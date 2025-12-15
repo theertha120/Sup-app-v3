@@ -1,6 +1,6 @@
 # S’Up Mobile App
 
-S’Up is a React Native (Expo) mobile app for supporting posture health during pregnancy and postpartum.
+S’Up is a React Native (Expo) mobile app for supporting posture health.
 
 ---
 
