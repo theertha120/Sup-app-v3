@@ -1,16 +1,26 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { colours } from "../../theme/colours";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 export default function HomeScreen() {
+  const { logout } = useAuth();
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>Welcome back</Text>
-        <Text style={styles.subtitle}>
-          We’re here to support your posture today
-        </Text>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.greeting}>Welcome back</Text>
+            <Text style={styles.subtitle}>
+              We're here to support your posture today
+            </Text>
+          </View>
+          <Pressable style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Status Card */}
@@ -75,6 +85,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 24,
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   greeting: {
     fontSize: 24,
     fontWeight: "600",
@@ -83,6 +98,17 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 6,
     color: "#666",
+  },
+  logoutButton: {
+    backgroundColor: colours.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  logoutText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "500",
   },
 
   statusCard: {
