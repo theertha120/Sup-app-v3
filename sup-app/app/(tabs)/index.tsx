@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { router } from "expo-router";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -11,11 +11,18 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.greeting}>Welcome back</Text>
-            <Text style={styles.subtitle}>
-              We're here to support your posture today
-            </Text>
+          <View style={styles.headerLeft}>
+            <Image 
+              source={require('../../assets/images/logo.jpg')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>Welcome back</Text>
+              <Text style={styles.subtitle}>
+                We're here to support your posture today
+              </Text>
+            </View>
           </View>
           <Pressable style={styles.logoutButton} onPress={logout}>
             <Text style={styles.logoutText}>Logout</Text>
@@ -89,6 +96,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  logo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   greeting: {
     fontSize: 24,
