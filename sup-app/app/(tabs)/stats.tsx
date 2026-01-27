@@ -13,9 +13,9 @@ export default function StatsScreen() {
       {/* Overall Score */}
       <View style={styles.scoreCard}>
         <Text style={styles.scoreLabel}>Posture Stability Score</Text>
-        <Text style={styles.scoreValue}>—</Text>
+        <Text style={styles.scoreValue}>0</Text>
         <Text style={styles.scoreHint}>
-          Score will appear after your first session
+          Score appears after your first session
         </Text>
       </View>
 
@@ -29,8 +29,9 @@ export default function StatsScreen() {
       {/* Weekly Summary */}
       <View style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>This week</Text>
-        <View style={styles.summaryLine} />
-        <View style={styles.summaryLineShort} />
+        <Text style={styles.summaryText}>
+          Your weekly summary will appear here once you start wearing your S'pots
+        </Text>
       </View>
 
       {/* Clinical Note */}
@@ -47,7 +48,7 @@ function MetricSkeleton({ label }: { label: string }) {
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>{label}</Text>
       <View style={styles.metricBar} />
-      <Text style={styles.metricHint}>Tracking will begin soon</Text>
+      <Text style={styles.metricHint}>Tracking starts after your first session</Text>
     </View>
   );
 }
@@ -129,18 +130,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 12,
   },
-  summaryLine: {
-    height: 10,
-    width: "100%",
-    backgroundColor: "#E5E5EA",
-    borderRadius: 5,
-    marginBottom: 8,
-  },
-  summaryLineShort: {
-    height: 10,
-    width: "70%",
-    backgroundColor: "#E5E5EA",
-    borderRadius: 5,
+  summaryText: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 20,
   },
 
   disclaimer: {

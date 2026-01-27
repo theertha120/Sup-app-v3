@@ -6,8 +6,8 @@ import { colours } from "../../theme/colours";
 const MOCK_USERS = [
   { id: 1, name: "Sarah Chen", streak: 45, weeklyAvg: 7.2, isCurrentUser: false },
   { id: 2, name: "Mike Johnson", streak: 38, weeklyAvg: 6.8, isCurrentUser: false },
-  { id: 3, name: "Emma Wilson", streak: 0, weeklyAvg: 0, isCurrentUser: false },
-  { id: 4, name: "Test User", streak: 28, weeklyAvg: 5.9, isCurrentUser: true },
+  { id: 3, name: "Emma Wilson", streak: 1, weeklyAvg: 0.1, isCurrentUser: false },
+  { id: 4, name: "Test User", streak: 0, weeklyAvg: 0, isCurrentUser: true },
   { id: 5, name: "Lisa Anderson", streak: 25, weeklyAvg: 5.7, isCurrentUser: false },
   { id: 6, name: "David Lee", streak: 22, weeklyAvg: 5.3, isCurrentUser: false },
   { id: 7, name: "Rachel Kim", streak: 18, weeklyAvg: 4.8, isCurrentUser: false },
@@ -50,7 +50,7 @@ export default function LeaderboardScreen() {
             <Text style={styles.statLabel}>Current Streak</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
-          <Text style={styles.statValue}>{currentUser?.streak} days ⚡</Text>
+          <Text style={styles.statValue}>{currentUser?.streak} {currentUser?.streak === 1 ? 'day' : 'days'} ⚡</Text>
         </Pressable>
 
         <Pressable 
@@ -136,7 +136,7 @@ function LeaderboardRow({ rank, name, streak, weeklyAvg, isCurrentUser }: Leader
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={styles.stats}>
-          ⚡ {streak} days • Average: {weeklyAvg} hrs/day
+          ⚡ {streak} {streak === 1 ? 'day' : 'days'} • Average: {weeklyAvg} hrs/day
         </Text>
       </View>
     </View>
