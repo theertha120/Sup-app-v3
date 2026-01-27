@@ -1,27 +1,69 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { colours } from "../../theme/colours";
-
-// Mock leaderboard data (sorted by streak only)
-const MOCK_USERS = [
-  { id: 1, name: "Sarah Chen", streak: 45, weeklyAvg: 7.2, isCurrentUser: false },
-  { id: 2, name: "Mike Johnson", streak: 38, weeklyAvg: 6.8, isCurrentUser: false },
-  { id: 3, name: "Emma Wilson", streak: 1, weeklyAvg: 0.1, isCurrentUser: false },
-  { id: 4, name: "Test User", streak: 0, weeklyAvg: 0, isCurrentUser: true },
-  { id: 5, name: "Lisa Anderson", streak: 25, weeklyAvg: 5.7, isCurrentUser: false },
-  { id: 6, name: "David Lee", streak: 22, weeklyAvg: 5.3, isCurrentUser: false },
-  { id: 7, name: "Rachel Kim", streak: 18, weeklyAvg: 4.8, isCurrentUser: false },
-  { id: 8, name: "Tom Brown", streak: 15, weeklyAvg: 4.5, isCurrentUser: false },
-];
+// import leaderboardData from "../../src/data/leaderboard.json";
+import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
+import { CURRENT_USER_ID, type User } from "../../constants/env";
+import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
+import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 
 export default function LeaderboardScreen() {
   const [showInfo, setShowInfo] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
 
-  // Sort users by streak (descending)
-  const sortedUsers = [...MOCK_USERS].sort((a, b) => b.streak - a.streak);
+  useEffect(() => {
+    fetchLeaderboardByStreak()
+      .then(setUsers)
+      .catch((err) => console.error("Failed to load leaderboard", err));
+  }, []);
 
-  const currentUser = sortedUsers.find(user => user.isCurrentUser);
-  const currentUserRank = sortedUsers.findIndex(user => user.isCurrentUser) + 1;
+  const sortedUsers = [...users].sort((a, b) => {
+    if (sortMode === "streak") {
+      return b.currentStreak - a.currentStreak;
+    }
+    return b.weeklyAvgScore - a.weeklyAvgScore;
+  });
+
+  // Rank is always based on streak, regardless of current display filter.
+  const streakSortedUsers = [...users].sort(
+    (a, b) => b.currentStreak - a.currentStreak
+  );
+
+  const [hasGoodPostureToday, setHasGoodPostureToday] = useState(false);
+  const [currentUserWithStreak, setCurrentUserWithStreak] =
+    useState<User | null>(null);
+
+  useEffect(() => {
+    // NOTE: do NOT depend on `sortedUsers` here; it's a new array every render.
+    const baseUser = users.find((user) => user.id === CURRENT_USER_ID);
+    if (!baseUser) {
+      return;
+    }
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayData = MOCK_POSTURE_DATA.find((data) => {
+      return data.userId === CURRENT_USER_ID && data.date === todayIso;
+    });
+
+    if (!todayData) {
+      setCurrentUserWithStreak(baseUser);
+      setHasGoodPostureToday(false);
+      return;
+    }
+
+    const goodToday = hasGoodPosture(todayData);
+    setHasGoodPostureToday(goodToday);
+
+    const updatedUser = updateStreak(baseUser, todayData);
+    setCurrentUserWithStreak(updatedUser);
+  }, [users]);
+
+  const currentUser = currentUserWithStreak ??
+    users.find((user) => user.id === CURRENT_USER_ID);
+  const currentUserRank = currentUser
+    ? streakSortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
+    : 0;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -33,7 +75,7 @@ export default function LeaderboardScreen() {
 
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
-        <Text style={styles.rankLabel}>Your Rank</Text>
+        <Text style={styles.rankLabel}>Your Streak Rank</Text>
         <Text style={styles.rankNumber}>#{currentUserRank}</Text>
         <Text style={styles.rankSubtext}>
           Keep going! You're doing great
@@ -50,7 +92,10 @@ export default function LeaderboardScreen() {
             <Text style={styles.statLabel}>Current Streak</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
-          <Text style={styles.statValue}>{currentUser?.streak} {currentUser?.streak === 1 ? 'day' : 'days'} ⚡</Text>
+          <Text style={styles.statValue}>
+            {currentUser?.currentStreak}{" "}
+            {currentUser?.currentStreak === 1 ? "day" : "days"} ⚡
+          </Text>
         </Pressable>
 
         <Pressable 
@@ -61,7 +106,9 @@ export default function LeaderboardScreen() {
             <Text style={styles.statLabel}>Weekly Average</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
-          <Text style={styles.statValue}>{currentUser?.weeklyAvg} hrs/day</Text>
+          <Text style={styles.statValue}>
+            {currentUser?.weeklyAvgScore} hrs/day
+          </Text>
         </Pressable>
       </View>
 
@@ -84,8 +131,50 @@ export default function LeaderboardScreen() {
         </View>
       )}
 
-      {/* Leaderboard Header */}
-      <Text style={styles.sectionTitle}>Top performers ranked by streak</Text>
+      {/* Leaderboard Header + Sort Toggle */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Top performers ranked by{" "}
+          {sortMode === "streak" ? "streak" : "weekly average"}
+          {hasGoodPostureToday ? " • Good posture today ✅" : ""}
+        </Text>
+
+        <View style={styles.sortToggle}>
+          <Pressable
+            style={[
+              styles.sortButton,
+              sortMode === "streak" && styles.sortButtonActive,
+            ]}
+            onPress={() => setSortMode("streak")}
+          >
+            <Text
+              style={[
+                styles.sortButtonText,
+                sortMode === "streak" && styles.sortButtonTextActive,
+              ]}
+            >
+              Streak
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.sortButton,
+              sortMode === "weekly" && styles.sortButtonActive,
+            ]}
+            onPress={() => setSortMode("weekly")}
+          >
+            <Text
+              style={[
+                styles.sortButtonText,
+                sortMode === "weekly" && styles.sortButtonTextActive,
+              ]}
+            >
+              Weekly Avg.
+            </Text>
+          </Pressable>
+        </View>
+      </View>
 
       {/* Leaderboard List */}
       <View style={styles.list}>
@@ -94,9 +183,9 @@ export default function LeaderboardScreen() {
             key={user.id}
             rank={index + 1}
             name={user.name}
-            streak={user.streak}
-            weeklyAvg={user.weeklyAvg}
-            isCurrentUser={user.isCurrentUser}
+            streak={user.currentStreak}
+            weeklyAvg={user.weeklyAvgScore}
+            isCurrentUser={user.id === CURRENT_USER_ID}
           />
         ))}
       </View>
@@ -260,11 +349,40 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  sectionTitle: {
+  sectionHeader: {
     marginTop: 24,
     marginHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionTitle: {
+    flex: 1,
     fontWeight: "600",
     color: "#444",
+  },
+  sortToggle: {
+    flexDirection: "row",
+    backgroundColor: "#E5E5EA",
+    borderRadius: 999,
+    padding: 2,
+  },
+  sortButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  sortButtonActive: {
+    backgroundColor: "white",
+  },
+  sortButtonText: {
+    fontSize: 11,
+    color: "#666",
+  },
+  sortButtonTextActive: {
+    color: colours.primary,
+    fontWeight: "600",
   },
 
   list: {
