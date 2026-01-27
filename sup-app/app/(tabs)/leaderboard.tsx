@@ -6,7 +6,7 @@ import { colours } from "../../theme/colours";
 const MOCK_USERS = [
   { id: 1, name: "Sarah Chen", streak: 45, weeklyAvg: 7.2, isCurrentUser: false },
   { id: 2, name: "Mike Johnson", streak: 38, weeklyAvg: 6.8, isCurrentUser: false },
-  { id: 3, name: "Emma Wilson", streak: 35, weeklyAvg: 6.5, isCurrentUser: false },
+  { id: 3, name: "Emma Wilson", streak: 0, weeklyAvg: 0, isCurrentUser: false },
   { id: 4, name: "Test User", streak: 28, weeklyAvg: 5.9, isCurrentUser: true },
   { id: 5, name: "Lisa Anderson", streak: 25, weeklyAvg: 5.7, isCurrentUser: false },
   { id: 6, name: "David Lee", streak: 22, weeklyAvg: 5.3, isCurrentUser: false },
@@ -15,9 +15,13 @@ const MOCK_USERS = [
 ];
 
 export default function LeaderboardScreen() {
-  const currentUser = MOCK_USERS.find(user => user.isCurrentUser);
-  const currentUserRank = MOCK_USERS.findIndex(user => user.isCurrentUser) + 1;
   const [showInfo, setShowInfo] = useState(false);
+
+  // Sort users by streak (descending)
+  const sortedUsers = [...MOCK_USERS].sort((a, b) => b.streak - a.streak);
+
+  const currentUser = sortedUsers.find(user => user.isCurrentUser);
+  const currentUserRank = sortedUsers.findIndex(user => user.isCurrentUser) + 1;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -85,7 +89,7 @@ export default function LeaderboardScreen() {
 
       {/* Leaderboard List */}
       <View style={styles.list}>
-        {MOCK_USERS.map((user, index) => (
+        {sortedUsers.map((user, index) => (
           <LeaderboardRow
             key={user.id}
             rank={index + 1}
