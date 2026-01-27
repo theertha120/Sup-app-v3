@@ -1,44 +1,99 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { useState } from "react";
 import { colours } from "../../theme/colours";
 
+// Mock leaderboard data (sorted by streak only)
+const MOCK_USERS = [
+  { id: 1, name: "Sarah Chen", streak: 45, weeklyAvg: 7.2, isCurrentUser: false },
+  { id: 2, name: "Mike Johnson", streak: 38, weeklyAvg: 6.8, isCurrentUser: false },
+  { id: 3, name: "Emma Wilson", streak: 35, weeklyAvg: 6.5, isCurrentUser: false },
+  { id: 4, name: "Test User", streak: 28, weeklyAvg: 5.9, isCurrentUser: true },
+  { id: 5, name: "Lisa Anderson", streak: 25, weeklyAvg: 5.7, isCurrentUser: false },
+  { id: 6, name: "David Lee", streak: 22, weeklyAvg: 5.3, isCurrentUser: false },
+  { id: 7, name: "Rachel Kim", streak: 18, weeklyAvg: 4.8, isCurrentUser: false },
+  { id: 8, name: "Tom Brown", streak: 15, weeklyAvg: 4.5, isCurrentUser: false },
+];
+
 export default function LeaderboardScreen() {
+  const currentUser = MOCK_USERS.find(user => user.isCurrentUser);
+  const currentUserRank = MOCK_USERS.findIndex(user => user.isCurrentUser) + 1;
+  const [showInfo, setShowInfo] = useState(false);
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Community Leaderboard</Text>
-        <Text style={styles.headerSubtitle}>Global community</Text>
+        <Text style={styles.headerSubtitle}>Global Community</Text>
       </View>
 
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
         <Text style={styles.rankLabel}>Your Rank</Text>
-        <Text style={styles.rankNumber}>#—</Text>
+        <Text style={styles.rankNumber}>#{currentUserRank}</Text>
         <Text style={styles.rankSubtext}>
-          Ranking will appear once you start
+          Keep going! You're doing great
         </Text>
       </View>
 
       {/* Stats Row */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Current Streak</Text>
-          <Text style={styles.statValue}>—</Text>
-        </View>
+        <Pressable 
+          style={styles.statCard}
+          onPress={() => setShowInfo(!showInfo)}
+        >
+          <View style={styles.statHeader}>
+            <Text style={styles.statLabel}>Current Streak</Text>
+            <Text style={styles.helpIcon}>?</Text>
+          </View>
+          <Text style={styles.statValue}>{currentUser?.streak} days ⚡</Text>
+        </Pressable>
 
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Total Score</Text>
-          <Text style={styles.statValue}>—</Text>
-        </View>
+        <Pressable 
+          style={styles.statCard}
+          onPress={() => setShowInfo(!showInfo)}
+        >
+          <View style={styles.statHeader}>
+            <Text style={styles.statLabel}>Weekly Average</Text>
+            <Text style={styles.helpIcon}>?</Text>
+          </View>
+          <Text style={styles.statValue}>{currentUser?.weeklyAvg} hrs/day</Text>
+        </Pressable>
       </View>
 
-      {/* Leaderboard Header */}
-      <Text style={styles.sectionTitle}>Top performers</Text>
+      {/* Info Card */}
+      {showInfo && (
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>Understanding your stats</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoBullet}>⚡</Text>
+            <Text style={styles.infoText}>
+              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S'pots
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoBullet}>📊</Text>
+            <Text style={styles.infoText}>
+              <Text style={styles.infoBold}>Weekly Average:</Text> Your average daily good posture hours over the past week
+            </Text>
+          </View>
+        </View>
+      )}
 
-      {/* Skeleton List */}
+      {/* Leaderboard Header */}
+      <Text style={styles.sectionTitle}>Top performers ranked by streak</Text>
+
+      {/* Leaderboard List */}
       <View style={styles.list}>
-        {[...Array(6)].map((_, i) => (
-          <LeaderboardSkeletonRow key={i} />
+        {MOCK_USERS.map((user, index) => (
+          <LeaderboardRow
+            key={user.id}
+            rank={index + 1}
+            name={user.name}
+            streak={user.streak}
+            weeklyAvg={user.weeklyAvg}
+            isCurrentUser={user.isCurrentUser}
+          />
         ))}
       </View>
 
@@ -50,18 +105,36 @@ export default function LeaderboardScreen() {
   );
 }
 
-function LeaderboardSkeletonRow() {
-  return (
-    <View style={styles.skeletonRow}>
-      <View style={styles.skeletonRank} />
-      <View style={styles.skeletonAvatar} />
+interface LeaderboardRowProps {
+  rank: number;
+  name: string;
+  streak: number;
+  weeklyAvg: number;
+  isCurrentUser: boolean;
+}
 
-      <View style={styles.skeletonInfo}>
-        <View style={styles.skeletonLineShort} />
-        <View style={styles.skeletonLineLong} />
+function LeaderboardRow({ rank, name, streak, weeklyAvg, isCurrentUser }: LeaderboardRowProps) {
+  return (
+    <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
+      <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
+        #{rank}
+      </Text>
+      
+      <View style={[styles.avatar, isCurrentUser && styles.currentUserAvatar]}>
+        <Text style={styles.avatarText}>
+          {name.split(' ').map(n => n[0]).join('')}
+        </Text>
       </View>
 
-      <View style={styles.skeletonScore} />
+      <View style={styles.info}>
+        <Text style={[styles.name, isCurrentUser && styles.currentUserText]}>
+          {name}
+          {isCurrentUser && " (You)"}
+        </Text>
+        <Text style={styles.stats}>
+          ⚡ {streak} days • Average: {weeklyAvg} hrs/day
+        </Text>
+      </View>
     </View>
   );
 }
@@ -121,14 +194,66 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 14,
   },
+  statHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   statLabel: {
     color: "#777",
     fontSize: 12,
+  },
+  helpIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colours.primary,
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 18,
   },
   statValue: {
     color: colours.primary,
     fontSize: 20,
     marginTop: 4,
+  },
+
+  infoCard: {
+    backgroundColor: "white",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: colours.primary,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colours.primary,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  infoBullet: {
+    fontSize: 14,
+    marginRight: 8,
+    marginTop: 1,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 18,
+  },
+  infoBold: {
+    fontWeight: "600",
+    color: "#333",
   },
 
   sectionTitle: {
@@ -143,8 +268,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  /* Skeleton styles */
-  skeletonRow: {
+  row: {
     backgroundColor: "white",
     borderRadius: 14,
     padding: 16,
@@ -152,39 +276,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  skeletonRank: {
-    width: 20,
-    height: 14,
-    backgroundColor: "#E5E5EA",
-    borderRadius: 4,
+  currentUserRow: {
+    backgroundColor: colours.primarySoft,
+    borderWidth: 2,
+    borderColor: colours.primary,
   },
-  skeletonAvatar: {
+  rank: {
+    width: 30,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  currentUserText: {
+    color: colours.primary,
+    fontWeight: "700",
+  },
+  avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "#E5E5EA",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  skeletonInfo: {
+  currentUserAvatar: {
+    backgroundColor: colours.primary,
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  info: {
     flex: 1,
-    gap: 6,
   },
-  skeletonLineShort: {
-    width: "40%",
-    height: 10,
-    backgroundColor: "#E5E5EA",
-    borderRadius: 4,
+  name: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
   },
-  skeletonLineLong: {
-    width: "70%",
-    height: 10,
-    backgroundColor: "#E5E5EA",
-    borderRadius: 4,
-  },
-  skeletonScore: {
-    width: 40,
-    height: 12,
-    backgroundColor: "#E5E5EA",
-    borderRadius: 4,
+  stats: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 2,
   },
 
   footerText: {
