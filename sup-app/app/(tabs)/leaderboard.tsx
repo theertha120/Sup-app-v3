@@ -76,7 +76,7 @@ export default function LeaderboardScreen() {
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
         <Text style={styles.rankLabel}>Your Streak Rank</Text>
-        <Text style={styles.rankNumber}>#{currentUserRank}</Text>
+        <Text style={styles.rankNumber}>{currentUserRank === 0 ? "—" : `#${currentUserRank}`}</Text>
         <Text style={styles.rankSubtext}>
           Keep going! You're doing great
         </Text>
@@ -93,7 +93,7 @@ export default function LeaderboardScreen() {
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <Text style={styles.statValue}>
-            {currentUser?.currentStreak}{" "}
+            {currentUser?.currentStreak ?? "0"}{" "}
             {currentUser?.currentStreak === 1 ? "day" : "days"} ⚡
           </Text>
         </Pressable>
@@ -107,7 +107,7 @@ export default function LeaderboardScreen() {
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <Text style={styles.statValue}>
-            {currentUser?.weeklyAvgScore} hrs/day
+            {currentUser?.weeklyAvgScore ?? "0"} hrs/day
           </Text>
         </Pressable>
       </View>
