@@ -22,7 +22,7 @@ export default function LeaderboardScreen() {
     if (sortMode === "streak") {
       return b.currentStreak - a.currentStreak;
     }
-    return b.weeklyAvgScore - a.weeklyAvgScore;
+    return b.weeklyTotalPoints - a.weeklyTotalPoints;
   });
 
   // Rank is always based on streak, regardless of current display filter.
@@ -103,11 +103,11 @@ export default function LeaderboardScreen() {
           onPress={() => setShowInfo(!showInfo)}
         >
           <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>Weekly Average</Text>
+            <Text style={styles.statLabel}>Weekly Total Points</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <Text style={styles.statValue}>
-            {currentUser?.weeklyAvgScore ?? "0"} hrs/day
+            {currentUser?.weeklyTotalPoints ?? "0"} pts
           </Text>
         </Pressable>
       </View>
@@ -125,7 +125,7 @@ export default function LeaderboardScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>📊</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Weekly Average:</Text> Your average daily good posture hours over the past week
+              <Text style={styles.infoBold}>Weekly Total Points:</Text> Sum of your daily average scores over the past week
             </Text>
           </View>
         </View>
@@ -135,7 +135,7 @@ export default function LeaderboardScreen() {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           Top performers ranked by{" "}
-          {sortMode === "streak" ? "streak" : "weekly average"}
+          {sortMode === "streak" ? "streak" : "weekly points"}
           {hasGoodPostureToday ? " • Good posture today ✅" : ""}
         </Text>
 
@@ -170,7 +170,7 @@ export default function LeaderboardScreen() {
                 sortMode === "weekly" && styles.sortButtonTextActive,
               ]}
             >
-              Weekly Avg.
+              Weekly Pts
             </Text>
           </Pressable>
         </View>
@@ -184,7 +184,7 @@ export default function LeaderboardScreen() {
             rank={index + 1}
             name={user.name}
             streak={user.currentStreak}
-            weeklyAvg={user.weeklyAvgScore}
+            weeklyPoints={user.weeklyTotalPoints}
             isCurrentUser={user.id === CURRENT_USER_ID}
           />
         ))}
@@ -202,11 +202,11 @@ interface LeaderboardRowProps {
   rank: number;
   name: string;
   streak: number;
-  weeklyAvg: number;
+  weeklyPoints: number;
   isCurrentUser: boolean;
 }
 
-function LeaderboardRow({ rank, name, streak, weeklyAvg, isCurrentUser }: LeaderboardRowProps) {
+function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser }: LeaderboardRowProps) {
   return (
     <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
       <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
@@ -225,7 +225,7 @@ function LeaderboardRow({ rank, name, streak, weeklyAvg, isCurrentUser }: Leader
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={styles.stats}>
-          ⚡ {streak} {streak === 1 ? 'day' : 'days'} • Average: {weeklyAvg} hrs/day
+          ⚡ {streak} {streak === 1 ? 'day' : 'days'} • Points: {weeklyPoints} pts
         </Text>
       </View>
     </View>

@@ -15,14 +15,14 @@ export interface User {
   avatar?: string;
   currentStreak: number;
   lastActivityDate: string; // ISO 8601 format
-  weeklyAvgScore: number; // Calculated from last 7 days
+  weeklyTotalPoints: number; // Sum of daily avg scores from last 7 days
 }
 
 // Leaderboard entry
 export interface LeaderboardEntry {
   user: User;
   rank: number;
-  weeklyAvgScore: number;
+  weeklyTotalPoints: number;
   currentStreak: number;
 }
 
