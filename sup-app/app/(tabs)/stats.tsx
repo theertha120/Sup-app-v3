@@ -1,7 +1,25 @@
+import { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { colours } from "../../theme/colours";
+import {
+  analyzeIMUStream,
+  type IMUReading,
+  type PostureSessionStats,
+} from "../../src/services/postureAnalysisService";
+
+// Mock stream: replace with real session data; empty = no data (startup state)
+const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
+const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
 
 export default function StatsScreen() {
+  const sessionStats = useMemo(() => {
+    const stream = mockStream?.length ? mockStream : [];
+    if (stream.length === 0) return null;
+    return analyzeIMUStream(stream, calibration ?? undefined);
+  }, []);
+
+  const hasData = sessionStats != null && sessionStats.totalMs > 0;
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
@@ -13,9 +31,11 @@ export default function StatsScreen() {
       {/* Overall Score */}
       <View style={styles.scoreCard}>
         <Text style={styles.scoreLabel}>Posture Stability Score</Text>
-        <Text style={styles.scoreValue}>0</Text>
+        <Text style={styles.scoreValue}>{hasData ? sessionStats.avgScore : "0"}</Text>
         <Text style={styles.scoreHint}>
-          Score appears after your first session
+          {hasData
+            ? "From your latest IMU session"
+            : "Score appears after your first session"}
         </Text>
       </View>
 
@@ -23,14 +43,20 @@ export default function StatsScreen() {
       <View style={styles.metrics}>
         <MetricSkeleton label="Neck alignment" />
         <MetricSkeleton label="Shoulder balance" />
-        <MetricSkeleton label="Upper back support" />
+        {hasData ? (
+          <UpperBackSessionCard stats={sessionStats} />
+        ) : (
+          <MetricSkeleton label="Upper back support" />
+        )}
       </View>
 
       {/* Weekly Summary */}
       <View style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>This week</Text>
         <Text style={styles.summaryText}>
-          Your weekly summary will appear here once you start wearing your S'pots
+          {hasData
+            ? `Session: ${(sessionStats.totalMs / 1000).toFixed(1)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
+            : "Your weekly summary will appear here once you start wearing your S'pots"}
         </Text>
       </View>
 
@@ -49,6 +75,24 @@ function MetricSkeleton({ label }: { label: string }) {
       <Text style={styles.metricLabel}>{label}</Text>
       <View style={styles.metricBar} />
       <Text style={styles.metricHint}>Tracking starts after your first session</Text>
+    </View>
+  );
+}
+
+function UpperBackSessionCard({ stats }: { stats: PostureSessionStats }) {
+  const goodWidth = stats.totalMs > 0 ? (stats.goodPostureMs / stats.totalMs) * 100 : 0;
+  const totalMinutes = (stats.totalMs / 60_000).toFixed(1);
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>Upper back support</Text>
+      <View style={styles.metricBarRow}>
+        <View style={[styles.metricBarGood, { flex: goodWidth }]} />
+        <View style={[styles.metricBarBad, { flex: 100 - goodWidth }]} />
+      </View>
+      <Text style={styles.metricHint}>
+        Good: {stats.goodPosturePercent.toFixed(0)}% · Bad: {stats.badPosturePercent.toFixed(0)}% · {totalMinutes} min
+        {stats.isVariableSession ? " · Variable session" : ""}
+      </Text>
     </View>
   );
 }
@@ -114,6 +158,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E5EA",
     borderRadius: 5,
     marginVertical: 10,
+  },
+  metricBarRow: {
+    flexDirection: "row",
+    height: 10,
+    borderRadius: 5,
+    marginVertical: 10,
+    overflow: "hidden",
+  },
+  metricBarGood: {
+    backgroundColor: colours.primary,
+    minWidth: 0,
+  },
+  metricBarBad: {
+    backgroundColor: "#E5E5EA",
+    minWidth: 0,
   },
   metricHint: {
     fontSize: 12,
