@@ -6,11 +6,14 @@ import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService"
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
+import ProfileModal from "../../src/components/ProfileModal";
 
 export default function LeaderboardScreen() {
   const [showInfo, setShowInfo] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
     fetchLeaderboardByStreak()
@@ -64,6 +67,29 @@ export default function LeaderboardScreen() {
   const currentUserRank = currentUser
     ? streakSortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
     : 0;
+
+  const handleUserPress = (user: User) => {
+    setSelectedUser(user);
+    setShowProfileModal(true);
+  };
+
+  const handleCloseProfile = () => {
+    setShowProfileModal(false);
+    setSelectedUser(null);
+  };
+
+  const handleSaveProfile = async (updatedData: { name: string; avatar?: string }) => {
+    // Frontend-only: update local state
+    if (selectedUser) {
+      const updatedUsers = users.map((u) =>
+        u.id === selectedUser.id ? { ...u, name: updatedData.name, avatar: updatedData.avatar } : u
+      );
+      setUsers(updatedUsers);
+      setSelectedUser({ ...selectedUser, name: updatedData.name, avatar: updatedData.avatar });
+    }
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -186,9 +212,19 @@ export default function LeaderboardScreen() {
             streak={user.currentStreak}
             weeklyPoints={user.weeklyTotalPoints}
             isCurrentUser={user.id === CURRENT_USER_ID}
+            onPress={() => handleUserPress(user)}
           />
         ))}
       </View>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        visible={showProfileModal}
+        user={selectedUser}
+        isCurrentUser={selectedUser?.id === CURRENT_USER_ID}
+        onClose={handleCloseProfile}
+        onSave={handleSaveProfile}
+      />
 
       {/* Footer */}
       <Text style={styles.footerText}>
@@ -204,11 +240,15 @@ interface LeaderboardRowProps {
   streak: number;
   weeklyPoints: number;
   isCurrentUser: boolean;
+  onPress: () => void;
 }
 
-function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser }: LeaderboardRowProps) {
+function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser, onPress }: LeaderboardRowProps) {
   return (
-    <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
+    <Pressable 
+      style={[styles.row, isCurrentUser && styles.currentUserRow]} 
+      onPress={onPress}
+    >
       <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
         #{rank}
       </Text>
@@ -228,7 +268,7 @@ function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser }: Lea
           ⚡ {streak} {streak === 1 ? 'day' : 'days'} • Points: {weeklyPoints} pts
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

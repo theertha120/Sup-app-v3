@@ -1,33 +1,89 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { router } from "expo-router";
+import { useState, useEffect } from "react";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
+import { CURRENT_USER_ID, type User } from "../../constants/env";
+import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
+import ProfileModal from "../../src/components/ProfileModal";
 
 export default function HomeScreen() {
   const { logout } = useAuth();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  useEffect(() => {
+    fetchLeaderboardByStreak()
+      .then((users) => {
+        const user = users.find((u) => u.id === CURRENT_USER_ID);
+        if (user) setCurrentUser(user);
+      })
+      .catch((err) => console.error("Failed to load user", err));
+  }, []);
+
+  const handleProfilePress = () => {
+    setShowProfileModal(true);
+  };
+
+  const handleCloseProfile = () => {
+    setShowProfileModal(false);
+  };
+
+  const handleSaveProfile = async (updatedData: { name: string; avatar?: string }) => {
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, name: updatedData.name, avatar: updatedData.avatar });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase();
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
+      {/* Enhanced Header Section */}
+      <View style={styles.headerContainer}>
+        <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Image 
-              source={require('../../assets/images/logo.jpg')} 
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <View style={styles.headerText}>
-              <Text style={styles.greeting}>Welcome back</Text>
-              <Text style={styles.subtitle}>
-                We're here to support your posture today
-              </Text>
-            </View>
+            <Text style={styles.greeting}>Welcome back!</Text>
+            <Text style={styles.subtitle}>We're here to support your posture today</Text>
           </View>
           <Pressable style={styles.logoutButton} onPress={logout}>
             <Text style={styles.logoutText}>Logout</Text>
           </Pressable>
         </View>
+
+        {/* User Profile Card */}
+        <Pressable style={styles.profileCard} onPress={handleProfilePress}>
+          <View style={styles.profileContent}>
+            <View style={styles.avatarWrapper}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {currentUser ? getInitials(currentUser.name) : "?"}
+                </Text>
+              </View>
+              <View style={styles.editBadge}>
+                <Text style={styles.editBadgeText}>✎</Text>
+              </View>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.userName}>{currentUser?.name || "Loading..."}</Text>
+              <View style={styles.statsRow}>
+                <View style={styles.statBadge}>
+                  <Text style={styles.statBadgeText}>⚡ {currentUser?.currentStreak || 0} day streak</Text>
+                </View>
+                <View style={styles.statBadge}>
+                  <Text style={styles.statBadgeText}>🏆 {currentUser?.weeklyTotalPoints || 0} pts</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Pressable>
       </View>
 
       {/* Status Card */}
@@ -77,6 +133,15 @@ export default function HomeScreen() {
       <Text style={styles.footer}>
         Recovery takes time. Small adjustments make a difference.
       </Text>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        visible={showProfileModal}
+        user={currentUser}
+        isCurrentUser={true}
+        onClose={handleCloseProfile}
+        onSave={handleSaveProfile}
+      />
     </ScrollView>
   );
 }
@@ -87,54 +152,133 @@ const styles = StyleSheet.create({
     backgroundColor: "#F6F6FA",
   },
 
-  header: {
-    paddingTop: 56,
-    paddingHorizontal: 20,
+  headerContainer: {
+    backgroundColor: "white",
     paddingBottom: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  headerTop: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  logo: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-  },
-  headerText: {
     flex: 1,
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: "600",
+    fontSize: 28,
+    fontWeight: "700",
     color: "#222",
   },
   subtitle: {
-    marginTop: 6,
+    marginTop: 4,
     color: "#666",
+    fontSize: 14,
+    lineHeight: 20,
   },
   logoutButton: {
-    backgroundColor: colours.primary,
+    backgroundColor: "#F6F6FA",
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
   },
   logoutText: {
-    color: "white",
+    color: "#666",
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+
+  profileCard: {
+    backgroundColor: colours.primary,
+    marginHorizontal: 20,
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: colours.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  profileContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  avatarWrapper: {
+    position: "relative",
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  avatarText: {
+    color: colours.primary,
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  editBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: colours.primary,
+  },
+  editBadgeText: {
+    fontSize: 12,
+    color: colours.primary,
+  },
+  profileInfo: {
+    flex: 1,
+    gap: 8,
+  },
+  userName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "white",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  statBadge: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  statBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   statusCard: {
     backgroundColor: colours.primary,
     marginHorizontal: 16,
+    marginTop: 24,
     padding: 24,
     borderRadius: 24,
   },
