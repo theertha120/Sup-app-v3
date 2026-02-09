@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,20 @@ import {
 } from "react-native";
 import { colours } from "../../theme/colours";
 import type { User } from "../../constants/env";
+import {
+  fetchUserProfile,
+  updateUserProfile,
+  userProfileToUser,
+  type ProfileUpdateInput,
+} from "../services/profileService";
 
 interface ProfileModalProps {
   visible: boolean;
   user: User | null;
   isCurrentUser: boolean;
   onClose: () => void;
-  onSave: (updatedUser: { name: string; avatar?: string }) => Promise<void>;
+  onSave?: (updatedUser: User) => Promise<void>;
+  loading?: boolean;
 }
 
 export default function ProfileModal({
@@ -26,18 +33,44 @@ export default function ProfileModal({
   isCurrentUser,
   onClose,
   onSave,
+  loading: externalLoading,
 }: ProfileModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [editedAvatar, setEditedAvatar] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [profileData, setProfileData] = useState<User | null>(user);
 
-  if (!user) return null;
+  // Fetch profile data when modal opens and user is provided
+  useEffect(() => {
+    if (visible && user?.id && !profileData) {
+      setIsLoading(true);
+      fetchUserProfile(user.id)
+        .then((profile) => {
+          if (profile) {
+            setProfileData(userProfileToUser(profile));
+          }
+        })
+        .catch((err) => {
+          console.error("[ProfileModal] Failed to fetch profile", err);
+          setError("Failed to load profile data");
+        })
+        .finally(() => setIsLoading(false));
+    } else if (visible && user) {
+      setProfileData(user);
+    }
+  }, [visible, user?.id]);
+
+  const loading = externalLoading || isLoading;
+
+  if (!visible) return null;
 
   const handleEdit = () => {
-    setEditedName(user.name);
-    setEditedAvatar(user.avatar || "");
+    if (!profileData) return;
+    setEditedName(profileData.name);
+    setEditedAvatar(profileData.avatar || "");
     setError("");
     setIsEditing(true);
   };
@@ -55,19 +88,41 @@ export default function ProfileModal({
       return;
     }
 
+    if (!profileData || !isCurrentUser) {
+      setError("Cannot save: invalid user or not current user");
+      return;
+    }
+
     setIsSaving(true);
     setError("");
 
     try {
-      await onSave({
+      const updates: ProfileUpdateInput = {
         name: editedName.trim(),
-        avatar: editedAvatar.trim() || undefined,
-      });
+        avatar: editedAvatar.trim() || null,
+      };
+
+      // Update via profileService
+      const updatedProfile = await updateUserProfile(profileData.id, updates);
+      
+      if (!updatedProfile) {
+        throw new Error("Update returned null");
+      }
+
+      const updatedUser = userProfileToUser(updatedProfile);
+      setProfileData(updatedUser);
+
+      // Call optional onSave callback for parent component updates
+      if (onSave) {
+        await onSave(updatedUser);
+      }
+
       setIsEditing(false);
       setEditedName("");
       setEditedAvatar("");
     } catch (err) {
-      setError("Failed to save changes. Please try again.");
+      console.error("[ProfileModal] Save error", err);
+      setError(err instanceof Error ? err.message : "Failed to save changes. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -113,67 +168,81 @@ export default function ProfileModal({
             <View style={styles.avatarContainer}>
               <View style={styles.avatarLarge}>
                 <Text style={styles.avatarLargeText}>
-                  {getInitials(isEditing ? editedName || user.name : user.name)}
+                  {getInitials(
+                    isEditing
+                      ? editedName || profileData?.name || ""
+                      : profileData?.name || ""
+                  )}
                 </Text>
               </View>
             </View>
 
             {/* User Info */}
             <View style={styles.content}>
-              {isEditing ? (
+              {loading ? (
+                <View style={{ padding: 24, alignItems: "center" }}>
+                  <ActivityIndicator size="large" color={colours.primary} />
+                </View>
+              ) : (
                 <>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Display Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={editedName}
-                      onChangeText={setEditedName}
-                      placeholder="Enter your name"
-                      placeholderTextColor="#999"
-                    />
-                  </View>
+                  {isEditing ? (
+                    <>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Display Name</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editedName}
+                          onChangeText={setEditedName}
+                          placeholder="Enter your name"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Avatar URL (optional)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={editedAvatar}
-                      onChangeText={setEditedAvatar}
-                      placeholder="https://example.com/avatar.jpg"
-                      placeholderTextColor="#999"
-                      autoCapitalize="none"
-                    />
-                  </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Avatar URL (optional)</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editedAvatar}
+                          onChangeText={setEditedAvatar}
+                          placeholder="https://example.com/avatar.jpg"
+                          placeholderTextColor="#999"
+                          autoCapitalize="none"
+                        />
+                      </View>
 
-                  {error && (
-                    <View style={styles.errorContainer}>
-                      <Text style={styles.errorText}>{error}</Text>
+                      {error && (
+                        <View style={styles.errorContainer}>
+                          <Text style={styles.errorText}>{error}</Text>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.name}>{profileData?.name || "Loading..."}</Text>
+                      {profileData?.avatar && (
+                        <Text style={styles.avatarUrl}>Avatar: {profileData.avatar}</Text>
+                      )}
+                    </>
+                  )}
+
+                  {/* Stats */}
+                  {profileData && (
+                    <View style={styles.statsContainer}>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statValue}>{profileData.currentStreak ?? 0}</Text>
+                        <Text style={styles.statLabel}>
+                          {(profileData.currentStreak ?? 0) === 1 ? "Day" : "Days"} Streak
+                        </Text>
+                      </View>
+
+                      <View style={styles.statBox}>
+                        <Text style={styles.statValue}>{profileData.weeklyTotalPoints ?? 0}</Text>
+                        <Text style={styles.statLabel}>Weekly Points</Text>
+                      </View>
                     </View>
                   )}
                 </>
-              ) : (
-                <>
-                  <Text style={styles.name}>{user.name}</Text>
-                  {user.avatar && (
-                    <Text style={styles.avatarUrl}>Avatar: {user.avatar}</Text>
-                  )}
-                </>
               )}
-
-              {/* Stats */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{user.currentStreak}</Text>
-                  <Text style={styles.statLabel}>
-                    {user.currentStreak === 1 ? "Day" : "Days"} Streak
-                  </Text>
-                </View>
-
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{user.weeklyTotalPoints}</Text>
-                  <Text style={styles.statLabel}>Weekly Points</Text>
-                </View>
-              </View>
             </View>
 
             {/* Actions */}
