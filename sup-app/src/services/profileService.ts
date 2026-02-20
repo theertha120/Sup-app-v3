@@ -1,6 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "../../constants/env";
 import { CURRENT_USER_ID } from "../../constants/env";
+import { MOCK_USERS } from "../data/mockUsers";
 
 /**
  * Row shape of the `profiles` table in Supabase.
@@ -102,6 +103,18 @@ function mapRowToUserProfile(row: ProfileRow): UserProfile {
   };
 }
 
+function userToUserProfile(user: User): UserProfile {
+  return {
+    id: user.id,
+    name: user.name,
+    avatar: user.avatar,
+    currentStreak: user.currentStreak,
+    lastActivityDate: user.lastActivityDate,
+    weeklyTotalPoints: user.weeklyTotalPoints,
+    createdAt: undefined,
+  };
+}
+
 /**
  * Get the currently authenticated Supabase user id.
  *
@@ -158,31 +171,56 @@ export async function fetchCurrentUserBasicProfile(): Promise<
 > {
   const userId = await getCurrentUserId();
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, name, avatar_url, created_at")
-    .eq("id", userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name, avatar_url, created_at")
+      .eq("id", userId)
+      .single();
 
-  if (error) {
-    console.error("[profile] Failed to fetch basic profile", error);
-    throw error;
+    if (error) {
+      console.warn(
+        "[profile] Failed to fetch basic profile, falling back to mock data",
+        error
+      );
+      // fall through to mock below
+    } else if (data) {
+      const row = data as ProfileRow;
+      const profile = mapRowToUserProfile({
+        ...row,
+        // Ensure stats fields have safe defaults even if omitted from select
+        current_streak: null,
+        last_activity_date: null,
+        weekly_total_points: null,
+      });
+
+      return {
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar,
+        createdAt: profile.createdAt,
+      };
+    }
+  } catch (err) {
+    console.warn(
+      "[profile] Supabase basic profile fetch threw, falling back to mock data",
+      err
+    );
   }
 
-  const row = data as ProfileRow;
-  const profile = mapRowToUserProfile({
-    ...row,
-    // Ensure stats fields have safe defaults even if omitted from select
-    current_streak: null,
-    last_activity_date: null,
-    weekly_total_points: null,
-  });
+  const mock = MOCK_USERS.find((u) => u.id === userId);
+  if (!mock) {
+    throw new Error(
+      "[profile] Basic profile not found in Supabase or mock data"
+    );
+  }
 
+  const fallback = userToUserProfile(mock);
   return {
-    id: profile.id,
-    name: profile.name,
-    avatar: profile.avatar,
-    createdAt: profile.createdAt,
+    id: fallback.id,
+    name: fallback.name,
+    avatar: fallback.avatar,
+    createdAt: fallback.createdAt,
   };
 }
 
@@ -206,20 +244,38 @@ export async function fetchCurrentUserBasicProfile(): Promise<
 export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
   const userId = await getCurrentUserId();
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
-    )
-    .eq("id", userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
+      )
+      .eq("id", userId)
+      .single();
 
-  if (error) {
-    console.error("[profile] Failed to fetch profile with stats", error);
-    throw error;
+    if (error) {
+      console.warn(
+        "[profile] Failed to fetch profile with stats, falling back to mock data",
+        error
+      );
+      // fall through to mock below
+    } else if (data) {
+      return mapRowToUserProfile(data as ProfileRow);
+    }
+  } catch (err) {
+    console.warn(
+      "[profile] Supabase profile-with-stats fetch threw, falling back to mock data",
+      err
+    );
   }
 
-  return mapRowToUserProfile(data as ProfileRow);
+  const mock = MOCK_USERS.find((u) => u.id === userId);
+  if (!mock) {
+    throw new Error(
+      "[profile] Profile with stats not found in Supabase or mock data"
+    );
+  }
+  return userToUserProfile(mock);
 }
 
 /**
@@ -320,27 +376,52 @@ export async function updateCurrentUserProfile(
 export async function fetchProfilePreviewStats(
   userId: string
 ): Promise<ProfilePreviewStats | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("current_streak, last_activity_date, weekly_total_points")
-    .eq("id", userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("current_streak, last_activity_date, weekly_total_points")
+      .eq("id", userId)
+      .single();
 
-  if (error) {
-    if (error.code === "PGRST116") {
-      return null;
+    if (error) {
+      if (error.code === "PGRST116") {
+        // Not found in Supabase, fall through to mock
+      } else {
+        console.warn(
+          "[profile] Failed to fetch profile stats, falling back to mock data",
+          error
+        );
+      }
+    } else if (data) {
+      const row = data as Pick<
+        ProfileRow,
+        "current_streak" | "last_activity_date" | "weekly_total_points"
+      >;
+
+      return {
+        currentStreak: row.current_streak ?? 0,
+        lastActivityDate: row.last_activity_date ?? "",
+        weeklyTotalPoints: Number(row.weekly_total_points) || 0,
+        hasActivity: Boolean(row.last_activity_date),
+      };
     }
-    console.error("[profile] Failed to fetch profile stats", error);
-    throw error;
+  } catch (err) {
+    console.warn(
+      "[profile] Supabase stats fetch threw, falling back to mock data",
+      err
+    );
   }
 
-  const row = data as Pick<ProfileRow, "current_streak" | "last_activity_date" | "weekly_total_points">;
-  
+  const mock = MOCK_USERS.find((u) => u.id === userId);
+  if (!mock) {
+    return null;
+  }
+
   return {
-    currentStreak: row.current_streak ?? 0,
-    lastActivityDate: row.last_activity_date ?? "",
-    weeklyTotalPoints: Number(row.weekly_total_points) || 0,
-    hasActivity: Boolean(row.last_activity_date),
+    currentStreak: mock.currentStreak,
+    lastActivityDate: mock.lastActivityDate,
+    weeklyTotalPoints: mock.weeklyTotalPoints,
+    hasActivity: Boolean(mock.lastActivityDate),
   };
 }
 
@@ -360,22 +441,35 @@ export async function fetchProfilePreviewStats(
  * ```
  */
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at")
-    .eq("id", userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
+      )
+      .eq("id", userId)
+      .single();
 
-  if (error) {
-    // If profile doesn't exist, return null (not an error)
-    if (error.code === "PGRST116") {
-      return null;
+    if (error) {
+      // If profile doesn't exist, fall through to mock
+      if (error.code !== "PGRST116") {
+        console.warn(
+          "[profile] Failed to fetch user profile, falling back to mock data",
+          error
+        );
+      }
+    } else if (data) {
+      return mapRowToUserProfile(data as ProfileRow);
     }
-    console.error("[profile] Failed to fetch user profile", error);
-    throw error;
+  } catch (err) {
+    console.warn(
+      "[profile] Supabase user profile fetch threw, falling back to mock data",
+      err
+    );
   }
 
-  return mapRowToUserProfile(data as ProfileRow);
+  const mock = MOCK_USERS.find((u) => u.id === userId);
+  return mock ? userToUserProfile(mock) : null;
 }
 
 /**
