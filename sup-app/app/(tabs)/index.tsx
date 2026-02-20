@@ -1,10 +1,48 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { router } from "expo-router";
+import { useMemo } from "react";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
+import {
+  analyzeIMUStream,
+  type IMUReading,
+} from "../../src/services/postureAnalysisService";
+
+// Helper to derive status from stability score
+function getPostureStatus(score: number): string {
+  if (score >= 85) return "Excellent";
+  if (score >= 70) return "Good";
+  if (score >= 50) return "Fair";
+  return "Needs Attention";
+}
+
+// Helper to get encouraging message based on score
+function getEncouragingMessage(score: number): string {
+  if (score >= 85) return "Keep up the fantastic work!";
+  if (score >= 70) return "You're doing great, stay consistent!";
+  if (score >= 50) return "Small steps lead to progress!";
+  return "Every effort counts, keep going!";
+}
 
 export default function HomeScreen() {
   const { logout } = useAuth();
+
+  // Calculate posture stability score from IMU stream (same logic as stats page)
+  const postureStats = useMemo(() => {
+    try {
+      const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
+      const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
+      
+      if (mockStream?.length > 0) {
+        return analyzeIMUStream(mockStream, calibration ?? undefined);
+      }
+    } catch (e) {
+      // No IMU data available
+    }
+    return null;
+  }, []);
+
+  const hasScore = postureStats !== null;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -33,10 +71,21 @@ export default function HomeScreen() {
       {/* Status Card */}
       <View style={styles.statusCard}>
         <Text style={styles.statusTitle}>Your posture status</Text>
-        <Text style={styles.statusValue}>Not yet measured</Text>
-        <Text style={styles.statusHint}>
-          Wear your S’pots to begin tracking
-        </Text>
+        {hasScore ? (
+          <>
+            <Text style={styles.statusValue}>{getPostureStatus(postureStats.avgScore)}</Text>
+            <Text style={styles.statusHint}>
+              {postureStats.goodPosturePercent.toFixed(0)}% good posture · {(postureStats.totalMs / 60000).toFixed(1)} min tracked · {getEncouragingMessage(postureStats.avgScore)}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.statusValue}>Not yet measured</Text>
+            <Text style={styles.statusHint}>
+              Wear your S'pots to begin tracking
+            </Text>
+          </>
+        )}
       </View>
 
       {/* Prompt Card */}
