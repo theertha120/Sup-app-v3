@@ -7,6 +7,7 @@ import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
+import { userProfileToUser } from "../../src/services/profileService";
 
 export default function LeaderboardScreen() {
   const [showInfo, setShowInfo] = useState(false);
@@ -78,17 +79,15 @@ export default function LeaderboardScreen() {
     setSelectedUser(null);
   };
 
-  const handleSaveProfile = async (updatedData: { name: string; avatar?: string }) => {
-    // Frontend-only: update local state
+  const handleSaveProfile = async (updatedUser: User) => {
+    // Update local state with the updated user from profileService
     if (selectedUser) {
       const updatedUsers = users.map((u) =>
-        u.id === selectedUser.id ? { ...u, name: updatedData.name, avatar: updatedData.avatar } : u
+        u.id === selectedUser.id ? updatedUser : u
       );
       setUsers(updatedUsers);
-      setSelectedUser({ ...selectedUser, name: updatedData.name, avatar: updatedData.avatar });
+      setSelectedUser(updatedUser);
     }
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
   };
 
   return (
