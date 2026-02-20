@@ -161,7 +161,6 @@ export default function LeaderboardScreen() {
         <Text style={styles.sectionTitle}>
           Top performers ranked by{" "}
           {sortMode === "streak" ? "streak" : "weekly points"}
-          {hasGoodPostureToday ? " • Good posture today ✅" : ""}
         </Text>
 
         <View style={styles.sortToggle}>
