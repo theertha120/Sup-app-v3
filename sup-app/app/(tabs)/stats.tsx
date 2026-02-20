@@ -1,24 +1,70 @@
-import { useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { colours } from "../../theme/colours";
 import {
   analyzeIMUStream,
   type IMUReading,
   type PostureSessionStats,
 } from "../../src/services/postureAnalysisService";
+import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
+import { CURRENT_USER_ID } from "../../constants/env";
+
+type DateRange = "today" | "last7days";
 
 // Mock stream: replace with real session data; empty = no data (startup state)
 const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
 const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
 
 export default function StatsScreen() {
+  const [dateRange, setDateRange] = useState<DateRange>("last7days");
+
   const sessionStats = useMemo(() => {
     const stream = mockStream?.length ? mockStream : [];
     if (stream.length === 0) return null;
     return analyzeIMUStream(stream, calibration ?? undefined);
   }, []);
 
+  // Filter posture data based on selected date range
+  const filteredData = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    
+    if (dateRange === "today") {
+      return MOCK_POSTURE_DATA.filter((d) => d.userId === CURRENT_USER_ID && d.date === todayStr);
+    } else {
+      // Last 7 days
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      return MOCK_POSTURE_DATA.filter(
+        (d) => d.userId === CURRENT_USER_ID && new Date(d.date) >= sevenDaysAgo
+      );
+    }
+  }, [dateRange]);
+
+  // Calculate best and worst days
+  const { bestDay, worstDay } = useMemo(() => {
+    if (filteredData.length === 0) return { bestDay: null, worstDay: null };
+    
+    const sorted = [...filteredData].sort((a, b) => b.avgScore - a.avgScore);
+    return {
+      bestDay: sorted[0],
+      worstDay: sorted[sorted.length - 1],
+    };
+  }, [filteredData]);
+
+  // Calculate today's specific stats
+  const todayStats = useMemo(() => {
+    if (dateRange !== "today" || filteredData.length === 0) return null;
+    const data = filteredData[0];
+    return {
+      totalMinutes: data.totalMinutes,
+      goodPostureMinutes: data.goodPostureMinutes,
+      avgScore: data.avgScore,
+    };
+  }, [dateRange, filteredData]);
+
   const hasData = sessionStats != null && sessionStats.totalMs > 0;
+  const hasHistoricalData = filteredData.length > 0;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -27,6 +73,77 @@ export default function StatsScreen() {
         <Text style={styles.headerTitle}>Your posture health</Text>
         <Text style={styles.headerSubtitle}>Based on daily wearable data</Text>
       </View>
+
+      {/* Date Range Selector */}
+      <View style={styles.dateRangeContainer}>
+        <Pressable
+          style={[styles.dateRangeButton, dateRange === "today" && styles.dateRangeButtonActive]}
+          onPress={() => setDateRange("today")}
+        >
+          <Text style={[styles.dateRangeText, dateRange === "today" && styles.dateRangeTextActive]}>
+            Today
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.dateRangeButton, dateRange === "last7days" && styles.dateRangeButtonActive]}
+          onPress={() => setDateRange("last7days")}
+        >
+          <Text style={[styles.dateRangeText, dateRange === "last7days" && styles.dateRangeTextActive]}>
+            Last 7 days
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Summary Cards */}
+      {hasHistoricalData ? (
+        dateRange === "today" && todayStats ? (
+          // Today view - show useful stats for the day
+          <View style={styles.summaryCardsRow}>
+            <View style={styles.summaryMiniCard}>
+              <Text style={styles.summaryMiniEmoji}>⏱️</Text>
+              <Text style={styles.summaryMiniLabel}>Total Time</Text>
+              <Text style={styles.summaryMiniScore}>{todayStats.totalMinutes}</Text>
+              <Text style={styles.summaryMiniDate}>minutes</Text>
+            </View>
+            <View style={styles.summaryMiniCard}>
+              <Text style={styles.summaryMiniEmoji}>✨</Text>
+              <Text style={styles.summaryMiniLabel}>Good Posture</Text>
+              <Text style={styles.summaryMiniScore}>{todayStats.goodPostureMinutes}</Text>
+              <Text style={styles.summaryMiniDate}>minutes</Text>
+            </View>
+          </View>
+        ) : (
+          // Last 7 days view - show best and worst
+          <View style={styles.summaryCardsRow}>
+            {bestDay && (
+              <View style={styles.summaryMiniCard}>
+                <Text style={styles.summaryMiniEmoji}>🌟</Text>
+                <Text style={styles.summaryMiniLabel}>Best Day</Text>
+                <Text style={styles.summaryMiniScore}>{bestDay.avgScore}</Text>
+                <Text style={styles.summaryMiniDate}>
+                  {new Date(bestDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </Text>
+              </View>
+            )}
+            {worstDay && bestDay?.date !== worstDay?.date && (
+              <View style={styles.summaryMiniCard}>
+                <Text style={styles.summaryMiniEmoji}>💪</Text>
+                <Text style={styles.summaryMiniLabel}>Needs Work</Text>
+                <Text style={styles.summaryMiniScore}>{worstDay.avgScore}</Text>
+                <Text style={styles.summaryMiniDate}>
+                  {new Date(worstDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </Text>
+              </View>
+            )}
+          </View>
+        )
+      ) : (
+        <View style={styles.noDataCard}>
+          <Text style={styles.noDataText}>
+            No data available for {dateRange === "today" ? "today" : "the last 7 days"}
+          </Text>
+        </View>
+      )}
 
       {/* Overall Score */}
       <View style={styles.scoreCard}>
@@ -116,6 +233,87 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 4,
     color: "#666",
+  },
+
+  dateRangeContainer: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: "#E5E5EA",
+    borderRadius: 12,
+    padding: 4,
+  },
+  dateRangeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  dateRangeButtonActive: {
+    backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  dateRangeText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#666",
+  },
+  dateRangeTextActive: {
+    color: colours.primary,
+    fontWeight: "600",
+  },
+
+  summaryCardsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 16,
+  },
+  summaryMiniCard: {
+    flex: 1,
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    borderLeftWidth: 4,
+    borderLeftColor: colours.primary,
+  },
+  summaryMiniEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  summaryMiniLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
+  },
+  summaryMiniScore: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: colours.primary,
+  },
+  summaryMiniDate: {
+    fontSize: 11,
+    color: "#999",
+    marginTop: 2,
+  },
+  noDataCard: {
+    backgroundColor: "white",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 24,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  noDataText: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
   },
 
   scoreCard: {
