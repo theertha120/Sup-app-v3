@@ -15,6 +15,9 @@ export default function RootLayout() {
 
         {/* Optional modal screen */}
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+
+        {/* Settings screen */}
+        <Stack.Screen name="settings" />
       </Stack>
 
       {/* Sign-in modal that shows on app open */}
