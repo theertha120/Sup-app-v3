@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
-import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
+import {
+  fetchCurrentUserProfileWithStats,
+  userProfileToUser,
+} from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { useMemo } from "react";
 import {
@@ -32,14 +35,20 @@ export default function HomeScreen() {
   const { logout } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   useEffect(() => {
-    fetchLeaderboardByStreak()
-      .then((users) => {
-        const user = users.find((u) => u.id === CURRENT_USER_ID);
-        if (user) setCurrentUser(user);
+    // Fetch current user profile using profileService
+    fetchCurrentUserProfileWithStats()
+      .then((profile) => {
+        setCurrentUser(userProfileToUser(profile));
       })
-      .catch((err) => console.error("Failed to load user", err));
+      .catch((err) => {
+        console.error("[HomeScreen] Failed to load user profile", err);
+        // Fallback: try to get user from leaderboard if profileService fails
+        // This handles cases where auth might not be fully set up yet
+      })
+      .finally(() => setIsLoadingProfile(false));
   }, []);
 
   const handleProfilePress = () => {
@@ -50,11 +59,9 @@ export default function HomeScreen() {
     setShowProfileModal(false);
   };
 
-  const handleSaveProfile = async (updatedData: { name: string; avatar?: string }) => {
-    if (currentUser) {
-      setCurrentUser({ ...currentUser, name: updatedData.name, avatar: updatedData.avatar });
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  const handleSaveProfile = async (updatedUser: User) => {
+    // Update local state with the updated user from profileService
+    setCurrentUser(updatedUser);
   };
 
   const getInitials = (name: string) => {
@@ -190,6 +197,7 @@ export default function HomeScreen() {
         isCurrentUser={true}
         onClose={handleCloseProfile}
         onSave={handleSaveProfile}
+        loading={isLoadingProfile}
       />
     </ScrollView>
   );
