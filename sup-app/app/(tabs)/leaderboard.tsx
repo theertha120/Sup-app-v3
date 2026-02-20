@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
-import { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 // import leaderboardData from "../../src/data/leaderboard.json";
 import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
@@ -10,6 +11,19 @@ import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
 
 export default function LeaderboardScreen() {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [])
+  );
+
   const [showInfo, setShowInfo] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
@@ -91,7 +105,8 @@ export default function LeaderboardScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Community Leaderboard</Text>
@@ -230,6 +245,7 @@ export default function LeaderboardScreen() {
         Scores update every 24 hours • Supporting moms through recovery
       </Text>
     </ScrollView>
+    </Animated.View>
   );
 }
 
@@ -274,7 +290,7 @@ function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser, onPre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F6FA",
+    backgroundColor: "#EDE9FF",
   },
 
   header: {

@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
@@ -32,6 +33,19 @@ function getEncouragingMessage(score: number): string {
 }
 
 export default function HomeScreen() {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim])
+  );
+
   const { logout } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -90,7 +104,8 @@ export default function HomeScreen() {
   const hasScore = postureStats !== null;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Enhanced Header Section */}
       <View style={styles.headerContainer}>
         <View style={styles.header}>
@@ -200,13 +215,14 @@ export default function HomeScreen() {
         loading={isLoadingProfile}
       />
     </ScrollView>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F6FA",
+    backgroundColor: "#EDE9FF",
   },
 
   headerContainer: {
