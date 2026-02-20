@@ -7,8 +7,6 @@ import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { useMemo } from "react";
-import { colours } from "../../theme/colours";
-import { useAuth } from "../../src/contexts/AuthContext";
 import {
   analyzeIMUStream,
   type IMUReading,
