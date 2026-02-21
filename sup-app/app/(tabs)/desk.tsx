@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     }),
   },
   figureWrapper: {
-    height: 300,
+    height: 340,
     justifyContent: "center",
     alignItems: "center",
   },

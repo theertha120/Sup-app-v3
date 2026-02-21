@@ -13,24 +13,29 @@ interface Props {
   score: number;
 }
 
-const TORSO_HEIGHT = 90;
-const TORSO_WIDTH = 16;
-const SHOULDER_WIDTH = 72;
-const SHOULDER_HEIGHT = 10;
-const HEAD_SIZE = 36;
-const SPINE_COLOR_GOOD = "#4CAF50";
+const TORSO_HEIGHT = 85;
+const TORSO_WIDTH   = 20;
+const SHOULDER_WIDTH  = 76;
+const SHOULDER_HEIGHT = 13;
+const HEAD_SIZE = 38;
 const TRANSITION_DURATION = 800;
 
-/**
- * 2D stick/silhouette figure seated at a desk.
- * Body parts are absolutely positioned around a hip-origin coordinate system.
- * The upper body (head, neck, torso, shoulders) rotates as a group to
- * simulate forward lean / slouch / side tilt.
- */
+// ─── Colours ───────────────────────────────────────────────────────────────
+const SKIN       = "#DBAB8A";
+const PANTS      = "#455A64";   // dark blue-gray trousers
+const CHAIR_COL  = "#78909C";   // medium steel-blue chair (clearly ≠ figure)
+const CHAIR_DARK = "#546E7A";
+const DESK_COL   = "#C8A370";   // warm wood
+const DESK_DARK  = "#A07840";
+const LAPTOP_BODY = "#37474F";  // near-black laptop shell
+const SCREEN_BG  = "#1C2733";   // dark screen surround
+const SCREEN_GLOW = "#90CAF9";  // blue-ish screen glow
+
 export default function DeskPostureFigure({ state, score }: Props) {
-  const torsoRot  = useSharedValue(0); // degrees – positive = lean forward (left on screen = screen-right lean)
+  // ── Animation shared values (unchanged) ──────────────────────────────────
+  const torsoRot    = useSharedValue(0);
   const shoulderRot = useSharedValue(0);
-  const headRot   = useSharedValue(0);
+  const headRot     = useSharedValue(0);
   const accentColor = getScoreColor(score);
 
   useEffect(() => {
@@ -41,8 +46,7 @@ export default function DeskPostureFigure({ state, score }: Props) {
     headRot.value     = withTiming(angles.head,     cfg);
   }, [state]);
 
-  // Upper body group pivots around the hip (bottom of the torso).
-  // Pivot trick: translate down by TORSO_HEIGHT/2, rotate, translate back up.
+  // Upper body pivots around the hip
   const upperBodyStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: TORSO_HEIGHT / 2 },
@@ -51,129 +55,171 @@ export default function DeskPostureFigure({ state, score }: Props) {
     ],
   }));
 
-  // Shoulders additionally tilt (for side-lean states)
   const shoulderStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${shoulderRot.value}deg` }],
   }));
 
-  // Head tilts a little independently
   const headStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${headRot.value}deg` }],
   }));
 
   return (
     <View style={styles.scene}>
-      {/* ── DESK SURFACE ── */}
-      <View style={[styles.desk, { backgroundColor: "#C8B89A" }]} />
-      <View style={[styles.deskLeg, { left: 30, backgroundColor: "#A99070" }]} />
-      <View style={[styles.deskLeg, { right: 30, backgroundColor: "#A99070" }]} />
 
-      {/* ── CHAIR SEAT ── */}
+      {/* ── Layer 1: desk legs (back) ── */}
+      <View style={[styles.deskLeg, { left: 28,  backgroundColor: DESK_DARK }]} />
+      <View style={[styles.deskLeg, { right: 28, backgroundColor: DESK_DARK }]} />
+
+      {/* ── Layer 2: chair legs ── */}
+      <View style={[styles.chairLeg, { left: 56  }]} />
+      <View style={[styles.chairLeg, { right: 56 }]} />
+
+      {/* ── Layer 3: chair back-rest (behind torso) ── */}
+      <View style={styles.chairBackrest} />
+
+      {/* ── Layer 4: chair seat ── */}
       <View style={styles.chairSeat} />
-      <View style={[styles.chairLeg, { left: 52 }]} />
-      <View style={[styles.chairLeg, { right: 52 }]} />
 
-      {/* ── FIGURE ── origin at hip point = (scene center-x, hipY) ── */}
+      {/* ── Layer 5: lower body (hidden by desk surface above) ── */}
       <View style={styles.figureRoot}>
+        {/* Hips */}
+        <View style={[styles.hips, { backgroundColor: PANTS }]} />
+        {/* Thighs – horizontal slabs going outward from hip */}
+        <View style={[styles.thigh, styles.thighLeft,  { backgroundColor: PANTS }]} />
+        <View style={[styles.thigh, styles.thighRight, { backgroundColor: PANTS }]} />
+        {/* Lower legs */}
+        <View style={[styles.lowerLeg, styles.lowerLegLeft,  { backgroundColor: PANTS }]} />
+        <View style={[styles.lowerLeg, styles.lowerLegRight, { backgroundColor: PANTS }]} />
+        {/* Feet */}
+        <View style={[styles.foot, styles.footLeft,  { backgroundColor: "#263238" }]} />
+        <View style={[styles.foot, styles.footRight, { backgroundColor: "#263238" }]} />
+      </View>
 
-        {/* UPPER BODY GROUP – rotates around the hip */}
+      {/* ── Layer 6: laptop base (on desk) ── */}
+      <View style={styles.laptopBase} />
+
+      {/* ── Layer 7: DESK SURFACE – covers lower body for depth illusion ── */}
+      <View style={[styles.deskSurface, { backgroundColor: DESK_COL }]} />
+      {/* Desk edge highlight */}
+      <View style={[styles.deskEdge, { backgroundColor: DESK_DARK }]} />
+
+      {/* ── Layer 8: laptop screen (above desk) ── */}
+      <View style={styles.laptopScreen}>
+        {/* Screen bezel */}
+        <View style={styles.screenBezel} />
+        {/* Screen content glow */}
+        <View style={styles.screenGlow} />
+        {/* Camera dot */}
+        <View style={styles.screenCamera} />
+      </View>
+
+      {/* ── Layer 9: upper body (animated, above desk) ── */}
+      <View style={styles.figureRoot}>
         <Animated.View style={[styles.upperBodyGroup, upperBodyStyle]}>
 
-          {/* Torso / Spine */}
-          <View
-            style={[
-              styles.torso,
-              { backgroundColor: accentColor },
-            ]}
-          />
+          {/* Shirt / torso */}
+          <View style={[styles.torso, { backgroundColor: accentColor }]} />
 
-          {/* Shoulders – horizontal bar at top of torso */}
+          {/* Shoulders */}
           <Animated.View style={[styles.shoulderRow, shoulderStyle]}>
             <View style={[styles.shoulderBar, { backgroundColor: accentColor }]} />
-            {/* Left arm */}
-            <View style={[styles.arm, styles.armLeft, { backgroundColor: "#C2A685" }]} />
-            {/* Right arm */}
-            <View style={[styles.arm, styles.armRight, { backgroundColor: "#C2A685" }]} />
+            {/* Upper arms angling down toward desk */}
+            <View style={[styles.upperArm, styles.upperArmLeft,  { backgroundColor: SKIN }]} />
+            <View style={[styles.upperArm, styles.upperArmRight, { backgroundColor: SKIN }]} />
           </Animated.View>
 
           {/* Neck */}
-          <View style={[styles.neck, { backgroundColor: "#C2A685" }]} />
+          <View style={[styles.neck, { backgroundColor: SKIN }]} />
 
           {/* Head */}
           <Animated.View style={[styles.headWrapper, headStyle]}>
-            <View style={[styles.head, { borderColor: accentColor, backgroundColor: "#C2A685" }]} />
+            {/* Hair */}
+            <View style={[styles.hair, { backgroundColor: "#4A3728" }]} />
+            {/* Face */}
+            <View style={[styles.head, { backgroundColor: SKIN }]} />
           </Animated.View>
 
         </Animated.View>
-
-        {/* HIPS */}
-        <View style={[styles.hips, { backgroundColor: "#5D5072" }]} />
-
-        {/* THIGHS – going forward at roughly 90° (horizontal) */}
-        <View style={[styles.thigh, styles.thighLeft,  { backgroundColor: "#5D5072" }]} />
-        <View style={[styles.thigh, styles.thighRight, { backgroundColor: "#5D5072" }]} />
-
-        {/* LOWER LEGS – going down from knee */}
-        <View style={[styles.lowerLeg, styles.lowerLegLeft,  { backgroundColor: "#5D5072" }]} />
-        <View style={[styles.lowerLeg, styles.lowerLegRight, { backgroundColor: "#5D5072" }]} />
-
-        {/* FOREARMS resting on desk */}
-        <View style={[styles.forearm, styles.forearmLeft,  { backgroundColor: "#C2A685" }]} />
-        <View style={[styles.forearm, styles.forearmRight, { backgroundColor: "#C2A685" }]} />
       </View>
 
-      {/* Score accent glow under figure */}
-      <View style={[styles.scoreGlow, { backgroundColor: accentColor + "33" }]} />
+      {/* ── Layer 10: forearms resting on desk toward laptop ── */}
+      <View style={[styles.forearm, styles.forearmLeft,  { backgroundColor: SKIN }]} />
+      <View style={[styles.forearm, styles.forearmRight, { backgroundColor: SKIN }]} />
+
+      {/* ── Score glow ── */}
+      <View style={[styles.scoreGlow, { backgroundColor: accentColor + "28" }]} />
     </View>
   );
 }
 
-const HIP_Y = 180; // px from top of scene where hips are
+// ─── Layout constants ───────────────────────────────────────────────────────
+const HIP_Y   = 220;   // hip level from top of scene
+const DESK_Y  = 185;   // desk surface y from top (above hips = person sits at desk)
 
 const styles = StyleSheet.create({
   scene: {
-    width: 240,
-    height: 300,
+    width: 260,
+    height: 340,
     position: "relative",
   },
 
-  // Desk
-  desk: {
+  // ── Desk ──
+  deskSurface: {
     position: "absolute",
-    top: HIP_Y - 90,
-    left: 10,
-    right: 10,
-    height: 10,
-    borderRadius: 3,
+    top: DESK_Y,
+    left: 0,
+    right: 0,
+    height: 12,
+    borderRadius: 4,
+  },
+  deskEdge: {
+    position: "absolute",
+    top: DESK_Y + 12,
+    left: 0,
+    right: 0,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.6,
   },
   deskLeg: {
     position: "absolute",
-    top: HIP_Y - 80,
-    width: 8,
-    height: 50,
-    borderRadius: 3,
+    top: DESK_Y + 16,
+    width: 10,
+    height: 110,
+    borderRadius: 4,
   },
 
-  // Chair
+  // ── Chair ──
   chairSeat: {
     position: "absolute",
-    top: HIP_Y + 10,
-    left: 50,
-    right: 50,
-    height: 8,
-    borderRadius: 3,
-    backgroundColor: "#8B7BA8",
+    top: HIP_Y + 8,
+    left: 42,
+    right: 42,
+    height: 10,
+    borderRadius: 4,
+    backgroundColor: CHAIR_COL,
+  },
+  chairBackrest: {
+    position: "absolute",
+    // Sits behind the torso – centred, from seat level up
+    top: HIP_Y - 72,
+    left: 113,
+    width: 34,
+    height: 80,
+    borderRadius: 6,
+    backgroundColor: CHAIR_COL,
+    opacity: 0.55,
   },
   chairLeg: {
     position: "absolute",
     top: HIP_Y + 18,
-    width: 6,
-    height: 55,
-    borderRadius: 2,
-    backgroundColor: "#7A6B96",
+    width: 8,
+    height: 90,
+    borderRadius: 3,
+    backgroundColor: CHAIR_DARK,
   },
 
-  // Figure root – centred horizontally, hip at HIP_Y
+  // ── Figure root ──
   figureRoot: {
     position: "absolute",
     top: HIP_Y,
@@ -182,134 +228,197 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // Upper body group
+  // ── Upper body group ──
   upperBodyGroup: {
     alignItems: "center",
     position: "absolute",
     top: -TORSO_HEIGHT,
-    width: SHOULDER_WIDTH + 40,
+    width: SHOULDER_WIDTH + 44,
   },
-
   torso: {
     position: "absolute",
     bottom: 0,
     width: TORSO_WIDTH,
     height: TORSO_HEIGHT,
-    borderRadius: 6,
+    borderRadius: 7,
   },
-
   shoulderRow: {
     position: "absolute",
     top: -(SHOULDER_HEIGHT / 2),
     alignItems: "center",
-    width: SHOULDER_WIDTH + 40,
+    width: SHOULDER_WIDTH + 44,
   },
   shoulderBar: {
     width: SHOULDER_WIDTH,
     height: SHOULDER_HEIGHT,
-    borderRadius: 5,
+    borderRadius: 6,
   },
-
-  arm: {
+  upperArm: {
     position: "absolute",
-    width: 10,
-    height: 40,
-    borderRadius: 4,
-    top: SHOULDER_HEIGHT / 2,
+    width: 11,
+    height: 36,
+    borderRadius: 5,
+    top: SHOULDER_HEIGHT,
   },
-  armLeft: {
-    left: 4,
-    transform: [{ rotate: "15deg" }],
+  upperArmLeft: {
+    left: 6,
+    transform: [{ rotate: "22deg" }],
   },
-  armRight: {
-    right: 4,
-    transform: [{ rotate: "-15deg" }],
+  upperArmRight: {
+    right: 6,
+    transform: [{ rotate: "-22deg" }],
   },
-
   neck: {
     position: "absolute",
-    top: -(HEAD_SIZE * 0.3 + 12),
-    width: 10,
-    height: 16,
-    borderRadius: 4,
+    top: -(HEAD_SIZE * 0.25 + 14),
+    width: 11,
+    height: 18,
+    borderRadius: 5,
   },
-
   headWrapper: {
     position: "absolute",
-    top: -(HEAD_SIZE + HEAD_SIZE * 0.3 + 12),
+    top: -(HEAD_SIZE + HEAD_SIZE * 0.25 + 14),
     alignItems: "center",
+  },
+  hair: {
+    position: "absolute",
+    top: 0,
+    width: HEAD_SIZE,
+    height: HEAD_SIZE * 0.55,
+    borderTopLeftRadius: HEAD_SIZE / 2,
+    borderTopRightRadius: HEAD_SIZE / 2,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   head: {
     width: HEAD_SIZE,
     height: HEAD_SIZE,
     borderRadius: HEAD_SIZE / 2,
-    borderWidth: 3,
   },
 
-  // Hips at origin (centre)
+  // ── Hips ──
   hips: {
     position: "absolute",
-    top: -6,
-    width: 44,
+    top: -8,
+    width: 48,
+    height: 14,
+    borderRadius: 6,
+  },
+
+  // ── Thighs (horizontal on chair) ──
+  thigh: {
+    position: "absolute",
+    top: 4,
+    width: 38,
     height: 12,
     borderRadius: 5,
   },
-
-  // Thighs – go horizontally outward (seats figure on chair)
-  thigh: {
-    position: "absolute",
-    top: 0,
-    width: 10,
-    height: 36,
-    borderRadius: 4,
-    transform: [{ rotate: "90deg" }],
-  },
   thighLeft: {
-    left: 16,
-    transformOrigin: "top",
+    left: 14,
   },
   thighRight: {
-    right: 16,
-    transformOrigin: "top",
+    right: 14,
   },
 
-  // Lower legs dropping from knee
+  // ── Lower legs ──
   lowerLeg: {
     position: "absolute",
-    top: 18,
-    width: 10,
-    height: 50,
-    borderRadius: 4,
+    top: 16,
+    width: 11,
+    height: 68,
+    borderRadius: 5,
   },
   lowerLegLeft: {
-    left: 50,
+    left: 58,
   },
   lowerLegRight: {
-    right: 50,
+    right: 58,
   },
 
-  // Forearms on desk surface
-  forearm: {
+  // ── Feet ──
+  foot: {
     position: "absolute",
-    top: -100,
-    width: 32,
-    height: 10,
+    top: 82,
+    width: 18,
+    height: 9,
     borderRadius: 4,
   },
-  forearmLeft: {
-    left: 12,
+  footLeft: {
+    left: 54,
   },
-  forearmRight: {
-    right: 12,
+  footRight: {
+    right: 54,
   },
 
-  // Subtle glow circle below figure reflecting posture score colour
+  // ── Forearms on desk ──
+  forearm: {
+    position: "absolute",
+    top: DESK_Y + 2,
+    width: 38,
+    height: 11,
+    borderRadius: 5,
+  },
+  forearmLeft: {
+    left: 60,
+  },
+  forearmRight: {
+    right: 60,
+  },
+
+  // ── Laptop ──
+  laptopBase: {
+    position: "absolute",
+    top: DESK_Y - 9,
+    left: 88,
+    right: 88,
+    height: 9,
+    borderRadius: 3,
+    backgroundColor: LAPTOP_BODY,
+  },
+  laptopScreen: {
+    position: "absolute",
+    top: DESK_Y - 62,
+    left: 84,
+    right: 84,
+    height: 52,
+    borderRadius: 5,
+    backgroundColor: LAPTOP_BODY,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  screenBezel: {
+    position: "absolute",
+    inset: 3,
+    borderRadius: 3,
+    backgroundColor: SCREEN_BG,
+  },
+  screenGlow: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    right: 6,
+    bottom: 6,
+    borderRadius: 2,
+    backgroundColor: SCREEN_GLOW,
+    opacity: 0.22,
+  },
+  screenCamera: {
+    position: "absolute",
+    top: 5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#546E7A",
+  },
+
+  // ── Score glow ──
   scoreGlow: {
     position: "absolute",
-    bottom: 0,
+    bottom: 2,
     alignSelf: "center",
-    width: 140,
-    height: 20,
-    borderRadius: 70,
+    width: 150,
+    height: 18,
+    borderRadius: 75,
   },
 });
