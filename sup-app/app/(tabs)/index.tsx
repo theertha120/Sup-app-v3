@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
@@ -9,6 +10,7 @@ import {
   userProfileToUser,
 } from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
+import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
 import { useMemo } from "react";
 import {
   analyzeIMUStream,
@@ -37,19 +39,27 @@ export default function HomeScreen() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  useEffect(() => {
-    // Fetch current user profile using profileService
+  const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(userProfileToUser(profile));
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
-        // Fallback: try to get user from leaderboard if profileService fails
-        // This handles cases where auth might not be fully set up yet
       })
       .finally(() => setIsLoadingProfile(false));
+  };
+
+  useEffect(() => {
+    loadProfile();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Refetch when returning from e.g. Supsona Builder so avatar updates
+      loadProfile();
+    }, [])
+  );
 
   const handleProfilePress = () => {
     setShowProfileModal(true);
@@ -62,14 +72,6 @@ export default function HomeScreen() {
   const handleSaveProfile = async (updatedUser: User) => {
     // Update local state with the updated user from profileService
     setCurrentUser(updatedUser);
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
   };
 
   // Calculate posture stability score from IMU stream (same logic as stats page)
@@ -107,11 +109,14 @@ export default function HomeScreen() {
         <Pressable style={styles.profileCard} onPress={handleProfilePress}>
           <View style={styles.profileContent}>
             <View style={styles.avatarWrapper}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {currentUser ? getInitials(currentUser.name) : "?"}
-                </Text>
-              </View>
+              <UserSupsonaAvatar
+                avatar={currentUser?.avatar}
+                name={currentUser?.name ?? ""}
+                size={64}
+                style={styles.avatar}
+                textStyle={styles.avatarText}
+                defaultAvatarBackgroundColor="white"
+              />
               <View style={styles.editBadge}>
                 <Text style={styles.editBadgeText}>✎</Text>
               </View>

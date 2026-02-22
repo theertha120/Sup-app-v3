@@ -15,6 +15,7 @@ export default function RootLayout() {
 
         {/* Optional modal screen */}
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+        <Stack.Screen name="supsona-builder" options={{ presentation: "modal", title: "Supsona" }} />
       </Stack>
 
       {/* Sign-in modal that shows on app open */}

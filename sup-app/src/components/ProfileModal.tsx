@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { router } from "expo-router";
 import { colours } from "../../theme/colours";
 import type { User } from "../../constants/env";
 import {
@@ -17,6 +18,7 @@ import {
   userProfileToUser,
   type ProfileUpdateInput,
 } from "../services/profileService";
+import { UserSupsonaAvatar } from "./SupsonaAvatar";
 
 interface ProfileModalProps {
   visible: boolean;
@@ -37,30 +39,31 @@ export default function ProfileModal({
 }: ProfileModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState("");
-  const [editedAvatar, setEditedAvatar] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [profileData, setProfileData] = useState<User | null>(user);
 
-  // Fetch profile data when modal opens and user is provided
+  // Sync with user when modal opens or when parent passes updated user (e.g. after supsona save)
   useEffect(() => {
-    if (visible && user?.id && !profileData) {
-      setIsLoading(true);
-      fetchUserProfile(user.id)
-        .then((profile) => {
-          if (profile) {
-            setProfileData(userProfileToUser(profile));
-          }
-        })
-        .catch((err) => {
-          console.error("[ProfileModal] Failed to fetch profile", err);
-          setError("Failed to load profile data");
-        })
-        .finally(() => setIsLoading(false));
-    } else if (visible && user) {
+    if (visible && user) {
       setProfileData(user);
     }
+  }, [visible, user]);
+
+  // Fetch full profile when modal opens for the first time for this user
+  useEffect(() => {
+    if (!visible || !user?.id) return;
+    setIsLoading(true);
+    fetchUserProfile(user.id)
+      .then((profile) => {
+        if (profile) setProfileData(userProfileToUser(profile));
+      })
+      .catch((err) => {
+        console.error("[ProfileModal] Failed to fetch profile", err);
+        setError("Failed to load profile data");
+      })
+      .finally(() => setIsLoading(false));
   }, [visible, user?.id]);
 
   const loading = externalLoading || isLoading;
@@ -70,7 +73,6 @@ export default function ProfileModal({
   const handleEdit = () => {
     if (!profileData) return;
     setEditedName(profileData.name);
-    setEditedAvatar(profileData.avatar || "");
     setError("");
     setIsEditing(true);
   };
@@ -78,7 +80,6 @@ export default function ProfileModal({
   const handleCancel = () => {
     setIsEditing(false);
     setEditedName("");
-    setEditedAvatar("");
     setError("");
   };
 
@@ -99,7 +100,6 @@ export default function ProfileModal({
     try {
       const updates: ProfileUpdateInput = {
         name: editedName.trim(),
-        avatar: editedAvatar.trim() || null,
       };
 
       // Update via profileService
@@ -119,7 +119,6 @@ export default function ProfileModal({
 
       setIsEditing(false);
       setEditedName("");
-      setEditedAvatar("");
     } catch (err) {
       console.error("[ProfileModal] Save error", err);
       setError(err instanceof Error ? err.message : "Failed to save changes. Please try again.");
@@ -164,17 +163,15 @@ export default function ProfileModal({
               </Pressable>
             </View>
 
-            {/* Avatar */}
+            {/* Avatar (Supsona or default initials) */}
             <View style={styles.avatarContainer}>
-              <View style={styles.avatarLarge}>
-                <Text style={styles.avatarLargeText}>
-                  {getInitials(
-                    isEditing
-                      ? editedName || profileData?.name || ""
-                      : profileData?.name || ""
-                  )}
-                </Text>
-              </View>
+              <UserSupsonaAvatar
+                avatar={profileData?.avatar}
+                name={isEditing ? editedName || profileData?.name || "" : profileData?.name || ""}
+                size={80}
+                style={styles.avatarLarge}
+                textStyle={styles.avatarLargeText}
+              />
             </View>
 
             {/* User Info */}
@@ -198,18 +195,6 @@ export default function ProfileModal({
                         />
                       </View>
 
-                      <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Avatar URL (optional)</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={editedAvatar}
-                          onChangeText={setEditedAvatar}
-                          placeholder="https://example.com/avatar.jpg"
-                          placeholderTextColor="#999"
-                          autoCapitalize="none"
-                        />
-                      </View>
-
                       {error && (
                         <View style={styles.errorContainer}>
                           <Text style={styles.errorText}>{error}</Text>
@@ -219,8 +204,16 @@ export default function ProfileModal({
                   ) : (
                     <>
                       <Text style={styles.name}>{profileData?.name || "Loading..."}</Text>
-                      {profileData?.avatar && (
-                        <Text style={styles.avatarUrl}>Avatar: {profileData.avatar}</Text>
+                      {isCurrentUser && (
+                        <Pressable
+                          style={styles.supsonaButton}
+                          onPress={() => {
+                            onClose();
+                            router.push("/supsona-builder");
+                          }}
+                        >
+                          <Text style={styles.supsonaButtonText}>Customise Supsona</Text>
+                        </Pressable>
                       )}
                     </>
                   )}
@@ -350,6 +343,19 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "600",
   },
+  supsonaButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colours.primarySoft,
+    alignSelf: "center",
+  },
+  supsonaButtonText: {
+    color: colours.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
   content: {
     padding: 20,
     paddingTop: 0,
@@ -360,12 +366,6 @@ const styles = StyleSheet.create({
     color: "#222",
     textAlign: "center",
     marginBottom: 8,
-  },
-  avatarUrl: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    marginBottom: 16,
   },
   inputGroup: {
     marginBottom: 16,
