@@ -13,16 +13,19 @@ export interface DeskPostureSnapshot {
   description: string;
 }
 
-// Posture config for each state – angles in degrees used by the animation
+// Posture config for each state – angles in degrees used by the animation.
+// torso    → side-view panel: forward(+) / back(-) lean
+// shoulder → front-view panel: right(+) / left(-) tilt
+// head     → head tilt, applied in both views
 export const POSTURE_ANGLES: Record<
   DeskPostureState,
   { torso: number; head: number; shoulder: number }
 > = {
-  upright:      { torso: 0,   head: 0,   shoulder: 0  },
-  forward_lean: { torso: 25,  head: 15,  shoulder: 10 },
-  slouched:     { torso: 35,  head: 20,  shoulder: 0  },
-  tilted_left:  { torso: -15, head: -8,  shoulder: -12 },
-  tilted_right: { torso: 15,  head: 8,   shoulder: 12 },
+  upright:      { torso: 0,   head: 0,   shoulder: 0   },
+  forward_lean: { torso: 22,  head: 13,  shoulder: 0   },
+  slouched:     { torso: 34,  head: 22,  shoulder: 0   },
+  tilted_left:  { torso: 0,   head: -8,  shoulder: -22 },
+  tilted_right: { torso: 0,   head: 8,   shoulder: 22  },
 };
 
 // Score thresholds
