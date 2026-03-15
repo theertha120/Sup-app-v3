@@ -3,6 +3,7 @@ export type AppUnits = "metric" | "imperial";
 
 export interface AppSettings {
   notificationsEnabled: boolean;
+  friendRequestNotificationsEnabled: boolean;
   postureRemindersEnabled: boolean;
   postureReminderTime: string;
   dailyGoalsEnabled: boolean;
@@ -13,6 +14,7 @@ export interface AppSettings {
 
 const defaultSettings: AppSettings = {
   notificationsEnabled: true,
+  friendRequestNotificationsEnabled: true,
   postureRemindersEnabled: true,
   postureReminderTime: "09:00",
   dailyGoalsEnabled: false,

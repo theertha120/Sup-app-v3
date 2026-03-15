@@ -104,6 +104,23 @@ export default function SettingsScreen() {
 
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Friend Request Notifications</Text>
+            <Text style={styles.settingDescription}>
+              Get notified when someone sends you a friend request
+            </Text>
+          </View>
+          <Switch
+            value={settings.friendRequestNotificationsEnabled}
+            onValueChange={(value) =>
+              updateSetting("friendRequestNotificationsEnabled", value)
+            }
+            trackColor={{ false: "#E0E0E0", true: colours.primary }}
+            thumbColor="white"
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Posture Reminders</Text>
             <Text style={styles.settingDescription}>
               Gentle reminders to check your posture
