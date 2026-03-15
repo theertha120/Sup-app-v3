@@ -1,4 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Animated,
+  TextInput,
+} from "react-native";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
@@ -9,6 +17,16 @@ import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
+import {
+  acceptFriendRequest,
+  ensureFriendDirectory,
+  getUsernameForUser,
+  getFriendsForUser,
+  getIncomingPendingRequests,
+  getOutgoingPendingRequests,
+  rejectFriendRequest,
+  sendFriendRequestByUsername,
+} from "../../src/services/friendService";
 
 // Animated number component for smooth transitions
 function AnimatedNumber({ value, style }: { value: number; style?: any }) {
@@ -76,6 +94,10 @@ export default function LeaderboardScreen() {
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [friendUsernameInput, setFriendUsernameInput] = useState("");
+  const [sendFeedback, setSendFeedback] = useState("");
+  const [incomingActionFeedback, setIncomingActionFeedback] = useState("");
+  const [friendStateVersion, setFriendStateVersion] = useState(0);
 
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
@@ -85,6 +107,25 @@ export default function LeaderboardScreen() {
       .then(setUsers)
       .catch((err) => console.error("Failed to load leaderboard", err));
   }, []);
+
+  useEffect(() => {
+    if (users.length === 0) return;
+    ensureFriendDirectory(users);
+
+    const currentUsername = getUsernameForUser(CURRENT_USER_ID);
+    const hasAnyRequests =
+      getIncomingPendingRequests(CURRENT_USER_ID).length > 0 ||
+      getOutgoingPendingRequests(CURRENT_USER_ID).length > 0;
+
+    if (!hasAnyRequests && currentUsername) {
+      const demoSender = users.find((user) => user.id !== CURRENT_USER_ID);
+      if (demoSender) {
+        sendFriendRequestByUsername(demoSender.id, currentUsername, users);
+      }
+    }
+
+    setFriendStateVersion((prev) => prev + 1);
+  }, [users]);
 
   const sortedUsers = [...users].sort((a, b) => {
     if (sortMode === "streak") {
@@ -152,6 +193,53 @@ export default function LeaderboardScreen() {
       setUsers(updatedUsers);
       setSelectedUser(updatedUser);
     }
+  };
+
+  const refreshFriendState = () => {
+    setFriendStateVersion((prev) => prev + 1);
+  };
+
+  const handleSendFriendRequest = () => {
+    const result = sendFriendRequestByUsername(
+      CURRENT_USER_ID,
+      friendUsernameInput,
+      users
+    );
+
+    if (!result.ok) {
+      setSendFeedback(result.message);
+      return;
+    }
+
+    setFriendUsernameInput("");
+    setSendFeedback("Friend request sent.");
+    setIncomingActionFeedback("");
+    refreshFriendState();
+  };
+
+  const handleAcceptRequest = (requestId: string) => {
+    const result = acceptFriendRequest(requestId, CURRENT_USER_ID);
+    setIncomingActionFeedback(
+      result.ok ? "Friend request accepted." : result.message
+    );
+    refreshFriendState();
+  };
+
+  const handleRejectRequest = (requestId: string) => {
+    const result = rejectFriendRequest(requestId, CURRENT_USER_ID);
+    setIncomingActionFeedback(
+      result.ok ? "Friend request rejected." : result.message
+    );
+    refreshFriendState();
+  };
+
+  const incomingRequests = getIncomingPendingRequests(CURRENT_USER_ID);
+  const outgoingRequests = getOutgoingPendingRequests(CURRENT_USER_ID);
+  const friends = getFriendsForUser(CURRENT_USER_ID);
+  const currentUsername = getUsernameForUser(CURRENT_USER_ID) ?? "Unknown User";
+
+  const getUserDisplayName = (userId: string): string => {
+    return users.find((user) => user.id === userId)?.name ?? userId;
   };
 
   return (
@@ -290,6 +378,77 @@ export default function LeaderboardScreen() {
             onPress={() => handleUserPress(user)}
           />
         ))}
+      </View>
+
+      {/* Friends */}
+      <View style={styles.friendSection}>
+        <Text style={styles.friendTitle}>Friends</Text>
+       
+        <View style={styles.friendAddRow}>
+          <TextInput
+            value={friendUsernameInput}
+            onChangeText={setFriendUsernameInput}
+            placeholder="Add friend by username"
+            autoCapitalize="none"
+            style={styles.friendInput}
+            placeholderTextColor="#9A9A9A"
+          />
+          <Pressable style={styles.friendSendBtn} onPress={handleSendFriendRequest}>
+            <Text style={styles.friendSendText}>Send</Text>
+          </Pressable>
+        </View>
+
+        {sendFeedback ? <Text style={styles.friendFeedback}>{sendFeedback}</Text> : null}
+
+        <Text style={styles.friendBlockTitle}>Incoming Requests</Text>
+        {incomingActionFeedback ? (
+          <Text style={styles.friendFeedback}>{incomingActionFeedback}</Text>
+        ) : null}
+        {incomingRequests.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No incoming requests.</Text>
+        ) : (
+          incomingRequests.map((request) => (
+            <View key={request.id} style={styles.requestRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.requestName}>{getUserDisplayName(request.fromUserId)}</Text>
+              </View>
+              <Pressable
+                style={[styles.requestActionBtn, styles.acceptBtn]}
+                onPress={() => handleAcceptRequest(request.id)}
+              >
+                <Text style={styles.requestActionText}>Accept</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.requestActionBtn, styles.rejectBtn]}
+                onPress={() => handleRejectRequest(request.id)}
+              >
+                <Text style={styles.requestActionText}>Reject</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
+
+        <Text style={styles.friendBlockTitle}>Pending Sent</Text>
+        {outgoingRequests.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No pending outgoing requests.</Text>
+        ) : (
+          outgoingRequests.map((request) => (
+            <Text key={request.id} style={styles.friendListItem}>
+              • {getUserDisplayName(request.toUserId)}
+            </Text>
+          ))
+        )}
+
+        <Text style={styles.friendBlockTitle}>Your Friends</Text>
+        {friends.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No friends yet.</Text>
+        ) : (
+          friends.map((friendId) => (
+            <Text key={friendId} style={styles.friendListItem}>
+              • {getUserDisplayName(friendId)}
+            </Text>
+          ))
+        )}
       </View>
 
       {/* Profile Modal */}
@@ -564,5 +723,100 @@ const styles = StyleSheet.create({
     color: "#777",
     fontSize: 12,
     padding: 16,
+  },
+  friendSection: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "white",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  friendTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  friendSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 2,
+  },
+  friendAddRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  friendInput: {
+    flex: 1,
+    backgroundColor: "#F6F6FA",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#333",
+  },
+  friendSendBtn: {
+    backgroundColor: colours.primary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  friendSendText: {
+    color: "white",
+    fontWeight: "700",
+  },
+  friendFeedback: {
+    color: colours.primary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  friendBlockTitle: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#444",
+  },
+  friendEmptyText: {
+    fontSize: 12,
+    color: "#777",
+  },
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 10,
+  },
+  requestName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  requestMeta: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 2,
+  },
+  requestActionBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  acceptBtn: {
+    backgroundColor: colours.primary,
+  },
+  rejectBtn: {
+    backgroundColor: "#E5E5EA",
+  },
+  requestActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#333",
+  },
+  friendListItem: {
+    fontSize: 12,
+    color: "#555",
   },
 });
