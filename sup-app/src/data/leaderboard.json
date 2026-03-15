@@ -5,56 +5,56 @@
       "name": "Sarah Chen",
       "currentStreak": 45,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 7.2
+      "weeklyTotalPoints": 504
     },
     {
       "id": "user-2",
       "name": "Mike Johnson",
       "currentStreak": 38,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 6.8
+      "weeklyTotalPoints": 476
     },
     {
       "id": "user-3",
       "name": "Emma Wilson",
       "currentStreak": 1,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 0.1
+      "weeklyTotalPoints": 70
     },
     {
       "id": "user-4",
       "name": "Test User",
-      "currentStreak": 0,
-      "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 0
+      "currentStreak": 14,
+      "lastActivityDate": "2026-02-27",
+      "weeklyTotalPoints": 353
     },
     {
       "id": "user-5",
       "name": "Lisa Anderson",
       "currentStreak": 25,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 5.7
+      "weeklyTotalPoints": 360
     },
     {
       "id": "user-6",
       "name": "David Lee",
-      "currentStreak": 22,
+      "currentStreak": 20,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 5.3
+      "weeklyTotalPoints": 371
     },
     {
       "id": "user-7",
       "name": "Rachel Kim",
       "currentStreak": 18,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 4.8
+      "weeklyTotalPoints": 336
     },
     {
       "id": "user-8",
       "name": "Tom Brown",
       "currentStreak": 15,
       "lastActivityDate": "2026-01-24",
-      "weeklyAvgScore": 4.5
+      "weeklyTotalPoints": 315
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { Tabs } from "expo-router";
 import { colours } from "@/theme/colours";
 import { Ionicons } from "@expo/vector-icons";
+import { Platform } from "react-native";
 
 export default function TabsLayout() {
   return (
@@ -12,6 +13,19 @@ export default function TabsLayout() {
         tabBarStyle: {
           borderTopColor: colours.border,
         },
+        animation: "shift",
+        // Add smooth transition animation
+        ...Platform.select({
+          ios: {
+            animation: "shift",
+          },
+          android: {
+            animation: "shift",
+          },
+          default: {
+            animation: "fade",
+          },
+        }),
       }}
     >
       <Tabs.Screen

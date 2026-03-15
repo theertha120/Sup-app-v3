@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -34,6 +34,19 @@ function getEncouragingMessage(score: number): string {
 }
 
 export default function HomeScreen() {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim])
+  );
+
   const { logout } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -74,6 +87,18 @@ export default function HomeScreen() {
     setCurrentUser(updatedUser);
   };
 
+  const handleSettingsPress = () => {
+    router.push("/settings");
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase();
+  };
+
   // Calculate posture stability score from IMU stream (same logic as stats page)
   const postureStats = useMemo(() => {
     try {
@@ -92,7 +117,8 @@ export default function HomeScreen() {
   const hasScore = postureStats !== null;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Enhanced Header Section */}
       <View style={styles.headerContainer}>
         <View style={styles.header}>
@@ -100,8 +126,8 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Welcome back!</Text>
             <Text style={styles.subtitle}>We're here to support your posture today</Text>
           </View>
-          <Pressable style={styles.logoutButton} onPress={logout}>
-            <Text style={styles.logoutText}>Logout</Text>
+          <Pressable style={styles.settingsButton} onPress={handleSettingsPress}>
+            <Text style={styles.gearIcon}>⚙</Text>
           </Pressable>
         </View>
 
@@ -205,13 +231,14 @@ export default function HomeScreen() {
         loading={isLoadingProfile}
       />
     </ScrollView>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F6FA",
+    backgroundColor: "#EDE9FF",
   },
 
   headerContainer: {
@@ -247,18 +274,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  logoutButton: {
-    backgroundColor: "#F6F6FA",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  logoutText: {
+  gearIcon: {
+    fontSize: 30,
     color: "#666",
-    fontSize: 14,
-    fontWeight: "600",
+    opacity: 0.8,
   },
 
   profileCard: {
@@ -376,14 +401,17 @@ const styles = StyleSheet.create({
   },
   promptButton: {
     alignSelf: "flex-start",
-    backgroundColor: colours.primary,
+    backgroundColor: "transparent",
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colours.primary,
   },
   promptButtonText: {
-    color: "white",
+    color: colours.primary,
     fontSize: 14,
+    fontWeight: "600",
   },
 
   actions: {
