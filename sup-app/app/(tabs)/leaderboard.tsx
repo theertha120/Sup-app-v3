@@ -9,6 +9,7 @@ import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
+import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
 
 // Animated number component for smooth transitions
 function AnimatedNumber({ value, style }: { value: number; style?: any }) {
@@ -77,6 +78,7 @@ export default function LeaderboardScreen() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
+  const loadLeaderboard = useCallback(() => {
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
 
@@ -85,6 +87,16 @@ export default function LeaderboardScreen() {
       .then(setUsers)
       .catch((err) => console.error("Failed to load leaderboard", err));
   }, []);
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, [loadLeaderboard]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadLeaderboard();
+    }, [loadLeaderboard])
+  );
 
   const sortedUsers = [...users].sort((a, b) => {
     if (sortMode === "streak") {
@@ -283,9 +295,7 @@ export default function LeaderboardScreen() {
           <LeaderboardRow
             key={user.id}
             rank={index + 1}
-            name={user.name}
-            streak={user.currentStreak}
-            weeklyPoints={user.weeklyTotalPoints}
+            user={user}
             isCurrentUser={user.id === CURRENT_USER_ID}
             onPress={() => handleUserPress(user)}
           />
@@ -312,14 +322,12 @@ export default function LeaderboardScreen() {
 
 interface LeaderboardRowProps {
   rank: number;
-  name: string;
-  streak: number;
-  weeklyPoints: number;
+  user: User;
   isCurrentUser: boolean;
   onPress: () => void;
 }
 
-function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser, onPress }: LeaderboardRowProps) {
+function LeaderboardRow({ rank, user, isCurrentUser, onPress }: LeaderboardRowProps) {
   return (
     <Pressable 
       style={[styles.row, isCurrentUser && styles.currentUserRow]} 
@@ -330,18 +338,23 @@ function LeaderboardRow({ rank, name, streak, weeklyPoints, isCurrentUser, onPre
       </Text>
       
       <View style={[styles.avatar, isCurrentUser && styles.currentUserAvatar]}>
-        <Text style={styles.avatarText}>
-          {name.split(' ').map(n => n[0]).join('')}
-        </Text>
+        <UserSupsonaAvatar
+          avatar={user.avatar}
+          name={user.name}
+          size={40}
+          style={styles.avatar}
+          textStyle={styles.avatarText}
+          defaultAvatarBackgroundColor="white"
+        />
       </View>
 
       <View style={styles.info}>
         <Text style={[styles.name, isCurrentUser && styles.currentUserText]}>
-          {name}
+          {user.name}
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={styles.stats}>
-          ⚡ {streak} {streak === 1 ? 'day' : 'days'} • Points: {weeklyPoints} pts
+          ⚡ {user.currentStreak} {user.currentStreak === 1 ? "day" : "days"} • Points: {user.weeklyTotalPoints} pts
         </Text>
       </View>
     </Pressable>
