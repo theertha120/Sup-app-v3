@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import {
   analyzeIMUStream,
@@ -16,6 +17,19 @@ const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[
 const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
 
 export default function StatsScreen() {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [])
+  );
+
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
 
   const sessionStats = useMemo(() => {
@@ -67,7 +81,8 @@ export default function StatsScreen() {
   const hasHistoricalData = filteredData.length > 0;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Your posture health</Text>
@@ -183,6 +198,7 @@ export default function StatsScreen() {
         advice.
       </Text>
     </ScrollView>
+    </Animated.View>
   );
 }
 
@@ -217,7 +233,7 @@ function UpperBackSessionCard({ stats }: { stats: PostureSessionStats }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F6FA",
+    backgroundColor: "#EDE9FF",
   },
 
   header: {
