@@ -1,12 +1,14 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Image,
   Animated,
   StyleSheet,
   ImageSourcePropType,
+  Easing,
 } from "react-native";
 import { DeskPostureState, getScoreColor } from "../data/mockDeskPostureData";
+import { colours } from "../../theme/colours";
 
 interface Props {
   state: DeskPostureState;
@@ -26,75 +28,147 @@ const STATE_IMAGE: Record<
 };
 
 export default function DeskPostureFigure({ state, score }: Props) {
-  const opacity  = useRef(new Animated.Value(1)).current;
+  const [displayedState, setDisplayedState] = useState<DeskPostureState>(state);
+  const [incomingState, setIncomingState] = useState<DeskPostureState | null>(null);
+  const transition = useRef(new Animated.Value(1)).current;
   const accentColor = getScoreColor(score);
 
-  const { source, mirror } = STATE_IMAGE[state];
+  const displayedImage = STATE_IMAGE[displayedState];
+  const incomingImage = incomingState ? STATE_IMAGE[incomingState] : null;
 
-  // Fade out → swap image → fade in on every state change
+  // Smoothly crossfade between the previous and next posture figure.
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [state]);
+    if (state === incomingState || state === displayedState) return;
+
+    if (incomingState) {
+      transition.stopAnimation();
+      setDisplayedState(incomingState);
+      setIncomingState(null);
+    }
+
+    setIncomingState(state);
+    transition.setValue(0);
+
+    Animated.timing(transition, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setDisplayedState(state);
+      setIncomingState(null);
+      transition.setValue(1);
+    });
+  }, [state, displayedState, incomingState, transition]);
+
+  const currentOpacity = transition;
+  const previousOpacity = transition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+
+  const currentScale = transition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.985, 1],
+  });
+
+  const previousScale = transition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.015],
+  });
 
   return (
-    <View style={styles.card}>
-      {/* Coloured accent bar at top that reflects posture score */}
-      <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-
-      <Animated.View
+    <View style={styles.scene}>
+      <View
         style={[
-          styles.imageWrapper,
-          { opacity },
-          mirror && styles.mirrored,
+          styles.baseShadow,
+          { backgroundColor: hexToRgba(accentColor, 0.2) },
         ]}
-      >
-        <Image
-          source={source}
-          style={styles.image}
-          resizeMode="contain"
-        />
-      </Animated.View>
+      />
+
+      {incomingImage ? (
+        <Animated.View
+          style={[
+            styles.layer,
+            {
+              opacity: previousOpacity,
+              transform: [
+                displayedImage.mirror ? { scaleX: -1 } : { scaleX: 1 },
+                { scale: previousScale },
+              ],
+            },
+          ]}
+        >
+          <Image source={displayedImage.source} style={styles.image} resizeMode="contain" />
+        </Animated.View>
+      ) : (
+        <View
+          style={[
+            styles.layer,
+            {
+              transform: [displayedImage.mirror ? { scaleX: -1 } : { scaleX: 1 }],
+            },
+          ]}
+        >
+          <Image source={displayedImage.source} style={styles.image} resizeMode="contain" />
+        </View>
+      )}
+
+      {incomingImage && (
+        <Animated.View
+          style={[
+            styles.layer,
+            {
+              opacity: currentOpacity,
+              transform: [
+                incomingImage.mirror ? { scaleX: -1 } : { scaleX: 1 },
+                { scale: currentScale },
+              ],
+            },
+          ]}
+        >
+          <Image source={incomingImage.source} style={styles.image} resizeMode="contain" />
+        </Animated.View>
+      )}
     </View>
   );
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 const styles = StyleSheet.create({
-  card: {
+  scene: {
     width: 260,
-    height: 280,
-    borderRadius: 20,
-    backgroundColor: "#F3F0FF",
-    overflow: "hidden",
-    alignItems: "center",
-  },
-  accentBar: {
-    width: "100%",
-    height: 5,
-  },
-  imageWrapper: {
-    flex: 1,
-    width: "100%",
+    height: 260,
+    backgroundColor: colours.card,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    overflow: "hidden",
   },
-  image: {
+  baseShadow: {
+    position: "absolute",
+    bottom: 16,
+    width: 150,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colours.border,
+    opacity: 0.35,
+  },
+  layer: {
+    position: "absolute",
     width: "100%",
     height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  mirrored: {
-    transform: [{ scaleX: -1 }],
+  image: {
+    width: "96%",
+    height: "96%",
   },
 });
