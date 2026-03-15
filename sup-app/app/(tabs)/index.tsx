@@ -7,6 +7,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
+  subscribeToProfileUpdates,
   userProfileToUser,
 } from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
@@ -63,6 +64,15 @@ export default function HomeScreen() {
         // This handles cases where auth might not be fully set up yet
       })
       .finally(() => setIsLoadingProfile(false));
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      if (updatedProfile.id !== CURRENT_USER_ID) return;
+      setCurrentUser(userProfileToUser(updatedProfile));
+    });
+
+    return unsubscribe;
   }, []);
 
   const handleProfilePress = () => {

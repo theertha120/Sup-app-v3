@@ -73,6 +73,80 @@ export type ProfileUpdateInput = {
   avatar?: string | null;
 };
 
+const localProfileOverrides = new Map<
+  string,
+  Pick<User, "name" | "avatar">
+>();
+
+type ProfileSaveMode = "remote" | "local_offline";
+let lastProfileSaveMode: ProfileSaveMode = "remote";
+
+type ProfileUpdateListener = (updatedProfile: UserProfile) => void;
+const profileUpdateListeners = new Set<ProfileUpdateListener>();
+
+export function subscribeToProfileUpdates(
+  listener: ProfileUpdateListener
+): () => void {
+  profileUpdateListeners.add(listener);
+  return () => {
+    profileUpdateListeners.delete(listener);
+  };
+}
+
+function notifyProfileUpdated(profile: UserProfile): void {
+  profileUpdateListeners.forEach((listener) => {
+    try {
+      listener(profile);
+    } catch (err) {
+      console.warn("[profile] Profile update listener threw", err);
+    }
+  });
+}
+
+export function consumeLastProfileSaveMode(): ProfileSaveMode {
+  const mode = lastProfileSaveMode;
+  lastProfileSaveMode = "remote";
+  return mode;
+}
+
+function getMockUserById(userId: string): User | undefined {
+  const baseUser = MOCK_USERS.find((u) => u.id === userId);
+  if (!baseUser) return undefined;
+
+  const override = localProfileOverrides.get(userId);
+  if (!override) return baseUser;
+
+  return {
+    ...baseUser,
+    name: override.name,
+    avatar: override.avatar,
+  };
+}
+
+function applyLocalProfileOverride(userId: string, updates: ProfileUpdateInput): void {
+  const current = getMockUserById(userId);
+  if (!current) return;
+
+  const nextName =
+    typeof updates.name === "string" && updates.name.trim().length > 0
+      ? updates.name.trim()
+      : current.name;
+
+  let nextAvatar = current.avatar;
+  if (Object.prototype.hasOwnProperty.call(updates, "avatar")) {
+    if (updates.avatar === null) {
+      nextAvatar = undefined;
+    } else if (typeof updates.avatar === "string") {
+      nextAvatar = updates.avatar.trim() || undefined;
+    }
+  }
+
+  localProfileOverrides.set(userId, {
+    name: nextName,
+    avatar: nextAvatar,
+  });
+}
+
 /**
  * Aggregated stats for profile preview.
  * Includes computed values useful for displaying user achievements.
@@ -208,7 +282,7 @@ export async function fetchCurrentUserBasicProfile(): Promise<
     );
   }
 
-  const mock = MOCK_USERS.find((u) => u.id === userId);
+  const mock = getMockUserById(userId);
   if (!mock) {
     throw new Error(
       "[profile] Basic profile not found in Supabase or mock data"
@@ -269,7 +343,7 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
     );
   }
 
-  const mock = MOCK_USERS.find((u) => u.id === userId);
+  const mock = getMockUserById(userId);
   if (!mock) {
     throw new Error(
       "[profile] Profile with stats not found in Supabase or mock data"
@@ -335,6 +409,23 @@ export async function updateCurrentUserProfile(
 
   if (error) {
     console.error("[profile] Failed to update profile", error);
+
+    const isNetworkError = /network request failed|failed to fetch|fetch failed|network/i.test(
+      error.message ?? ""
+    );
+    if (isNetworkError) {
+      lastProfileSaveMode = "local_offline";
+      console.warn(
+        "[profile] Supabase is unreachable right now. Your profile changes were saved locally (offline mode)."
+      );
+      applyLocalProfileOverride(userId, updates);
+      const locallyUpdated = getMockUserById(userId);
+      if (locallyUpdated) {
+        const fallbackProfile = userToUserProfile(locallyUpdated);
+        notifyProfileUpdated(fallbackProfile);
+        return fallbackProfile;
+      }
+    }
     
     // Provide helpful error message for RLS policy issues
     if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
@@ -353,7 +444,11 @@ export async function updateCurrentUserProfile(
     throw error;
   }
 
-  return mapRowToUserProfile(data as ProfileRow);
+  lastProfileSaveMode = "remote";
+
+  const updatedProfile = mapRowToUserProfile(data as ProfileRow);
+  notifyProfileUpdated(updatedProfile);
+  return updatedProfile;
 }
 
 /**
@@ -412,7 +507,7 @@ export async function fetchProfilePreviewStats(
     );
   }
 
-  const mock = MOCK_USERS.find((u) => u.id === userId);
+  const mock = getMockUserById(userId);
   if (!mock) {
     return null;
   }
@@ -468,7 +563,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     );
   }
 
-  const mock = MOCK_USERS.find((u) => u.id === userId);
+  const mock = getMockUserById(userId);
   return mock ? userToUserProfile(mock) : null;
 }
 
@@ -550,6 +645,24 @@ export async function updateUserProfile(
     if (error.code === "PGRST116") {
       return null; // Profile not found
     }
+
+    const isNetworkError = /network request failed|failed to fetch|fetch failed|network/i.test(
+      error.message ?? ""
+    );
+    if (isNetworkError) {
+      lastProfileSaveMode = "local_offline";
+      console.warn(
+        "[profile] Supabase is unreachable right now. Your profile changes were saved locally (offline mode)."
+      );
+      applyLocalProfileOverride(userId, updates);
+      const locallyUpdated = getMockUserById(userId);
+      if (!locallyUpdated) {
+        return null;
+      }
+      const fallbackProfile = userToUserProfile(locallyUpdated);
+      notifyProfileUpdated(fallbackProfile);
+      return fallbackProfile;
+    }
     
     // Provide helpful error message for RLS policy issues
     if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
@@ -569,7 +682,11 @@ export async function updateUserProfile(
     throw error;
   }
 
-  return mapRowToUserProfile(data as ProfileRow);
+  lastProfileSaveMode = "remote";
+
+  const updatedProfile = mapRowToUserProfile(data as ProfileRow);
+  notifyProfileUpdated(updatedProfile);
+  return updatedProfile;
 }
 
 /**

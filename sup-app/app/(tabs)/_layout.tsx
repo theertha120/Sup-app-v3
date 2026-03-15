@@ -14,18 +14,6 @@ export default function TabsLayout() {
           borderTopColor: colours.border,
         },
         animation: "shift",
-        // Add smooth transition animation
-        ...Platform.select({
-          ios: {
-            animation: "shift",
-          },
-          android: {
-            animation: "shift",
-          },
-          default: {
-            animation: "fade",
-          },
-        }),
       }}
     >
       <Tabs.Screen
