@@ -78,6 +78,10 @@ export default function HomeScreen() {
     setCurrentUser(updatedUser);
   };
 
+  const handleSettingsPress = () => {
+    router.push("/settings");
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -113,8 +117,8 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Welcome back!</Text>
             <Text style={styles.subtitle}>We're here to support your posture today</Text>
           </View>
-          <Pressable style={styles.logoutButton} onPress={logout}>
-            <Text style={styles.logoutText}>Logout</Text>
+          <Pressable style={styles.settingsButton} onPress={handleSettingsPress}>
+            <Text style={styles.gearIcon}>⚙</Text>
           </Pressable>
         </View>
 
@@ -258,18 +262,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  logoutButton: {
-    backgroundColor: "#F6F6FA",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  logoutText: {
+  gearIcon: {
+    fontSize: 30,
     color: "#666",
-    fontSize: 14,
-    fontWeight: "600",
+    opacity: 0.8,
   },
 
   profileCard: {
