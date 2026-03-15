@@ -387,14 +387,17 @@ const styles = StyleSheet.create({
   },
   promptButton: {
     alignSelf: "flex-start",
-    backgroundColor: colours.primary,
+    backgroundColor: "transparent",
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colours.primary,
   },
   promptButtonText: {
-    color: "white",
+    color: colours.primary,
     fontSize: 14,
+    fontWeight: "600",
   },
 
   actions: {
