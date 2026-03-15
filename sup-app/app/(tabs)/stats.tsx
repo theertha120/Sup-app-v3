@@ -16,6 +16,92 @@ type DateRange = "today" | "last7days";
 const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
 const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
 
+// For prototype: using Feb 27, 2026 as "today"
+const MOCK_TODAY = new Date("2026-02-27");
+
+// Animated number component for smooth transitions
+function AnimatedNumber({ value, style }: { value: number; style?: any }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const animationRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Clear any existing animation
+    if (animationRef.current) {
+      clearInterval(animationRef.current);
+    }
+
+    const startValue = displayValue;
+    const endValue = value;
+    const duration = 250; // 250ms animation
+    const startTime = Date.now();
+
+    if (startValue === endValue) return;
+
+    animationRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out animation
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const current = startValue + (endValue - startValue) * easeProgress;
+      
+      setDisplayValue(Math.round(current));
+
+      if (progress >= 1) {
+        setDisplayValue(endValue);
+        if (animationRef.current) {
+          clearInterval(animationRef.current);
+          animationRef.current = null;
+        }
+      }
+    }, 16); // ~60fps
+
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+      }
+    };
+  }, [value]);
+
+  return <Text style={style}>{displayValue}</Text>;
+}
+
+// Animated progress bar component
+function AnimatedProgressBar({ 
+  goodPercent, 
+  animationKey 
+}: { 
+  goodPercent: number; 
+  animationKey?: string | number; 
+}) {
+  const animatedWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    animatedWidth.setValue(0);
+    Animated.timing(animatedWidth, {
+      toValue: goodPercent,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [goodPercent, animationKey]);
+
+  return (
+    <View style={styles.metricBarRow}>
+      <Animated.View 
+        style={[
+          styles.metricBarGood, 
+          { 
+            width: animatedWidth.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%']
+            })
+          }
+        ]} 
+      />
+    </View>
+  );
+}
+
 export default function StatsScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -40,7 +126,7 @@ export default function StatsScreen() {
 
   // Filter posture data based on selected date range
   const filteredData = useMemo(() => {
-    const today = new Date();
+    const today = MOCK_TODAY; // Use mock date for prototype
     const todayStr = today.toISOString().slice(0, 10);
     
     if (dateRange === "today") {
@@ -117,13 +203,13 @@ export default function StatsScreen() {
             <View style={styles.summaryMiniCard}>
               <Text style={styles.summaryMiniEmoji}>⏱️</Text>
               <Text style={styles.summaryMiniLabel}>Total Time</Text>
-              <Text style={styles.summaryMiniScore}>{todayStats.totalMinutes}</Text>
+              <AnimatedNumber value={todayStats.totalMinutes} style={styles.summaryMiniScore} />
               <Text style={styles.summaryMiniDate}>minutes</Text>
             </View>
             <View style={styles.summaryMiniCard}>
               <Text style={styles.summaryMiniEmoji}>✨</Text>
               <Text style={styles.summaryMiniLabel}>Good Posture</Text>
-              <Text style={styles.summaryMiniScore}>{todayStats.goodPostureMinutes}</Text>
+              <AnimatedNumber value={todayStats.goodPostureMinutes} style={styles.summaryMiniScore} />
               <Text style={styles.summaryMiniDate}>minutes</Text>
             </View>
           </View>
@@ -134,7 +220,7 @@ export default function StatsScreen() {
               <View style={styles.summaryMiniCard}>
                 <Text style={styles.summaryMiniEmoji}>🌟</Text>
                 <Text style={styles.summaryMiniLabel}>Best Day</Text>
-                <Text style={styles.summaryMiniScore}>{bestDay.avgScore}</Text>
+                <AnimatedNumber value={bestDay.avgScore} style={styles.summaryMiniScore} />
                 <Text style={styles.summaryMiniDate}>
                   {new Date(bestDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                 </Text>
@@ -144,7 +230,7 @@ export default function StatsScreen() {
               <View style={styles.summaryMiniCard}>
                 <Text style={styles.summaryMiniEmoji}>💪</Text>
                 <Text style={styles.summaryMiniLabel}>Needs Work</Text>
-                <Text style={styles.summaryMiniScore}>{worstDay.avgScore}</Text>
+                <AnimatedNumber value={worstDay.avgScore} style={styles.summaryMiniScore} />
                 <Text style={styles.summaryMiniDate}>
                   {new Date(worstDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                 </Text>
@@ -173,10 +259,18 @@ export default function StatsScreen() {
 
       {/* Metrics */}
       <View style={styles.metrics}>
-        <MetricSkeleton label="Neck alignment" />
-        <MetricSkeleton label="Shoulder balance" />
+        <MetricCard 
+          label="Neck alignment" 
+          goodPercent={dateRange === "today" ? 72 : 78} 
+          animationKey={dateRange} 
+        />
+        <MetricCard 
+          label="Shoulder balance" 
+          goodPercent={dateRange === "today" ? 85 : 70} 
+          animationKey={dateRange} 
+        />
         {hasData ? (
-          <UpperBackSessionCard stats={sessionStats} />
+          <UpperBackSessionCard stats={sessionStats} animationKey={dateRange} />
         ) : (
           <MetricSkeleton label="Upper back support" />
         )}
@@ -212,16 +306,39 @@ function MetricSkeleton({ label }: { label: string }) {
   );
 }
 
-function UpperBackSessionCard({ stats }: { stats: PostureSessionStats }) {
+function MetricCard({ 
+  label, 
+  goodPercent, 
+  animationKey 
+}: { 
+  label: string; 
+  goodPercent: number; 
+  animationKey?: string | number;
+}) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <AnimatedProgressBar goodPercent={goodPercent} animationKey={animationKey} />
+      <Text style={styles.metricHint}>
+        Good: {goodPercent.toFixed(0)}% · Needs work: {(100 - goodPercent).toFixed(0)}%
+      </Text>
+    </View>
+  );
+}
+
+function UpperBackSessionCard({ 
+  stats, 
+  animationKey 
+}: { 
+  stats: PostureSessionStats; 
+  animationKey?: string | number;
+}) {
   const goodWidth = stats.totalMs > 0 ? (stats.goodPostureMs / stats.totalMs) * 100 : 0;
   const totalMinutes = (stats.totalMs / 60_000).toFixed(1);
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>Upper back support</Text>
-      <View style={styles.metricBarRow}>
-        <View style={[styles.metricBarGood, { flex: goodWidth }]} />
-        <View style={[styles.metricBarBad, { flex: 100 - goodWidth }]} />
-      </View>
+      <AnimatedProgressBar goodPercent={goodWidth} animationKey={animationKey} />
       <Text style={styles.metricHint}>
         Good: {stats.goodPosturePercent.toFixed(0)}% · Bad: {stats.badPosturePercent.toFixed(0)}% · {totalMinutes} min
         {stats.isVariableSession ? " · Variable session" : ""}
@@ -374,19 +491,16 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   metricBarRow: {
-    flexDirection: "row",
     height: 10,
     borderRadius: 5,
     marginVertical: 10,
     overflow: "hidden",
+    backgroundColor: "#E5E5EA",
   },
   metricBarGood: {
     backgroundColor: colours.primary,
-    minWidth: 0,
-  },
-  metricBarBad: {
-    backgroundColor: "#E5E5EA",
-    minWidth: 0,
+    height: 10,
+    borderRadius: 5,
   },
   metricHint: {
     fontSize: 12,

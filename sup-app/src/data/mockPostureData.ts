@@ -6,7 +6,15 @@ import { CURRENT_USER_ID } from "../../constants/env";
 export const MOCK_POSTURE_DATA: PostureData[] = [
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-08",
+    date: "2026-02-27", // Today
+    avgScore: 76,
+    goodPostureMinutes: 165,
+    badPostureMinutes: 55,
+    totalMinutes: 220
+  },
+  {
+    userId: CURRENT_USER_ID,
+    date: "2026-02-26",
     avgScore: 68,
     goodPostureMinutes: 150,
     badPostureMinutes: 60,
@@ -14,7 +22,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-07",
+    date: "2026-02-25",
     avgScore: 72,
     goodPostureMinutes: 180,
     badPostureMinutes: 45,
@@ -22,7 +30,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-06",
+    date: "2026-02-24",
     avgScore: 75,
     goodPostureMinutes: 190,
     badPostureMinutes: 40,
@@ -30,7 +38,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-05",
+    date: "2026-02-23",
     avgScore: 80,
     goodPostureMinutes: 210,
     badPostureMinutes: 30,
@@ -38,7 +46,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-04",
+    date: "2026-02-22",
     avgScore: 78,
     goodPostureMinutes: 200,
     badPostureMinutes: 35,
@@ -46,7 +54,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-03",
+    date: "2026-02-21",
     avgScore: 82,
     goodPostureMinutes: 220,
     badPostureMinutes: 25,
@@ -54,7 +62,7 @@ export const MOCK_POSTURE_DATA: PostureData[] = [
   },
   {
     userId: CURRENT_USER_ID,
-    date: "2026-02-02",
+    date: "2026-02-20",
     avgScore: 85,
     goodPostureMinutes: 230,
     badPostureMinutes: 20,

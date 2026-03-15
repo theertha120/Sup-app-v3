@@ -10,6 +10,53 @@ import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
 
+// Animated number component for smooth transitions
+function AnimatedNumber({ value, style }: { value: number; style?: any }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const animationRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Clear any existing animation
+    if (animationRef.current) {
+      clearInterval(animationRef.current);
+    }
+
+    const startValue = displayValue;
+    const endValue = value;
+    const duration = 250; // 250ms animation
+    const startTime = Date.now();
+
+    if (startValue === endValue) return;
+
+    animationRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out animation
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const current = startValue + (endValue - startValue) * easeProgress;
+      
+      setDisplayValue(Math.round(current));
+
+      if (progress >= 1) {
+        setDisplayValue(endValue);
+        if (animationRef.current) {
+          clearInterval(animationRef.current);
+          animationRef.current = null;
+        }
+      }
+    }, 16); // ~60fps
+
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+      }
+    };
+  }, [value]);
+
+  return <Text style={style}>{displayValue}</Text>;
+}
+
 export default function LeaderboardScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -29,6 +76,9 @@ export default function LeaderboardScreen() {
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // For prototype: using Feb 27, 2026 as "today"
+  const MOCK_TODAY = new Date("2026-02-27");
 
   useEffect(() => {
     fetchLeaderboardByStreak()
@@ -59,7 +109,7 @@ export default function LeaderboardScreen() {
       return;
     }
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = MOCK_TODAY.toISOString().slice(0, 10); // Use mock date for prototype
     const todayData = MOCK_POSTURE_DATA.find((data) => {
       return data.userId === CURRENT_USER_ID && data.date === todayIso;
     });
@@ -73,14 +123,14 @@ export default function LeaderboardScreen() {
     const goodToday = hasGoodPosture(todayData);
     setHasGoodPostureToday(goodToday);
 
-    const updatedUser = updateStreak(baseUser, todayData);
-    setCurrentUserWithStreak(updatedUser);
+    // For prototype: Don't recalculate streak, use data from leaderboard.json
+    setCurrentUserWithStreak(baseUser);
   }, [users]);
 
   const currentUser = currentUserWithStreak ??
     users.find((user) => user.id === CURRENT_USER_ID);
   const currentUserRank = currentUser
-    ? streakSortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
+    ? sortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
     : 0;
 
   const handleUserPress = (user: User) => {
@@ -115,8 +165,17 @@ export default function LeaderboardScreen() {
 
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
-        <Text style={styles.rankLabel}>Your Streak Rank</Text>
-        <Text style={styles.rankNumber}>{currentUserRank === 0 ? "—" : `#${currentUserRank}`}</Text>
+        <Text style={styles.rankLabel}>
+          Your {sortMode === "streak" ? "Streak" : "Weekly Points"} Rank
+        </Text>
+        {currentUserRank === 0 ? (
+          <Text style={styles.rankNumber}>—</Text>
+        ) : (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={styles.rankNumber}>#</Text>
+            <AnimatedNumber value={currentUserRank} style={styles.rankNumber} />
+          </View>
+        )}
         <Text style={styles.rankSubtext}>
           Keep going! You're doing great
         </Text>
@@ -132,10 +191,12 @@ export default function LeaderboardScreen() {
             <Text style={styles.statLabel}>Current Streak</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
-          <Text style={styles.statValue}>
-            {currentUser?.currentStreak ?? "0"}{" "}
-            {currentUser?.currentStreak === 1 ? "day" : "days"} ⚡
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <AnimatedNumber value={currentUser?.currentStreak ?? 0} style={styles.statValue} />
+            <Text style={styles.statValue}>
+              {" "}{currentUser?.currentStreak === 1 ? "day" : "days"} ⚡
+            </Text>
+          </View>
         </Pressable>
 
         <Pressable 
@@ -146,9 +207,10 @@ export default function LeaderboardScreen() {
             <Text style={styles.statLabel}>Weekly Total Points</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
-          <Text style={styles.statValue}>
-            {currentUser?.weeklyTotalPoints ?? "0"} pts
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <AnimatedNumber value={currentUser?.weeklyTotalPoints ?? 0} style={styles.statValue} />
+            <Text style={styles.statValue}> pts</Text>
+          </View>
         </Pressable>
       </View>
 
@@ -176,7 +238,6 @@ export default function LeaderboardScreen() {
         <Text style={styles.sectionTitle}>
           Top performers ranked by{" "}
           {sortMode === "streak" ? "streak" : "weekly points"}
-          {hasGoodPostureToday ? " • Good posture today ✅" : ""}
         </Text>
 
         <View style={styles.sortToggle}>
