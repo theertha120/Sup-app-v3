@@ -78,11 +78,10 @@ export default function LeaderboardScreen() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const loadLeaderboard = useCallback(() => {
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
 
-  useEffect(() => {
+  const loadLeaderboard = useCallback(() => {
     fetchLeaderboardByStreak()
       .then(setUsers)
       .catch((err) => console.error("Failed to load leaderboard", err));

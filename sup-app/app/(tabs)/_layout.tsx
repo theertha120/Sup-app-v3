@@ -13,7 +13,6 @@ export default function TabsLayout() {
         tabBarStyle: {
           borderTopColor: colours.border,
         },
-        animation: "shift",
         // Add smooth transition animation
         ...Platform.select({
           ios: {
