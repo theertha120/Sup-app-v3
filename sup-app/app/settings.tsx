@@ -8,14 +8,22 @@ import {
   Modal,
 } from "react-native";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
+import {
+  DEFAULT_REMINDER_PREFERENCES,
+  loadReminderPreferencesAndSyncLocal,
+  updateReminderPreferencesAndSyncLocal,
+} from "../src/services/notificationService";
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [postureReminders, setPostureReminders] = useState(true);
+  const [postureReminderTime, setPostureReminderTime] = useState(
+    DEFAULT_REMINDER_PREFERENCES.postureReminderTime
+  );
   const [dailyGoals, setDailyGoals] = useState(false);
   const [soundEffects, setSoundEffects] = useState(true);
   
@@ -29,6 +37,19 @@ export default function SettingsScreen() {
     logout();
     router.replace("/");
   };
+
+  useEffect(() => {
+    loadReminderPreferencesAndSyncLocal()
+      .then(({ preferences, local }) => {
+        setPostureReminders(preferences.postureRemindersEnabled);
+        setPostureReminderTime(preferences.postureReminderTime);
+        // For now, "Push Notifications" toggle reflects whether notifications permission allows scheduling.
+        setNotificationsEnabled(local.permissionGranted);
+      })
+      .catch((e) => {
+        console.warn("[settings] Failed to load reminder preferences", e);
+      });
+  }, []);
   
   const getThemeLabel = () => {
     if (theme === "light") return "Light";
@@ -64,7 +85,37 @@ export default function SettingsScreen() {
           </View>
           <Switch
             value={notificationsEnabled}
-            onValueChange={setNotificationsEnabled}
+            onValueChange={async (next) => {
+              // Push tokens are not set up right now. This toggle controls whether reminders can be scheduled.
+              setNotificationsEnabled(next);
+              if (!next) {
+                setPostureReminders(false);
+                try {
+                  const res = await updateReminderPreferencesAndSyncLocal({
+                    postureRemindersEnabled: false,
+                    postureReminderTime,
+                  });
+                  setPostureReminders(res.preferences.postureRemindersEnabled);
+                  setNotificationsEnabled(res.local.permissionGranted);
+                } catch (e) {
+                  console.warn("[settings] Failed to disable reminders", e);
+                }
+              } else {
+                // If user turns this on and reminders are enabled, re-sync local scheduling.
+                if (postureReminders) {
+                  try {
+                    const res = await updateReminderPreferencesAndSyncLocal({
+                      postureRemindersEnabled: true,
+                      postureReminderTime,
+                    });
+                    setPostureReminders(res.preferences.postureRemindersEnabled);
+                    setNotificationsEnabled(res.local.permissionGranted);
+                  } catch (e) {
+                    console.warn("[settings] Failed to enable reminders", e);
+                  }
+                }
+              }
+            }}
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
@@ -79,7 +130,20 @@ export default function SettingsScreen() {
           </View>
           <Switch
             value={postureReminders}
-            onValueChange={setPostureReminders}
+            onValueChange={async (next) => {
+              setPostureReminders(next);
+              try {
+                const res = await updateReminderPreferencesAndSyncLocal({
+                  postureRemindersEnabled: next,
+                  postureReminderTime,
+                });
+                setPostureReminders(res.preferences.postureRemindersEnabled);
+                setPostureReminderTime(res.preferences.postureReminderTime);
+                setNotificationsEnabled(res.local.permissionGranted);
+              } catch (e) {
+                console.warn("[settings] Failed to update reminder preferences", e);
+              }
+            }}
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />

@@ -1,4 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
+import { CURRENT_USER_ID } from "@/constants/env";
 
 export type ReminderPreferences = {
   postureRemindersEnabled: boolean;
@@ -8,7 +11,7 @@ export type ReminderPreferences = {
 
 export const DEFAULT_REMINDER_PREFERENCES: ReminderPreferences = {
   postureRemindersEnabled: false,
-  postureReminderTime: "09:00",
+  postureReminderTime: "17:30",
 };
 
 type ReminderPreferencesRow = {
@@ -26,6 +29,9 @@ type PushTokenRow = {
   last_seen_at?: string | null;
 };
 
+const LOCAL_POSTURE_REMINDER_NOTIFICATION_ID_KEY =
+  "sup_app_posture_reminder_notification_id";
+
 function toReminderPreferences(row: ReminderPreferencesRow | null): ReminderPreferences {
   if (!row) return DEFAULT_REMINDER_PREFERENCES;
   return {
@@ -37,18 +43,35 @@ function toReminderPreferences(row: ReminderPreferencesRow | null): ReminderPref
 }
 
 async function getCurrentUserId(): Promise<string> {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-  if (error || !user) {
-    throw new Error(
-      "Not authenticated. Please sign in before syncing notification settings."
+    if (error) {
+      console.warn(
+        "[notifications] Failed to resolve auth user, falling back to CURRENT_USER_ID",
+        error
+      );
+      return CURRENT_USER_ID;
+    }
+
+    if (!user) {
+      console.warn(
+        "[notifications] No authenticated user, falling back to CURRENT_USER_ID"
+      );
+      return CURRENT_USER_ID;
+    }
+
+    return user.id;
+  } catch (e) {
+    console.warn(
+      "[notifications] Auth check threw, falling back to CURRENT_USER_ID",
+      e
     );
+    return CURRENT_USER_ID;
   }
-
-  return user.id;
 }
 
 function normalizeSupabaseAuthzError(err: unknown): Error {
@@ -70,6 +93,81 @@ function normalizeDailyTime(value: string | null | undefined): string | null {
   const hh = m[1];
   const mm = m[2];
   return `${hh}:${mm}`;
+}
+
+function parseHHMM(value: string): { hour: number; minute: number } | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (!m) return null;
+  return { hour: Number(m[1]), minute: Number(m[2]) };
+}
+
+export async function ensureLocalNotificationPermission(): Promise<boolean> {
+  const existing = await Notifications.getPermissionsAsync();
+  let status = existing.status;
+
+  if (status !== "granted") {
+    const requested = await Notifications.requestPermissionsAsync();
+    status = requested.status;
+  }
+
+  return status === "granted";
+}
+
+export async function cancelLocalPostureReminder(): Promise<void> {
+  const existingId = await AsyncStorage.getItem(LOCAL_POSTURE_REMINDER_NOTIFICATION_ID_KEY);
+  if (!existingId) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(existingId);
+  } catch (e) {
+    console.warn("[notifications] Failed to cancel scheduled local reminder", e);
+  } finally {
+    await AsyncStorage.removeItem(LOCAL_POSTURE_REMINDER_NOTIFICATION_ID_KEY);
+  }
+}
+
+export async function scheduleDailyLocalPostureReminder(timeHHMM: string): Promise<void> {
+  const parsed = parseHHMM(timeHHMM) ?? parseHHMM(DEFAULT_REMINDER_PREFERENCES.postureReminderTime);
+  if (!parsed) return;
+
+  await cancelLocalPostureReminder();
+
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Posture reminder",
+      body: "Quick check-in: roll your shoulders back and sit tall.",
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+      hour: parsed.hour,
+      minute: parsed.minute,
+      repeats: true,
+    },
+  });
+
+  await AsyncStorage.setItem(LOCAL_POSTURE_REMINDER_NOTIFICATION_ID_KEY, id);
+}
+
+/**
+ * Apply local scheduling based on stored preferences.
+ * - If reminders enabled: ensure permission then schedule daily local reminder.
+ * - If disabled or permission denied: cancel any scheduled reminder.
+ */
+export async function syncLocalPostureReminderWithPreferences(
+  prefs: ReminderPreferences
+): Promise<{ scheduled: boolean; permissionGranted: boolean }> {
+  if (!prefs.postureRemindersEnabled) {
+    await cancelLocalPostureReminder();
+    return { scheduled: false, permissionGranted: true };
+  }
+
+  const granted = await ensureLocalNotificationPermission();
+  if (!granted) {
+    await cancelLocalPostureReminder();
+    return { scheduled: false, permissionGranted: false };
+  }
+
+  await scheduleDailyLocalPostureReminder(prefs.postureReminderTime);
+  return { scheduled: true, permissionGranted: true };
 }
 
 /**
@@ -114,14 +212,28 @@ export async function upsertCurrentUserPushToken(input: {
 export async function fetchCurrentUserReminderPreferences(): Promise<ReminderPreferences> {
   const userId = await getCurrentUserId();
 
-  const { data, error } = await supabase
-    .from("reminder_preferences")
-    .select("user_id, reminders_enabled, reminder_time")
-    .eq("user_id", userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("reminder_preferences")
+      .select("user_id, reminders_enabled, reminder_time")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-  if (error) throw normalizeSupabaseAuthzError(error);
-  return toReminderPreferences((data as ReminderPreferencesRow | null) ?? null);
+    if (error) {
+      console.warn(
+        "[notifications] Failed to fetch reminder preferences, falling back to defaults",
+        error
+      );
+      return DEFAULT_REMINDER_PREFERENCES;
+    }
+    return toReminderPreferences((data as ReminderPreferencesRow | null) ?? null);
+  } catch (e) {
+    console.warn(
+      "[notifications] Reminder preferences fetch threw, falling back to defaults",
+      e
+    );
+    return DEFAULT_REMINDER_PREFERENCES;
+  }
 }
 
 /**
@@ -132,29 +244,50 @@ export async function fetchCurrentUserReminderPreferences(): Promise<ReminderPre
 export async function fetchOrCreateCurrentUserReminderPreferences(): Promise<ReminderPreferences> {
   const userId = await getCurrentUserId();
 
-  const { data: existing, error: existingError } = await supabase
-    .from("reminder_preferences")
-    .select("user_id, reminders_enabled, reminder_time")
-    .eq("user_id", userId)
-    .maybeSingle();
+  try {
+    const { data: existing, error: existingError } = await supabase
+      .from("reminder_preferences")
+      .select("user_id, reminders_enabled, reminder_time")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-  if (existingError) throw normalizeSupabaseAuthzError(existingError);
-  if (existing) return toReminderPreferences(existing as ReminderPreferencesRow);
+    if (existingError) {
+      console.warn(
+        "[notifications] Failed to fetch reminder prefs (maybeSingle), falling back to defaults",
+        existingError
+      );
+      return DEFAULT_REMINDER_PREFERENCES;
+    }
+    if (existing) return toReminderPreferences(existing as ReminderPreferencesRow);
 
-  const insertPayload = {
-    user_id: userId,
-    reminders_enabled: DEFAULT_REMINDER_PREFERENCES.postureRemindersEnabled,
-    reminder_time: DEFAULT_REMINDER_PREFERENCES.postureReminderTime,
-  };
+    const insertPayload = {
+      user_id: userId,
+      reminders_enabled: DEFAULT_REMINDER_PREFERENCES.postureRemindersEnabled,
+      reminder_time: DEFAULT_REMINDER_PREFERENCES.postureReminderTime,
+    };
 
-  const { data: created, error: createError } = await supabase
-    .from("reminder_preferences")
-    .insert(insertPayload)
-    .select("user_id, reminders_enabled, reminder_time")
-    .single();
+    const { data: created, error: createError } = await supabase
+      .from("reminder_preferences")
+      .insert(insertPayload)
+      .select("user_id, reminders_enabled, reminder_time")
+      .single();
 
-  if (createError) throw normalizeSupabaseAuthzError(createError);
-  return toReminderPreferences(created as ReminderPreferencesRow);
+    if (createError) {
+      console.warn(
+        "[notifications] Failed to create reminder prefs row, falling back to defaults",
+        createError
+      );
+      return DEFAULT_REMINDER_PREFERENCES;
+    }
+
+    return toReminderPreferences(created as ReminderPreferencesRow);
+  } catch (e) {
+    console.warn(
+      "[notifications] Reminder preferences fetch/create threw, falling back to defaults",
+      e
+    );
+    return DEFAULT_REMINDER_PREFERENCES;
+  }
 }
 
 /**
@@ -178,19 +311,64 @@ export async function updateCurrentUserReminderPreferences(
       DEFAULT_REMINDER_PREFERENCES.postureReminderTime,
   };
 
-  const payload = {
-    user_id: userId,
-    reminders_enabled: Boolean(next.postureRemindersEnabled),
-    reminder_time: next.postureReminderTime,
-  };
+  try {
+    const payload = {
+      user_id: userId,
+      reminders_enabled: Boolean(next.postureRemindersEnabled),
+      reminder_time: next.postureReminderTime,
+    };
 
-  const { data, error } = await supabase
-    .from("reminder_preferences")
-    .upsert(payload, { onConflict: "user_id" })
-    .select("user_id, reminders_enabled, reminder_time")
-    .single();
+    const { data, error } = await supabase
+      .from("reminder_preferences")
+      .upsert(payload, { onConflict: "user_id" })
+      .select("user_id, reminders_enabled, reminder_time")
+      .single();
 
-  if (error) throw normalizeSupabaseAuthzError(error);
-  return toReminderPreferences(data as ReminderPreferencesRow);
+    if (error) {
+      console.warn(
+        "[notifications] Failed to upsert reminder preferences, returning local value",
+        error
+      );
+      return next;
+    }
+
+    return toReminderPreferences(data as ReminderPreferencesRow);
+  } catch (e) {
+    console.warn(
+      "[notifications] Reminder preferences upsert threw, returning local value",
+      e
+    );
+    return next;
+  }
+}
+
+/**
+ * Convenience for Settings screen:
+ * - Upserts reminder prefs in Supabase
+ * - Syncs local scheduled notification accordingly (Expo Go compatible)
+ */
+export async function updateReminderPreferencesAndSyncLocal(
+  updates: Partial<ReminderPreferences>
+): Promise<{
+  preferences: ReminderPreferences;
+  local: { scheduled: boolean; permissionGranted: boolean };
+}> {
+  const preferences = await updateCurrentUserReminderPreferences(updates);
+  const local = await syncLocalPostureReminderWithPreferences(preferences);
+  return { preferences, local };
+}
+
+/**
+ * Convenience for Settings screen initial load:
+ * - Fetches/creates prefs in Supabase
+ * - Syncs local scheduled notification
+ */
+export async function loadReminderPreferencesAndSyncLocal(): Promise<{
+  preferences: ReminderPreferences;
+  local: { scheduled: boolean; permissionGranted: boolean };
+}> {
+  const preferences = await fetchOrCreateCurrentUserReminderPreferences();
+  const local = await syncLocalPostureReminderWithPreferences(preferences);
+  return { preferences, local };
 }
 
