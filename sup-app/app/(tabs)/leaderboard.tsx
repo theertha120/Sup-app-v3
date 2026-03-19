@@ -10,6 +10,7 @@ import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
 import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Animated number component for smooth transitions
 function AnimatedNumber({ value, style }: { value: number; style?: any }) {
@@ -81,6 +82,23 @@ export default function LeaderboardScreen() {
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
 
+  const [weeklyRankDelta, setWeeklyRankDelta] = useState<number | null>(null);
+
+  function getWeekKey(d: Date): string {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  }
+
+  function getWeekKeyWeeksAgo(weeksAgo: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - 7 * weeksAgo);
+    return getWeekKey(d);
+  }
+
   const loadLeaderboard = useCallback(() => {
     fetchLeaderboardByStreak()
       .then(setUsers)
@@ -103,6 +121,8 @@ export default function LeaderboardScreen() {
     }
     return b.weeklyTotalPoints - a.weeklyTotalPoints;
   });
+
+  const weeklySortedUsers = [...users].sort((a, b) => b.weeklyTotalPoints - a.weeklyTotalPoints);
 
   // Rank is always based on streak, regardless of current display filter.
   const streakSortedUsers = [...users].sort(
@@ -143,6 +163,84 @@ export default function LeaderboardScreen() {
   const currentUserRank = currentUser
     ? sortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
     : 0;
+
+  const currentUserWeeklyRank = currentUser
+    ? weeklySortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
+    : 0;
+
+  useEffect(() => {
+    if (!currentUser || currentUserWeeklyRank === 0) {
+      setWeeklyRankDelta(null);
+      return;
+    }
+
+    const run = async () => {
+      const thisWeek = getWeekKey(new Date());
+      const key = `sup_app_weekly_rank_snapshot_${CURRENT_USER_ID}`;
+      const raw = await AsyncStorage.getItem(key);
+      let snapshot: { weekKey: string; rank: number } | null = null;
+      if (raw) {
+        try {
+          snapshot = JSON.parse(raw) as { weekKey: string; rank: number };
+        } catch {
+          snapshot = null;
+        }
+      }
+
+      if (!snapshot) {
+        // Dev UX: seed a "previous week" snapshot so the indicator shows immediately.
+        // This never affects Supabase; it's purely local UI state.
+        if (__DEV__) {
+          const possible = [1, 2, 3, -1, -2, -4];
+          const delta = possible[Math.floor(Math.random() * possible.length)];
+          const previousRank = Math.max(1, currentUserWeeklyRank + delta);
+          snapshot = { weekKey: getWeekKeyWeeksAgo(1), rank: previousRank };
+        } else {
+          await AsyncStorage.setItem(
+            key,
+            JSON.stringify({ weekKey: thisWeek, rank: currentUserWeeklyRank })
+          );
+          setWeeklyRankDelta(null);
+          return;
+        }
+      }
+
+      if (snapshot.weekKey === thisWeek) {
+        // If we've already snapshotted this week, we usually hide the delta.
+        // Dev-only workaround: keep a stable "demo delta" for this week so Expo Go can always show the badge.
+        if (__DEV__) {
+          const demoKey = `sup_app_weekly_rank_demo_delta_${thisWeek}_${CURRENT_USER_ID}`;
+          const existingDemo = await AsyncStorage.getItem(demoKey);
+          if (existingDemo) {
+            const demoDelta = Number(existingDemo);
+            setWeeklyRankDelta(Number.isFinite(demoDelta) && demoDelta !== 0 ? demoDelta : null);
+            return;
+          }
+          const possible = [1, 2, 3, -1, -2, -4];
+          const demoDelta = possible[Math.floor(Math.random() * possible.length)];
+          await AsyncStorage.setItem(demoKey, String(demoDelta));
+          setWeeklyRankDelta(demoDelta);
+          return;
+        }
+
+        setWeeklyRankDelta(null);
+        return;
+      }
+
+      const delta = snapshot.rank - currentUserWeeklyRank; // + means moved up
+      setWeeklyRankDelta(delta === 0 ? null : delta);
+
+      await AsyncStorage.setItem(
+        key,
+        JSON.stringify({ weekKey: thisWeek, rank: currentUserWeeklyRank })
+      );
+    };
+
+    run().catch((e) => {
+      console.warn("[leaderboard] Failed to compute weekly rank delta", e);
+      setWeeklyRankDelta(null);
+    });
+  }, [currentUser?.id, currentUserWeeklyRank]);
 
   const handleUserPress = (user: User) => {
     setSelectedUser(user);
@@ -185,6 +283,17 @@ export default function LeaderboardScreen() {
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={styles.rankNumber}>#</Text>
             <AnimatedNumber value={currentUserRank} style={styles.rankNumber} />
+            {sortMode === "weekly" && weeklyRankDelta !== null && (
+              <Text
+                style={[
+                  styles.rankDelta,
+                  weeklyRankDelta > 0 ? styles.rankDeltaUp : styles.rankDeltaDown,
+                ]}
+              >
+                {weeklyRankDelta > 0 ? " ▲" : " ▼"}{" "}
+                {weeklyRankDelta > 0 ? `+${weeklyRankDelta}` : weeklyRankDelta}
+              </Text>
+            )}
           </View>
         )}
         <Text style={styles.rankSubtext}>
@@ -402,6 +511,23 @@ const styles = StyleSheet.create({
     color: "white",
     opacity: 0.8,
     fontSize: 12,
+  },
+  rankDelta: {
+    marginLeft: 10,
+    fontSize: 14,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  rankDeltaUp: {
+    color: "#0B3D1B",
+    backgroundColor: "rgba(0, 255, 127, 0.22)",
+  },
+  rankDeltaDown: {
+    color: "#5A0A0A",
+    backgroundColor: "rgba(255, 99, 71, 0.22)",
   },
 
   statsRow: {
