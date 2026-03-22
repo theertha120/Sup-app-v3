@@ -11,6 +11,8 @@ type ProfileRow = {
   current_streak: number;
   last_activity_date: string | null;
   weekly_total_points: number;
+  previous_week_streak_rank?: number;
+  previous_week_weekly_rank?: number;
 };
 
 // Fetch leaderboard ordered by current streak (descending)
@@ -19,7 +21,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points"
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, previous_week_streak_rank, previous_week_weekly_rank"
       )
       .order("current_streak", { ascending: false });
 
@@ -38,6 +40,8 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
         currentStreak: row.current_streak,
         lastActivityDate: row.last_activity_date ?? "",
         weeklyTotalPoints: row.weekly_total_points,
+        previousWeekStreakRank: row.previous_week_streak_rank,
+        previousWeekWeeklyRank: row.previous_week_weekly_rank,
       }));
       const local = await getLocalSupsona(CURRENT_USER_ID);
       const testUser = users.find((u) => u.id === CURRENT_USER_ID);
@@ -67,7 +71,7 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points"
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, previous_week_streak_rank, previous_week_weekly_rank"
       )
       .order("weekly_total_points", { ascending: false });
 
@@ -86,6 +90,8 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
         currentStreak: row.current_streak,
         lastActivityDate: row.last_activity_date ?? "",
         weeklyTotalPoints: row.weekly_total_points,
+        previousWeekStreakRank: row.previous_week_streak_rank,
+        previousWeekWeeklyRank: row.previous_week_weekly_rank,
       }));
       const local = await getLocalSupsona(CURRENT_USER_ID);
       const testUser = users.find((u) => u.id === CURRENT_USER_ID);
