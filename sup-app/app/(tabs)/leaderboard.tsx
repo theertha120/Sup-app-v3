@@ -98,6 +98,62 @@ export default function LeaderboardScreen() {
   const [sendFeedback, setSendFeedback] = useState("");
   const [incomingActionFeedback, setIncomingActionFeedback] = useState("");
   const [friendStateVersion, setFriendStateVersion] = useState(0);
+  const sendFeedbackOpacity = useRef(new Animated.Value(0)).current;
+  const incomingFeedbackOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!sendFeedback) {
+      sendFeedbackOpacity.setValue(0);
+      return;
+    }
+
+    sendFeedbackOpacity.setValue(1);
+    const animation = Animated.sequence([
+      Animated.delay(4500),
+      Animated.timing(sendFeedbackOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setSendFeedback("");
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [sendFeedback, sendFeedbackOpacity]);
+
+  useEffect(() => {
+    if (!incomingActionFeedback) {
+      incomingFeedbackOpacity.setValue(0);
+      return;
+    }
+
+    incomingFeedbackOpacity.setValue(1);
+    const animation = Animated.sequence([
+      Animated.delay(4500),
+      Animated.timing(incomingFeedbackOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setIncomingActionFeedback("");
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [incomingActionFeedback, incomingFeedbackOpacity]);
 
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
@@ -199,24 +255,6 @@ export default function LeaderboardScreen() {
     setFriendStateVersion((prev) => prev + 1);
   };
 
-  const handleSendFriendRequest = () => {
-    const result = sendFriendRequestByUsername(
-      CURRENT_USER_ID,
-      friendUsernameInput,
-      users
-    );
-
-    if (!result.ok) {
-      setSendFeedback(result.message);
-      return;
-    }
-
-    setFriendUsernameInput("");
-    setSendFeedback("Friend request sent.");
-    setIncomingActionFeedback("");
-    refreshFriendState();
-  };
-
   const handleAcceptRequest = (requestId: string) => {
     const result = acceptFriendRequest(requestId, CURRENT_USER_ID);
     setIncomingActionFeedback(
@@ -237,10 +275,55 @@ export default function LeaderboardScreen() {
   const outgoingRequests = getOutgoingPendingRequests(CURRENT_USER_ID);
   const friends = getFriendsForUser(CURRENT_USER_ID);
   const currentUsername = getUsernameForUser(CURRENT_USER_ID) ?? "Unknown User";
+  const normalizedSearch = friendUsernameInput.trim().toLowerCase();
+
+  const incomingFromSet = new Set(incomingRequests.map((request) => request.fromUserId));
+  const outgoingToSet = new Set(outgoingRequests.map((request) => request.toUserId));
+  const friendSet = new Set(friends);
 
   const getUserDisplayName = (userId: string): string => {
     return users.find((user) => user.id === userId)?.name ?? userId;
   };
+
+  const getUserById = (userId: string): User | undefined => {
+    return users.find((user) => user.id === userId);
+  };
+
+  const getInitials = (name: string): string => {
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+  };
+
+  const getFriendStatusForUserId = (
+    userId: string
+  ): "friend" | "incoming" | "outgoing" | "none" => {
+    if (friendSet.has(userId)) return "friend";
+    if (incomingFromSet.has(userId)) return "incoming";
+    if (outgoingToSet.has(userId)) return "outgoing";
+    return "none";
+  };
+
+  const getStatusLabel = (status: "friend" | "incoming" | "outgoing" | "none") => {
+    if (status === "friend") return "Friends";
+    if (status === "incoming") return "Sent you a request";
+    if (status === "outgoing") return "Request sent";
+    return "Not connected";
+  };
+
+  const searchMatches =
+    normalizedSearch.length === 0
+      ? []
+      : users
+          .filter(
+            (user) =>
+              user.id !== CURRENT_USER_ID &&
+              user.name.toLowerCase().startsWith(normalizedSearch)
+          )
+          .slice(0, 5);
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -393,30 +476,92 @@ export default function LeaderboardScreen() {
             style={styles.friendInput}
             placeholderTextColor="#9A9A9A"
           />
-          <Pressable style={styles.friendSendBtn} onPress={handleSendFriendRequest}>
-            <Text style={styles.friendSendText}>Send</Text>
-          </Pressable>
         </View>
 
-        {sendFeedback ? <Text style={styles.friendFeedback}>{sendFeedback}</Text> : null}
+        {sendFeedback ? (
+          <Animated.Text style={[styles.friendFeedback, { opacity: sendFeedbackOpacity }]}>
+            {sendFeedback}
+          </Animated.Text>
+        ) : null}
+
+        {normalizedSearch.length > 0 && (
+          <View style={styles.searchResultsContainer}>
+            {searchMatches.length === 0 ? (
+              <Text style={styles.friendEmptyText}>No users found.</Text>
+            ) : (
+              searchMatches.map((user) => {
+                const status = getFriendStatusForUserId(user.id);
+                return (
+                  <View key={user.id} style={styles.friendUserRow}>
+                    <View style={styles.friendUserAvatar}>
+                      <Text style={styles.friendUserAvatarText}>{getInitials(user.name)}</Text>
+                    </View>
+                    <View style={styles.friendUserInfo}>
+                      <Text style={styles.friendUserName}>{user.name}</Text>
+                      <Text style={styles.friendUserStatus}>{getStatusLabel(status)}</Text>
+                    </View>
+
+                    {status === "none" ? (
+                      <Pressable
+                        style={[styles.requestActionBtn, styles.acceptBtn]}
+                        onPress={() => {
+                          const result = sendFriendRequestByUsername(
+                            CURRENT_USER_ID,
+                            user.name,
+                            users
+                          );
+                          setSendFeedback(result.ok ? "Friend request sent." : result.message);
+                          if (result.ok) refreshFriendState();
+                        }}
+                      >
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Send</Text>
+                      </Pressable>
+                    ) : status === "incoming" ? (
+                      <Pressable
+                        style={[styles.requestActionBtn, styles.acceptBtn]}
+                        onPress={() => {
+                          const pending = incomingRequests.find((request) => request.fromUserId === user.id);
+                          if (!pending) return;
+                          handleAcceptRequest(pending.id);
+                        }}
+                      >
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
 
         <Text style={styles.friendBlockTitle}>Incoming Requests</Text>
         {incomingActionFeedback ? (
-          <Text style={styles.friendFeedback}>{incomingActionFeedback}</Text>
+          <Animated.Text
+            style={[styles.friendFeedback, { opacity: incomingFeedbackOpacity }]}
+          >
+            {incomingActionFeedback}
+          </Animated.Text>
         ) : null}
         {incomingRequests.length === 0 ? (
           <Text style={styles.friendEmptyText}>No incoming requests.</Text>
         ) : (
           incomingRequests.map((request) => (
             <View key={request.id} style={styles.requestRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(request.fromUserId))}
+                </Text>
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.requestName}>{getUserDisplayName(request.fromUserId)}</Text>
+                <Text style={styles.requestMeta}>Incoming friend request</Text>
               </View>
               <Pressable
                 style={[styles.requestActionBtn, styles.acceptBtn]}
                 onPress={() => handleAcceptRequest(request.id)}
               >
-                <Text style={styles.requestActionText}>Accept</Text>
+                <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
               </Pressable>
               <Pressable
                 style={[styles.requestActionBtn, styles.rejectBtn]}
@@ -433,9 +578,17 @@ export default function LeaderboardScreen() {
           <Text style={styles.friendEmptyText}>No pending outgoing requests.</Text>
         ) : (
           outgoingRequests.map((request) => (
-            <Text key={request.id} style={styles.friendListItem}>
-              • {getUserDisplayName(request.toUserId)}
-            </Text>
+            <View key={request.id} style={styles.friendUserRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(request.toUserId))}
+                </Text>
+              </View>
+              <View style={styles.friendUserInfo}>
+                <Text style={styles.friendUserName}>{getUserDisplayName(request.toUserId)}</Text>
+                <Text style={styles.friendUserStatus}>Request sent</Text>
+              </View>
+            </View>
           ))
         )}
 
@@ -444,9 +597,17 @@ export default function LeaderboardScreen() {
           <Text style={styles.friendEmptyText}>No friends yet.</Text>
         ) : (
           friends.map((friendId) => (
-            <Text key={friendId} style={styles.friendListItem}>
-              • {getUserDisplayName(friendId)}
-            </Text>
+            <View key={friendId} style={styles.friendUserRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(friendId))}
+                </Text>
+              </View>
+              <View style={styles.friendUserInfo}>
+                <Text style={styles.friendUserName}>{getUserDisplayName(friendId)}</Text>
+                <Text style={styles.friendUserStatus}>Friends</Text>
+              </View>
+            </View>
           ))
         )}
       </View>
@@ -756,20 +917,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
   },
-  friendSendBtn: {
-    backgroundColor: colours.primary,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  friendSendText: {
-    color: "white",
-    fontWeight: "700",
-  },
   friendFeedback: {
     color: colours.primary,
     fontSize: 12,
     fontWeight: "600",
+  },
+  searchResultsContainer: {
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+  },
+  friendUserRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 10,
+  },
+  friendUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E5E5EA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  friendUserAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#555",
+  },
+  friendUserInfo: {
+    flex: 1,
+  },
+  friendUserName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  friendUserStatus: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 1,
   },
   friendBlockTitle: {
     marginTop: 8,
@@ -814,6 +1005,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#333",
+  },
+  requestActionTextLight: {
+    color: "white",
   },
   friendListItem: {
     fontSize: 12,
