@@ -1,4 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Animated,
+  TextInput,
+} from "react-native";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
@@ -9,6 +17,16 @@ import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { userProfileToUser } from "../../src/services/profileService";
+import {
+  acceptFriendRequest,
+  ensureFriendDirectory,
+  getUsernameForUser,
+  getFriendsForUser,
+  getIncomingPendingRequests,
+  getOutgoingPendingRequests,
+  rejectFriendRequest,
+  sendFriendRequestByUsername,
+} from "../../src/services/friendService";
 import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
 
 // Animated number component for smooth transitions
@@ -77,6 +95,66 @@ export default function LeaderboardScreen() {
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [friendUsernameInput, setFriendUsernameInput] = useState("");
+  const [sendFeedback, setSendFeedback] = useState("");
+  const [incomingActionFeedback, setIncomingActionFeedback] = useState("");
+  const [friendStateVersion, setFriendStateVersion] = useState(0);
+  const sendFeedbackOpacity = useRef(new Animated.Value(0)).current;
+  const incomingFeedbackOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!sendFeedback) {
+      sendFeedbackOpacity.setValue(0);
+      return;
+    }
+
+    sendFeedbackOpacity.setValue(1);
+    const animation = Animated.sequence([
+      Animated.delay(4500),
+      Animated.timing(sendFeedbackOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setSendFeedback("");
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [sendFeedback, sendFeedbackOpacity]);
+
+  useEffect(() => {
+    if (!incomingActionFeedback) {
+      incomingFeedbackOpacity.setValue(0);
+      return;
+    }
+
+    incomingFeedbackOpacity.setValue(1);
+    const animation = Animated.sequence([
+      Animated.delay(4500),
+      Animated.timing(incomingFeedbackOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setIncomingActionFeedback("");
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [incomingActionFeedback, incomingFeedbackOpacity]);
 
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
@@ -86,6 +164,25 @@ export default function LeaderboardScreen() {
       .then(setUsers)
       .catch((err) => console.error("Failed to load leaderboard", err));
   }, []);
+
+  useEffect(() => {
+    if (users.length === 0) return;
+    ensureFriendDirectory(users);
+
+    const currentUsername = getUsernameForUser(CURRENT_USER_ID);
+    const hasAnyRequests =
+      getIncomingPendingRequests(CURRENT_USER_ID).length > 0 ||
+      getOutgoingPendingRequests(CURRENT_USER_ID).length > 0;
+
+    if (!hasAnyRequests && currentUsername) {
+      const demoSender = users.find((user) => user.id !== CURRENT_USER_ID);
+      if (demoSender) {
+        sendFriendRequestByUsername(demoSender.id, currentUsername, users);
+      }
+    }
+
+    setFriendStateVersion((prev) => prev + 1);
+  }, [users]);
 
   useEffect(() => {
     loadLeaderboard();
@@ -164,6 +261,80 @@ export default function LeaderboardScreen() {
       setSelectedUser(updatedUser);
     }
   };
+
+  const refreshFriendState = () => {
+    setFriendStateVersion((prev) => prev + 1);
+  };
+
+  const handleAcceptRequest = (requestId: string) => {
+    const result = acceptFriendRequest(requestId, CURRENT_USER_ID);
+    setIncomingActionFeedback(
+      result.ok ? "Friend request accepted." : result.message
+    );
+    refreshFriendState();
+  };
+
+  const handleRejectRequest = (requestId: string) => {
+    const result = rejectFriendRequest(requestId, CURRENT_USER_ID);
+    setIncomingActionFeedback(
+      result.ok ? "Friend request rejected." : result.message
+    );
+    refreshFriendState();
+  };
+
+  const incomingRequests = getIncomingPendingRequests(CURRENT_USER_ID);
+  const outgoingRequests = getOutgoingPendingRequests(CURRENT_USER_ID);
+  const friends = getFriendsForUser(CURRENT_USER_ID);
+  const currentUsername = getUsernameForUser(CURRENT_USER_ID) ?? "Unknown User";
+  const normalizedSearch = friendUsernameInput.trim().toLowerCase();
+
+  const incomingFromSet = new Set(incomingRequests.map((request) => request.fromUserId));
+  const outgoingToSet = new Set(outgoingRequests.map((request) => request.toUserId));
+  const friendSet = new Set(friends);
+
+  const getUserDisplayName = (userId: string): string => {
+    return users.find((user) => user.id === userId)?.name ?? userId;
+  };
+
+  const getUserById = (userId: string): User | undefined => {
+    return users.find((user) => user.id === userId);
+  };
+
+  const getInitials = (name: string): string => {
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+  };
+
+  const getFriendStatusForUserId = (
+    userId: string
+  ): "friend" | "incoming" | "outgoing" | "none" => {
+    if (friendSet.has(userId)) return "friend";
+    if (incomingFromSet.has(userId)) return "incoming";
+    if (outgoingToSet.has(userId)) return "outgoing";
+    return "none";
+  };
+
+  const getStatusLabel = (status: "friend" | "incoming" | "outgoing" | "none") => {
+    if (status === "friend") return "Friends";
+    if (status === "incoming") return "Sent you a request";
+    if (status === "outgoing") return "Request sent";
+    return "Not connected";
+  };
+
+  const searchMatches =
+    normalizedSearch.length === 0
+      ? []
+      : users
+          .filter(
+            (user) =>
+              user.id !== CURRENT_USER_ID &&
+              user.name.toLowerCase().startsWith(normalizedSearch)
+          )
+          .slice(0, 5);
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -299,6 +470,155 @@ export default function LeaderboardScreen() {
             onPress={() => handleUserPress(user)}
           />
         ))}
+      </View>
+
+      {/* Friends */}
+      <View style={styles.friendSection}>
+        <Text style={styles.friendTitle}>Friends</Text>
+       
+        <View style={styles.friendAddRow}>
+          <TextInput
+            value={friendUsernameInput}
+            onChangeText={setFriendUsernameInput}
+            placeholder="Add friend by username"
+            autoCapitalize="none"
+            style={styles.friendInput}
+            placeholderTextColor="#9A9A9A"
+          />
+        </View>
+
+        {sendFeedback ? (
+          <Animated.Text style={[styles.friendFeedback, { opacity: sendFeedbackOpacity }]}>
+            {sendFeedback}
+          </Animated.Text>
+        ) : null}
+
+        {normalizedSearch.length > 0 && (
+          <View style={styles.searchResultsContainer}>
+            {searchMatches.length === 0 ? (
+              <Text style={styles.friendEmptyText}>No users found.</Text>
+            ) : (
+              searchMatches.map((user) => {
+                const status = getFriendStatusForUserId(user.id);
+                return (
+                  <View key={user.id} style={styles.friendUserRow}>
+                    <View style={styles.friendUserAvatar}>
+                      <Text style={styles.friendUserAvatarText}>{getInitials(user.name)}</Text>
+                    </View>
+                    <View style={styles.friendUserInfo}>
+                      <Text style={styles.friendUserName}>{user.name}</Text>
+                      <Text style={styles.friendUserStatus}>{getStatusLabel(status)}</Text>
+                    </View>
+
+                    {status === "none" ? (
+                      <Pressable
+                        style={[styles.requestActionBtn, styles.acceptBtn]}
+                        onPress={() => {
+                          const result = sendFriendRequestByUsername(
+                            CURRENT_USER_ID,
+                            user.name,
+                            users
+                          );
+                          setSendFeedback(result.ok ? "Friend request sent." : result.message);
+                          if (result.ok) refreshFriendState();
+                        }}
+                      >
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Send</Text>
+                      </Pressable>
+                    ) : status === "incoming" ? (
+                      <Pressable
+                        style={[styles.requestActionBtn, styles.acceptBtn]}
+                        onPress={() => {
+                          const pending = incomingRequests.find((request) => request.fromUserId === user.id);
+                          if (!pending) return;
+                          handleAcceptRequest(pending.id);
+                        }}
+                      >
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        <Text style={styles.friendBlockTitle}>Incoming Requests</Text>
+        {incomingActionFeedback ? (
+          <Animated.Text
+            style={[styles.friendFeedback, { opacity: incomingFeedbackOpacity }]}
+          >
+            {incomingActionFeedback}
+          </Animated.Text>
+        ) : null}
+        {incomingRequests.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No incoming requests.</Text>
+        ) : (
+          incomingRequests.map((request) => (
+            <View key={request.id} style={styles.requestRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(request.fromUserId))}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.requestName}>{getUserDisplayName(request.fromUserId)}</Text>
+                <Text style={styles.requestMeta}>Incoming friend request</Text>
+              </View>
+              <Pressable
+                style={[styles.requestActionBtn, styles.acceptBtn]}
+                onPress={() => handleAcceptRequest(request.id)}
+              >
+                <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.requestActionBtn, styles.rejectBtn]}
+                onPress={() => handleRejectRequest(request.id)}
+              >
+                <Text style={styles.requestActionText}>Reject</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
+
+        <Text style={styles.friendBlockTitle}>Pending Sent</Text>
+        {outgoingRequests.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No pending outgoing requests.</Text>
+        ) : (
+          outgoingRequests.map((request) => (
+            <View key={request.id} style={styles.friendUserRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(request.toUserId))}
+                </Text>
+              </View>
+              <View style={styles.friendUserInfo}>
+                <Text style={styles.friendUserName}>{getUserDisplayName(request.toUserId)}</Text>
+                <Text style={styles.friendUserStatus}>Request sent</Text>
+              </View>
+            </View>
+          ))
+        )}
+
+        <Text style={styles.friendBlockTitle}>Your Friends</Text>
+        {friends.length === 0 ? (
+          <Text style={styles.friendEmptyText}>No friends yet.</Text>
+        ) : (
+          friends.map((friendId) => (
+            <View key={friendId} style={styles.friendUserRow}>
+              <View style={styles.friendUserAvatar}>
+                <Text style={styles.friendUserAvatarText}>
+                  {getInitials(getUserDisplayName(friendId))}
+                </Text>
+              </View>
+              <View style={styles.friendUserInfo}>
+                <Text style={styles.friendUserName}>{getUserDisplayName(friendId)}</Text>
+                <Text style={styles.friendUserStatus}>Friends</Text>
+              </View>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Profile Modal */}
@@ -576,5 +896,133 @@ const styles = StyleSheet.create({
     color: "#777",
     fontSize: 12,
     padding: 16,
+  },
+  friendSection: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "white",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  friendTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  friendSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 2,
+  },
+  friendAddRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  friendInput: {
+    flex: 1,
+    backgroundColor: "#F6F6FA",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#333",
+  },
+  friendFeedback: {
+    color: colours.primary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  searchResultsContainer: {
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+  },
+  friendUserRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 10,
+  },
+  friendUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E5E5EA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  friendUserAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#555",
+  },
+  friendUserInfo: {
+    flex: 1,
+  },
+  friendUserName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  friendUserStatus: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 1,
+  },
+  friendBlockTitle: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#444",
+  },
+  friendEmptyText: {
+    fontSize: 12,
+    color: "#777",
+  },
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F8F8FC",
+    borderRadius: 10,
+    padding: 10,
+  },
+  requestName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  requestMeta: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 2,
+  },
+  requestActionBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  acceptBtn: {
+    backgroundColor: colours.primary,
+  },
+  rejectBtn: {
+    backgroundColor: "#E5E5EA",
+  },
+  requestActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#333",
+  },
+  requestActionTextLight: {
+    color: "white",
+  },
+  friendListItem: {
+    fontSize: 12,
+    color: "#555",
   },
 });
