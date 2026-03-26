@@ -13,7 +13,18 @@ export default function TabsLayout() {
         tabBarStyle: {
           borderTopColor: colours.border,
         },
-        animation: "shift",
+        // Add smooth transition animation
+        ...Platform.select({
+          ios: {
+            animation: "shift",
+          },
+          android: {
+            animation: "shift",
+          },
+          default: {
+            animation: "fade",
+          },
+        }),
       }}
     >
       <Tabs.Screen
@@ -42,6 +53,16 @@ export default function TabsLayout() {
           title: "Leaderboard",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trophy-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="desk"
+        options={{
+          title: "Desk Mode",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="desktop-outline" size={size} color={color} />
           ),
         }}
       />

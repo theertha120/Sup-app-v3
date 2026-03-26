@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -11,6 +11,7 @@ import {
   userProfileToUser,
 } from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
+import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
 import { useMemo } from "react";
 import {
   analyzeIMUStream,
@@ -52,18 +53,19 @@ export default function HomeScreen() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  useEffect(() => {
-    // Fetch current user profile using profileService
+  const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(userProfileToUser(profile));
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
-        // Fallback: try to get user from leaderboard if profileService fails
-        // This handles cases where auth might not be fully set up yet
       })
       .finally(() => setIsLoadingProfile(false));
+  };
+
+  useEffect(() => {
+    loadProfile();
   }, []);
 
   useEffect(() => {
@@ -74,6 +76,12 @@ export default function HomeScreen() {
 
     return unsubscribe;
   }, []);
+  useFocusEffect(
+    useCallback(() => {
+      // Refetch when returning from e.g. Supsona Builder so avatar updates
+      loadProfile();
+    }, [])
+  );
 
   const handleProfilePress = () => {
     setShowProfileModal(true);
@@ -136,11 +144,14 @@ export default function HomeScreen() {
         <Pressable style={styles.profileCard} onPress={handleProfilePress}>
           <View style={styles.profileContent}>
             <View style={styles.avatarWrapper}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {currentUser ? getInitials(currentUser.name) : "?"}
-                </Text>
-              </View>
+              <UserSupsonaAvatar
+                avatar={currentUser?.avatar}
+                name={currentUser?.name ?? ""}
+                size={64}
+                style={styles.avatar}
+                textStyle={styles.avatarText}
+                defaultAvatarBackgroundColor="white"
+              />
               <View style={styles.editBadge}>
                 <Text style={styles.editBadgeText}>✎</Text>
               </View>

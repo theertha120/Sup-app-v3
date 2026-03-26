@@ -1,5 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "../../constants/env";
+import { CURRENT_USER_ID } from "../../constants/env";
+import { getLocalSupsona } from "./profileService";
 import { MOCK_USERS } from "../data/mockUsers";
 
 type ProfileRow = {
@@ -29,7 +31,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
       // Fall through to mock data below
     } else if (data) {
       const rows = data as ProfileRow[];
-      return rows.map((row) => ({
+      const users: User[] = rows.map((row) => ({
         id: row.id,
         name: row.name,
         avatar: row.avatar_url ?? undefined,
@@ -37,6 +39,10 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
         lastActivityDate: row.last_activity_date ?? "",
         weeklyTotalPoints: row.weekly_total_points,
       }));
+      const local = await getLocalSupsona(CURRENT_USER_ID);
+      const testUser = users.find((u) => u.id === CURRENT_USER_ID);
+      if (testUser && local != null) testUser.avatar = local;
+      return users;
     }
   } catch (err) {
     console.warn(
@@ -46,9 +52,13 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
   }
 
   // Fallback: use static mock users so UI still works
-  return [...MOCK_USERS].sort(
+  const users = [...MOCK_USERS].sort(
     (a, b) => b.currentStreak - a.currentStreak
   );
+  const local = await getLocalSupsona(CURRENT_USER_ID);
+  const testUser = users.find((u) => u.id === CURRENT_USER_ID);
+  if (testUser && local != null) testUser.avatar = local;
+  return users;
 }
 
 // Fetch leaderboard ordered by weekly total points (descending)
@@ -69,7 +79,7 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
       // Fall through to mock data below
     } else if (data) {
       const rows = data as ProfileRow[];
-      return rows.map((row) => ({
+      const users: User[] = rows.map((row) => ({
         id: row.id,
         name: row.name,
         avatar: row.avatar_url ?? undefined,
@@ -77,6 +87,10 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
         lastActivityDate: row.last_activity_date ?? "",
         weeklyTotalPoints: row.weekly_total_points,
       }));
+      const local = await getLocalSupsona(CURRENT_USER_ID);
+      const testUser = users.find((u) => u.id === CURRENT_USER_ID);
+      if (testUser && local != null) testUser.avatar = local;
+      return users;
     }
   } catch (err) {
     console.warn(
@@ -86,8 +100,12 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
   }
 
   // Fallback: use static mock users so UI still works
-  return [...MOCK_USERS].sort(
+  const users = [...MOCK_USERS].sort(
     (a, b) => b.weeklyTotalPoints - a.weeklyTotalPoints
   );
+  const local = await getLocalSupsona(CURRENT_USER_ID);
+  const testUser = users.find((u) => u.id === CURRENT_USER_ID);
+  if (testUser && local != null) testUser.avatar = local;
+  return users;
 }
 
