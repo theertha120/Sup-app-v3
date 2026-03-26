@@ -1,7 +1,31 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "../../constants/env";
 import { CURRENT_USER_ID } from "../../constants/env";
 import { MOCK_USERS } from "../data/mockUsers";
+
+const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
+
+/** Used internally and by leaderboard so test user's local supsona appears in the list. */
+export async function getLocalSupsona(userId: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(LOCAL_SUPSONA_KEY_PREFIX + userId);
+  } catch {
+    return null;
+  }
+}
+
+async function setLocalSupsona(userId: string, value: string | null): Promise<void> {
+  try {
+    if (value === null) {
+      await AsyncStorage.removeItem(LOCAL_SUPSONA_KEY_PREFIX + userId);
+    } else {
+      await AsyncStorage.setItem(LOCAL_SUPSONA_KEY_PREFIX + userId, value);
+    }
+  } catch (e) {
+    console.warn("[profile] Failed to save supsona locally", e);
+  }
+}
 
 /**
  * Row shape of the `profiles` table in Supabase.
@@ -260,7 +284,12 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
       );
       // fall through to mock below
     } else if (data) {
-      return mapRowToUserProfile(data as ProfileRow);
+      const profile = mapRowToUserProfile(data as ProfileRow);
+      if (userId === CURRENT_USER_ID) {
+        const local = await getLocalSupsona(userId);
+        if (local != null) profile.avatar = local;
+      }
+      return profile;
     }
   } catch (err) {
     console.warn(
@@ -275,7 +304,12 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
       "[profile] Profile with stats not found in Supabase or mock data"
     );
   }
-  return userToUserProfile(mock);
+  const profile = userToUserProfile(mock);
+  if (userId === CURRENT_USER_ID) {
+    const local = await getLocalSupsona(userId);
+    if (local != null) profile.avatar = local;
+  }
+  return profile;
 }
 
 /**
@@ -324,6 +358,11 @@ export async function updateCurrentUserProfile(
     return fetchCurrentUserProfileWithStats();
   }
 
+  // For test user, always persist supsona (avatar) locally so it works when Supabase is down
+  if (userId === CURRENT_USER_ID && Object.prototype.hasOwnProperty.call(updates, "avatar")) {
+    await setLocalSupsona(userId, updates.avatar ?? null);
+  }
+
   const { data, error } = await supabase
     .from("profiles")
     .update(payload)
@@ -334,22 +373,16 @@ export async function updateCurrentUserProfile(
     .single();
 
   if (error) {
-    console.error("[profile] Failed to update profile", error);
-    
-    // Provide helpful error message for RLS policy issues
-    if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
-      const isTestUser = userId === CURRENT_USER_ID;
-      if (isTestUser) {
-        throw new Error(
-          "Update blocked by RLS policy. For development, ensure the 'Allow anon to update test user profile' policy is enabled in your Supabase database. See sql/rls_policies_profiles.sql"
-        );
-      } else {
-        throw new Error(
-          "Update blocked: You can only update your own profile. Authentication may be required."
-        );
-      }
+    console.warn("[profile] Failed to update profile (Supabase), using local fallback for test user", error);
+    if (userId === CURRENT_USER_ID) {
+      return fetchCurrentUserProfileWithStats();
     }
-    
+    console.error("[profile] Failed to update profile", error);
+    if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
+      throw new Error(
+        "Update blocked: You can only update your own profile. Authentication may be required."
+      );
+    }
     throw error;
   }
 
@@ -459,7 +492,12 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
         );
       }
     } else if (data) {
-      return mapRowToUserProfile(data as ProfileRow);
+      const profile = mapRowToUserProfile(data as ProfileRow);
+      if (userId === CURRENT_USER_ID) {
+        const local = await getLocalSupsona(userId);
+        if (local != null) profile.avatar = local;
+      }
+      return profile;
     }
   } catch (err) {
     console.warn(
@@ -469,7 +507,12 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
   }
 
   const mock = MOCK_USERS.find((u) => u.id === userId);
-  return mock ? userToUserProfile(mock) : null;
+  const profile = mock ? userToUserProfile(mock) : null;
+  if (profile && userId === CURRENT_USER_ID) {
+    const local = await getLocalSupsona(userId);
+    if (local != null) profile.avatar = local;
+  }
+  return profile;
 }
 
 /**
@@ -538,6 +581,11 @@ export async function updateUserProfile(
     return fetchUserProfile(userId);
   }
 
+  // For test user, always persist supsona (avatar) locally so it works when Supabase is down
+  if (userId === CURRENT_USER_ID && updates.avatar !== undefined) {
+    await setLocalSupsona(userId, updates.avatar ?? null);
+  }
+
   // Perform update (restricted to current user via RLS)
   const { data, error } = await supabase
     .from("profiles")
@@ -547,29 +595,28 @@ export async function updateUserProfile(
     .single();
 
   if (error) {
+    if (userId === CURRENT_USER_ID) {
+      console.warn("[profile] Failed to update user profile (Supabase), using local fallback for test user", error);
+      return fetchUserProfile(userId);
+    }
     if (error.code === "PGRST116") {
       return null; // Profile not found
     }
-    
-    // Provide helpful error message for RLS policy issues
     if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
-      const isTestUser = userId === CURRENT_USER_ID;
-      if (isTestUser) {
-        throw new Error(
-          "Update blocked by RLS policy. For development, ensure the 'Allow anon to update test user profile' policy is enabled in your Supabase database. See sql/rls_policies_profiles.sql"
-        );
-      } else {
-        throw new Error(
-          "Update blocked: You can only update your own profile. Authentication may be required."
-        );
-      }
+      throw new Error(
+        "Update blocked: You can only update your own profile. Authentication may be required."
+      );
     }
-    
     console.error("[profile] Failed to update user profile", error);
     throw error;
   }
 
-  return mapRowToUserProfile(data as ProfileRow);
+  const profile = mapRowToUserProfile(data as ProfileRow);
+  if (userId === CURRENT_USER_ID) {
+    const local = await getLocalSupsona(userId);
+    if (local != null) profile.avatar = local;
+  }
+  return profile;
 }
 
 /**
