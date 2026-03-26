@@ -56,6 +56,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="desk"
+        options={{
+          title: "Desk Mode",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="desktop-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
