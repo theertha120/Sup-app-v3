@@ -16,7 +16,10 @@ import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
 import ProfileModal from "../../src/components/ProfileModal";
-import { userProfileToUser } from "../../src/services/profileService";
+import {
+  subscribeToProfileUpdates,
+  userProfileToUser,
+} from "../../src/services/profileService";
 import {
   acceptFriendRequest,
   ensureFriendDirectory,
@@ -163,6 +166,24 @@ export default function LeaderboardScreen() {
     fetchLeaderboardByStreak()
       .then(setUsers)
       .catch((err) => console.error("Failed to load leaderboard", err));
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      const updatedUser = userProfileToUser(updatedProfile);
+
+      setUsers((prev) => {
+        const exists = prev.some((u) => u.id === updatedUser.id);
+        if (!exists) return prev;
+        return prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+      });
+
+      setSelectedUser((prev) =>
+        prev && prev.id === updatedUser.id ? { ...prev, ...updatedUser } : prev
+      );
+    });
+
+    return unsubscribe;
   }, []);
 
   useEffect(() => {

@@ -11,19 +11,51 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
+import {
+  getSettingsSnapshot,
+  updateSettings,
+  type AppSettings,
+} from "../src/services/settingsService";
+
+const REMINDER_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hour = Math.floor(index / 2);
+  const minute = index % 2 === 0 ? 0 : 30;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
+
+function formatReminderTime(value: string): string {
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return value;
+  }
+
+  const period = hours >= 12 ? "PM" : "AM";
+  const twelveHour = hours % 12 === 0 ? 12 : hours % 12;
+  return `${twelveHour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [postureReminders, setPostureReminders] = useState(true);
-  const [dailyGoals, setDailyGoals] = useState(false);
-  const [soundEffects, setSoundEffects] = useState(true);
+  const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
   
   // Theme and Units state
-  const [theme, setTheme] = useState<"light" | "dark" | "auto">("light");
   const [showThemeModal, setShowThemeModal] = useState(false);
-  const [units, setUnits] = useState<"metric" | "imperial">("metric");
   const [showUnitsModal, setShowUnitsModal] = useState(false);
+  const [showReminderTimeModal, setShowReminderTimeModal] = useState(false);
+
+  const updateSetting = <K extends keyof AppSettings>(
+    key: K,
+    value: AppSettings[K]
+  ) => {
+    setSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      updateSettings({ [key]: value });
+      return next;
+    });
+  };
 
   const handleLogout = () => {
     logout();
@@ -31,13 +63,13 @@ export default function SettingsScreen() {
   };
   
   const getThemeLabel = () => {
-    if (theme === "light") return "Light";
-    if (theme === "dark") return "Dark";
+    if (settings.theme === "light") return "Light";
+    if (settings.theme === "dark") return "Dark";
     return "Auto";
   };
   
   const getUnitsLabel = () => {
-    return units === "metric" ? "Metric (cm, kg)" : "Imperial (in, lb)";
+    return settings.units === "metric" ? "Metric (cm, kg)" : "Imperial (in, lb)";
   };
 
   return (
@@ -63,8 +95,25 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Switch
-            value={notificationsEnabled}
-            onValueChange={setNotificationsEnabled}
+            value={settings.notificationsEnabled}
+            onValueChange={(value) => updateSetting("notificationsEnabled", value)}
+            trackColor={{ false: "#E0E0E0", true: colours.primary }}
+            thumbColor="white"
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Friend Request Notifications</Text>
+            <Text style={styles.settingDescription}>
+              Get notified when someone sends you a friend request
+            </Text>
+          </View>
+          <Switch
+            value={settings.friendRequestNotificationsEnabled}
+            onValueChange={(value) =>
+              updateSetting("friendRequestNotificationsEnabled", value)
+            }
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
@@ -78,12 +127,25 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Switch
-            value={postureReminders}
-            onValueChange={setPostureReminders}
+            value={settings.postureRemindersEnabled}
+            onValueChange={(value) => updateSetting("postureRemindersEnabled", value)}
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
         </View>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={() => setShowReminderTimeModal(true)}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Posture Reminder Time</Text>
+            <Text style={styles.settingDescription}>
+              Currently saved: {formatReminderTime(settings.postureReminderTime)}
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
 
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
@@ -93,8 +155,8 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Switch
-            value={dailyGoals}
-            onValueChange={setDailyGoals}
+            value={settings.dailyGoalsEnabled}
+            onValueChange={(value) => updateSetting("dailyGoalsEnabled", value)}
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
@@ -121,8 +183,8 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Switch
-            value={soundEffects}
-            onValueChange={setSoundEffects}
+            value={settings.soundEffectsEnabled}
+            onValueChange={(value) => updateSetting("soundEffectsEnabled", value)}
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
@@ -237,48 +299,48 @@ export default function SettingsScreen() {
             <Text style={styles.modalTitle}>Select Theme</Text>
             
             <Pressable
-              style={[styles.modalOption, theme === "light" && styles.modalOptionSelected]}
+              style={[styles.modalOption, settings.theme === "light" && styles.modalOptionSelected]}
               onPress={() => {
-                setTheme("light");
+                updateSetting("theme", "light");
                 setShowThemeModal(false);
               }}
             >
               <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, theme === "light" && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, settings.theme === "light" && styles.modalOptionTextSelected]}>
                   ☀️  Light
                 </Text>
               </View>
-              {theme === "light" && <Text style={styles.checkmark}>✓</Text>}
+              {settings.theme === "light" && <Text style={styles.checkmark}>✓</Text>}
             </Pressable>
 
             <Pressable
-              style={[styles.modalOption, theme === "dark" && styles.modalOptionSelected]}
+              style={[styles.modalOption, settings.theme === "dark" && styles.modalOptionSelected]}
               onPress={() => {
-                setTheme("dark");
+                updateSetting("theme", "dark");
                 setShowThemeModal(false);
               }}
             >
               <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, theme === "dark" && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, settings.theme === "dark" && styles.modalOptionTextSelected]}>
                   🌙  Dark
                 </Text>
               </View>
-              {theme === "dark" && <Text style={styles.checkmark}>✓</Text>}
+              {settings.theme === "dark" && <Text style={styles.checkmark}>✓</Text>}
             </Pressable>
 
             <Pressable
-              style={[styles.modalOption, theme === "auto" && styles.modalOptionSelected]}
+              style={[styles.modalOption, settings.theme === "auto" && styles.modalOptionSelected]}
               onPress={() => {
-                setTheme("auto");
+                updateSetting("theme", "auto");
                 setShowThemeModal(false);
               }}
             >
               <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, theme === "auto" && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, settings.theme === "auto" && styles.modalOptionTextSelected]}>
                   🔄  Auto (System)
                 </Text>
               </View>
-              {theme === "auto" && <Text style={styles.checkmark}>✓</Text>}
+              {settings.theme === "auto" && <Text style={styles.checkmark}>✓</Text>}
             </Pressable>
 
             <Pressable
@@ -303,40 +365,90 @@ export default function SettingsScreen() {
             <Text style={styles.modalTitle}>Select Units</Text>
             
             <Pressable
-              style={[styles.modalOption, units === "metric" && styles.modalOptionSelected]}
+              style={[styles.modalOption, settings.units === "metric" && styles.modalOptionSelected]}
               onPress={() => {
-                setUnits("metric");
+                updateSetting("units", "metric");
                 setShowUnitsModal(false);
               }}
             >
               <View>
-                <Text style={[styles.modalOptionText, units === "metric" && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, settings.units === "metric" && styles.modalOptionTextSelected]}>
                   Metric
                 </Text>
                 <Text style={styles.modalOptionSubtext}>Centimeters, Kilograms</Text>
               </View>
-              {units === "metric" && <Text style={styles.checkmark}>✓</Text>}
+              {settings.units === "metric" && <Text style={styles.checkmark}>✓</Text>}
             </Pressable>
 
             <Pressable
-              style={[styles.modalOption, units === "imperial" && styles.modalOptionSelected]}
+              style={[styles.modalOption, settings.units === "imperial" && styles.modalOptionSelected]}
               onPress={() => {
-                setUnits("imperial");
+                updateSetting("units", "imperial");
                 setShowUnitsModal(false);
               }}
             >
               <View>
-                <Text style={[styles.modalOptionText, units === "imperial" && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, settings.units === "imperial" && styles.modalOptionTextSelected]}>
                   Imperial
                 </Text>
                 <Text style={styles.modalOptionSubtext}>Inches, Pounds</Text>
               </View>
-              {units === "imperial" && <Text style={styles.checkmark}>✓</Text>}
+              {settings.units === "imperial" && <Text style={styles.checkmark}>✓</Text>}
             </Pressable>
 
             <Pressable
               style={styles.modalCancel}
               onPress={() => setShowUnitsModal(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Reminder Time Selection Modal */}
+      <Modal
+        visible={showReminderTimeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReminderTimeModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowReminderTimeModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Posture Reminder Time</Text>
+
+            <ScrollView style={styles.timeList} showsVerticalScrollIndicator={false}>
+              {REMINDER_TIME_OPTIONS.map((timeValue) => {
+                const selected = settings.postureReminderTime === timeValue;
+                return (
+                  <Pressable
+                    key={timeValue}
+                    style={[styles.modalOption, selected && styles.modalOptionSelected]}
+                    onPress={() => {
+                      updateSetting("postureReminderTime", timeValue);
+                      setShowReminderTimeModal(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        selected && styles.modalOptionTextSelected,
+                      ]}
+                    >
+                      {formatReminderTime(timeValue)}
+                    </Text>
+                    {selected ? <Text style={styles.checkmark}>✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Pressable
+              style={styles.modalCancel}
+              onPress={() => setShowReminderTimeModal(false)}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
@@ -506,5 +618,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontWeight: "600",
+  },
+  timeList: {
+    maxHeight: 300,
   },
 });

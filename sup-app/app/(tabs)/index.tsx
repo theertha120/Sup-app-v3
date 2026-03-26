@@ -7,6 +7,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
+  subscribeToProfileUpdates,
   userProfileToUser,
 } from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
@@ -67,6 +68,14 @@ export default function HomeScreen() {
     loadProfile();
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      if (updatedProfile.id !== CURRENT_USER_ID) return;
+      setCurrentUser(userProfileToUser(updatedProfile));
+    });
+
+    return unsubscribe;
+  }, []);
   useFocusEffect(
     useCallback(() => {
       // Refetch when returning from e.g. Supsona Builder so avatar updates
