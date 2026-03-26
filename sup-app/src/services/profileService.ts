@@ -739,6 +739,7 @@ export async function updateUserProfile(
 
   notifyProfileUpdated(updatedProfile);
   return updatedProfile;
+}
 
 /**
  * Helper to convert UserProfile to User type (for compatibility with existing UI components).
