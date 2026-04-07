@@ -11,6 +11,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
+import { useToast } from "../src/contexts/ToastContext";
 import {
   getSettingsSnapshot,
   updateSettings,
@@ -39,6 +40,7 @@ function formatReminderTime(value: string): string {
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
   
   // Theme and Units state
@@ -48,13 +50,18 @@ export default function SettingsScreen() {
 
   const updateSetting = <K extends keyof AppSettings>(
     key: K,
-    value: AppSettings[K]
+    value: AppSettings[K],
+    options?: { toastMessage?: string }
   ) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       updateSettings({ [key]: value });
       return next;
     });
+
+    if (options?.toastMessage) {
+      showToast(options.toastMessage, "success");
+    }
   };
 
   const handleLogout = () => {
@@ -128,7 +135,11 @@ export default function SettingsScreen() {
           </View>
           <Switch
             value={settings.postureRemindersEnabled}
-            onValueChange={(value) => updateSetting("postureRemindersEnabled", value)}
+            onValueChange={(value) =>
+              updateSetting("postureRemindersEnabled", value, {
+                toastMessage: value ? "Nudges on" : "Nudges off",
+              })
+            }
             trackColor={{ false: "#E0E0E0", true: colours.primary }}
             thumbColor="white"
           />
@@ -428,7 +439,9 @@ export default function SettingsScreen() {
                     key={timeValue}
                     style={[styles.modalOption, selected && styles.modalOptionSelected]}
                     onPress={() => {
-                      updateSetting("postureReminderTime", timeValue);
+                      updateSetting("postureReminderTime", timeValue, {
+                        toastMessage: "Reminder saved",
+                      });
                       setShowReminderTimeModal(false);
                     }}
                   >

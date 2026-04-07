@@ -10,6 +10,7 @@ import {
 import { router } from "expo-router";
 import { colours } from "../theme/colours";
 import SupsonaAvatar from "../src/components/SupsonaAvatar";
+import { useToast } from "../src/contexts/ToastContext";
 import type {
   Supsona,
   FaceShapeId,
@@ -62,6 +63,7 @@ const OPTION_LABELS: Record<string, string> = {
 };
 
 export default function SupsonaBuilderScreen() {
+  const { showToast } = useToast();
   const [supsona, setSupsona] = useState<Supsona>(DEFAULT_SUPSONA);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,9 +84,12 @@ export default function SupsonaBuilderScreen() {
     setError("");
     try {
       await updateCurrentUserProfile({ avatar: stringifySupsona(supsona) });
+      showToast("Supsona saved", "success");
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
+      const message = e instanceof Error ? e.message : "Failed to save";
+      setError(message);
+      showToast("Could not save", "error");
     } finally {
       setSaving(false);
     }

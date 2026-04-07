@@ -5,72 +5,56 @@
       "name": "Sarah Chen",
       "currentStreak": 45,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 504,
-      "previousWeekStreakRank": 1,
-      "previousWeekWeeklyRank": 1
+      "weeklyTotalPoints": 504
     },
     {
       "id": "user-2",
       "name": "Mike Johnson",
       "currentStreak": 38,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 476,
-      "previousWeekStreakRank": 2,
-      "previousWeekWeeklyRank": 2
+      "weeklyTotalPoints": 476
     },
     {
       "id": "user-3",
       "name": "Emma Wilson",
       "currentStreak": 1,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 70,
-      "previousWeekStreakRank": 8,
-      "previousWeekWeeklyRank": 8
+      "weeklyTotalPoints": 70
     },
     {
       "id": "user-4",
       "name": "Test User",
       "currentStreak": 14,
       "lastActivityDate": "2026-02-27",
-      "weeklyTotalPoints": 353,
-      "previousWeekStreakRank": 4,
-      "previousWeekWeeklyRank": 6
+      "weeklyTotalPoints": 353
     },
     {
       "id": "user-5",
       "name": "Lisa Anderson",
       "currentStreak": 25,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 360,
-      "previousWeekStreakRank": 4,
-      "previousWeekWeeklyRank": 5
+      "weeklyTotalPoints": 360
     },
     {
       "id": "user-6",
       "name": "David Lee",
       "currentStreak": 20,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 371,
-      "previousWeekStreakRank": 5,
-      "previousWeekWeeklyRank": 4
+      "weeklyTotalPoints": 371
     },
     {
       "id": "user-7",
       "name": "Rachel Kim",
       "currentStreak": 18,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 336,
-      "previousWeekStreakRank": 6,
-      "previousWeekWeeklyRank": 7
+      "weeklyTotalPoints": 336
     },
     {
       "id": "user-8",
       "name": "Tom Brown",
       "currentStreak": 15,
       "lastActivityDate": "2026-01-24",
-      "weeklyTotalPoints": 315,
-      "previousWeekStreakRank": 3,
-      "previousWeekWeeklyRank": 3
+      "weeklyTotalPoints": 315
     }
   ]
 }
