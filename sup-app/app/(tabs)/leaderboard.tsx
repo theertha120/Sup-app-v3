@@ -80,93 +80,6 @@ function AnimatedNumber({ value, style }: { value: number; style?: any }) {
   return <Text style={style}>{displayValue}</Text>;
 }
 
-// Animated rank component showing transition from previous rank to current
-function AnimatedRank({ 
-  previousRank, 
-  currentRank, 
-  isCurrentUser,
-  rankChangeDir
-}: { 
-  previousRank?: number; 
-  currentRank: number;
-  isCurrentUser: boolean;
-  rankChangeDir: "up" | "down" | null;
-}) {
-  const slideAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank) {
-      slideAnim.setValue(0);
-      Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 450,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      slideAnim.setValue(1);
-    }
-  }, [currentRank, previousRank, rankChangeDir, isCurrentUser, slideAnim]);
-
-  return (
-    <View style={{ position: "relative", overflow: "hidden", height: 20 }}>
-      {isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank && (
-        <Animated.Text
-          style={[
-            styles.rank,
-            isCurrentUser && styles.currentUserText,
-            {
-              position: "absolute",
-              top: 0,
-              transform: [
-                {
-                  translateY: slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, -20],
-                  }),
-                },
-              ],
-              opacity: slideAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 0],
-              }),
-            },
-          ]}
-        >
-          #{previousRank}
-        </Animated.Text>
-      )}
-      <Animated.Text
-        style={[
-          styles.rank,
-          isCurrentUser && styles.currentUserText,
-          {
-            transform: [
-              {
-                translateY:
-                  isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank
-                    ? slideAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [20, 0],
-                      })
-                    : 0,
-              },
-            ],
-            opacity:
-              isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank
-                ? slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 1],
-                  })
-                : 1,
-          },
-        ]}
-      >
-        #{currentRank}
-      </Animated.Text>
-    </View>
-  );
-}
-
 export default function LeaderboardScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
@@ -255,13 +168,6 @@ export default function LeaderboardScreen() {
     }
     return b.weeklyTotalPoints - a.weeklyTotalPoints;
   });
-
-  const getPreviousRankForMode = (user: User) => {
-    if (sortMode === "streak") {
-      return user.previousWeekStreakRank;
-    }
-    return user.previousWeekWeeklyRank;
-  };
 
   const [hasGoodPostureToday, setHasGoodPostureToday] = useState(false);
   const [currentUserWithStreak, setCurrentUserWithStreak] =
@@ -519,7 +425,6 @@ export default function LeaderboardScreen() {
           <LeaderboardRow
             key={user.id}
             rank={index + 1}
-            previousRank={getPreviousRankForMode(user)}
             user={user}
             isCurrentUser={user.id === CURRENT_USER_ID}
             onPress={() => handleUserPress(user)}
@@ -686,73 +591,21 @@ export default function LeaderboardScreen() {
 
 interface LeaderboardRowProps {
   rank: number;
-  previousRank?: number;
   user: User;
   isCurrentUser: boolean;
   onPress: () => void;
 }
 
-function LeaderboardRow({ rank, previousRank, user, isCurrentUser, onPress }: LeaderboardRowProps) {
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  
-  // Rank change indicator (only for current user)
-  let rankChange = 0;
-  let rankChangeDir: "up" | "down" | null = null;
-  
-  if (isCurrentUser && previousRank) {
-    rankChange = previousRank - rank; // Positive = improved (move up)
-    if (rankChange > 0) rankChangeDir = "up";
-    if (rankChange < 0) rankChangeDir = "down";
-  }
-
-  // Animate badge in when it appears
-  useEffect(() => {
-    if (rankChangeDir) {
-      Animated.parallel([
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      scaleAnim.setValue(0.5);
-      opacityAnim.setValue(0);
-    }
-  }, [rankChangeDir]);
-
+function LeaderboardRow({ rank, user, isCurrentUser, onPress }: LeaderboardRowProps) {
   return (
     <Pressable 
       style={[styles.row, isCurrentUser && styles.currentUserRow]} 
       onPress={onPress}
     >
       <View style={styles.rankContainer}>
-        <AnimatedRank
-          previousRank={isCurrentUser ? previousRank : undefined}
-          currentRank={rank}
-          isCurrentUser={isCurrentUser}
-          rankChangeDir={rankChangeDir}
-        />
-        {isCurrentUser && rankChangeDir && (
-          <Animated.View style={[
-            styles.rankChangeIndicator,
-            rankChangeDir === "up" ? styles.rankChangeUp : styles.rankChangeDown,
-            {
-              transform: [{ scale: scaleAnim }],
-              opacity: opacityAnim,
-            }
-          ]}>
-            <Text style={[styles.rankChangeText, { color: rankChangeDir === "up" ? "#4CAF50" : "#F44336" }]}>
-              {`${rankChangeDir === "up" ? "↑" : "↓"}${Math.abs(rankChange)}`}
-            </Text>
-          </Animated.View>
-        )}
+        <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
+          #{rank}
+        </Text>
       </View>
       
       <View style={[styles.avatar, isCurrentUser && styles.currentUserAvatar]}>
@@ -948,7 +801,7 @@ const styles = StyleSheet.create({
   rankContainer: {
     position: "relative",
     alignItems: "center",
-    width: 58,
+    width: 34,
   },
   rankChangeIndicator: {
     position: "absolute",
