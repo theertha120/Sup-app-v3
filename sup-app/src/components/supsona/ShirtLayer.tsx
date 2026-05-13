@@ -1,7 +1,7 @@
 // Shirt Layer
 import React from "react";
 import Svg, { Circle } from "react-native-svg";
-import type { ShirtColourId } from "../../types/supsona";
+import type { ShirtColourId } from "./supsona";
 import { SHIRT_COLOR_MAP } from "./supsonaColors";
 
 const VIEWBOX = "0 0 100 120";

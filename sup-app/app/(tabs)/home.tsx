@@ -9,15 +9,15 @@ import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
-} from "../../src/services/profileService";
-import ProfileModal from "../../src/components/ProfileModal";
-import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
+} from "../../src/services/user/profileService";
+import ProfileModal from "../../src/components/modals/ProfileModal";
+import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
 import { useMemo } from "react";
 import {
   analyzeIMUStream,
   type IMUReading,
-} from "../../src/services/postureAnalysisService";
+} from "../../src/services/posture/postureAnalysisService";
 
 // Helper to derive status from stability score
 function getPostureStatus(score: number): string {
@@ -203,7 +203,7 @@ export default function HomeScreen() {
 
         <Pressable
           style={styles.promptButton}
-          onPress={() => router.push("/modal")}
+          onPress={() => router.push("/posture-tip")}
         >
           <Text style={styles.promptButtonText}>View posture tip</Text>
         </Pressable>

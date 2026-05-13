@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/contexts/AuthContext";
-import SignInModal from "@/src/components/SignInModal";
+import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 
 export default function RootLayout() {
@@ -15,9 +15,8 @@ export default function RootLayout() {
           {/* Tabs live inside the stack */}
           <Stack.Screen name="(tabs)" />
 
-          {/* Optional modal screen */}
-          <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-          <Stack.Screen name="supsona-builder" options={{ presentation: "modal", title: "Supsona" }} />
+          {/* Optional modal screens */}
+          <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
 
           {/* Settings screen */}
           <Stack.Screen name="settings" />
