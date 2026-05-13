@@ -1,6 +1,6 @@
 import React from "react";
 import Svg, { Path, Ellipse } from "react-native-svg";
-import type { HairStyleId, HairColourId } from "../../types/supsona";
+import type { HairStyleId, HairColourId } from "./supsona";
 import { HAIR_COLOR_MAP } from "./supsonaColors";
 
 const VIEWBOX = "0 0 100 120";

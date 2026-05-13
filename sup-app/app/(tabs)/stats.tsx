@@ -6,7 +6,7 @@ import {
   analyzeIMUStream,
   type IMUReading,
   type PostureSessionStats,
-} from "../../src/services/postureAnalysisService";
+} from "../../src/services/posture/postureAnalysisService";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { CURRENT_USER_ID } from "../../constants/env";
 

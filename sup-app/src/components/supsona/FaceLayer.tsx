@@ -1,7 +1,7 @@
 // Face Layer
 import React from "react";
 import Svg, { Ellipse, Path, G } from "react-native-svg";
-import type { FaceShapeId, SkinToneId } from "../../types/supsona";
+import type { FaceShapeId, SkinToneId } from "./supsona";
 import { SKIN_TONE_MAP } from "./supsonaColors";
 
 const VIEWBOX = "0 0 100 120";

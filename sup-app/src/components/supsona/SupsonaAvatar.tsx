@@ -1,12 +1,11 @@
 import React from "react";
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from "react-native";
-import type { Supsona } from "../types/supsona";
-import { parseSupsona, isSupsonaAvatar } from "../types/supsona";
-import FaceLayer from "./supsona/FaceLayer";
-import HairLayer from "./supsona/HairLayer";
-import ShirtLayer from "./supsona/ShirtLayer";
-import { DEFAULT_SUPSONA } from "../types/supsona";
-import { colours } from "../../theme/colours";
+import type { Supsona } from "./supsona";
+import { parseSupsona, isSupsonaAvatar, DEFAULT_SUPSONA } from "./supsona";
+import FaceLayer from "./FaceLayer";
+import HairLayer from "./HairLayer";
+import ShirtLayer from "./ShirtLayer";
+import { colours } from "../../../theme/colours";
 
 interface SupsonaAvatarProps {
   /** If provided, parse as supsona JSON; otherwise show default. */
@@ -31,23 +30,9 @@ export default function SupsonaAvatar({
   return (
     <View style={[styles.wrapper, { width: size, height: size }, style]}>
       {/* Stack order: shirt (back), face, hair (front) */}
-      <ShirtLayer
-        shirtColour={supsona.shirtColour}
-        width={size}
-        height={size}
-      />
-      <FaceLayer
-        faceShape={supsona.faceShape}
-        skinTone={supsona.skinTone}
-        width={size}
-        height={size}
-      />
-      <HairLayer
-        hairStyle={supsona.hairStyle}
-        hairColour={supsona.hairColour}
-        width={size}
-        height={size}
-      />
+      <ShirtLayer shirtColour={supsona.shirtColour} width={size} height={size} />
+      <FaceLayer faceShape={supsona.faceShape} skinTone={supsona.skinTone} width={size} height={size} />
+      <HairLayer hairStyle={supsona.hairStyle} hairColour={supsona.hairColour} width={size} height={size} />
     </View>
   );
 }

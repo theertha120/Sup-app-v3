@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
-import type { User } from "../../constants/env";
-import { CURRENT_USER_ID } from "../../constants/env";
-import { MOCK_USERS } from "../data/mockUsers";
+import type { User } from "@/constants/env";
+import { CURRENT_USER_ID } from "@/constants/env";
+import { MOCK_USERS } from "@/src/data/mockUsers";
 
 const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
 

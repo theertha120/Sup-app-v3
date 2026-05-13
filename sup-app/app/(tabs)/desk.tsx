@@ -13,11 +13,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Path, Line } from "react-native-svg";
 import { colours } from "../../theme/colours";
-import DeskPostureFigure from "../../src/components/DeskPostureFigure";
-import { getScoreColor, getScoreLabel } from "../../src/data/mockDeskPostureData";
+import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
+import { MOCK_DESK_POSTURE_SEQUENCE, getScoreColor, getScoreLabel, type DeskPostureSnapshot } from "../../src/components/desk/mockDeskPostureData";
 import { useIMU } from "../../src/hooks/useIMU";
 import { Device } from "react-native-ble-plx";
 import { SensorSlot } from "../../src/services/BLEService";
+
+const CYCLE_INTERVAL_MS = 3500; // how long each snapshot is shown
 
 const POSTURE_TIPS: Record<string, string> = {
   upright:      "Keep your feet flat, shoulders relaxed, and eyes level with the screen.",

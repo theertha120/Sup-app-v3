@@ -16,7 +16,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Animated, StyleSheet, Easing } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
-import { DeskPostureState, getScoreColor } from "../data/mockDeskPostureData";
+import { DeskPostureState, getScoreColor } from "./mockDeskPostureData";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import type { HairColourId, SkinToneId, ShirtColourId } from "../../types/supsona";
+import type { HairColourId, SkinToneId, ShirtColourId } from "./supsona";
 
 export const HAIR_COLOR_MAP: Record<HairColourId, string> = {
   black: "#2C2C2C",
