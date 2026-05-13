@@ -12,6 +12,7 @@ import {
 } from "../../src/services/profileService";
 import ProfileModal from "../../src/components/ProfileModal";
 import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
+import { useToast } from "../../src/contexts/ToastContext";
 import { useMemo } from "react";
 import {
   analyzeIMUStream,
@@ -36,6 +37,7 @@ function getEncouragingMessage(score: number): string {
 
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -94,6 +96,7 @@ export default function HomeScreen() {
   const handleSaveProfile = async (updatedUser: User) => {
     // Update local state with the updated user from profileService
     setCurrentUser(updatedUser);
+    showToast("Profile glow-up saved", "success");
   };
 
   const handleSettingsPress = () => {
