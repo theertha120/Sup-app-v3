@@ -11,15 +11,15 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 // import leaderboardData from "../../src/data/leaderboard.json";
-import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
+import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
-import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
-import ProfileModal from "../../src/components/ProfileModal";
+import { hasGoodPosture, updateStreak } from "../../src/services/posture/streakService";
+import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
   subscribeToProfileUpdates,
   userProfileToUser,
-} from "../../src/services/profileService";
+} from "../../src/services/user/profileService";
 import {
   acceptFriendRequest,
   ensureFriendDirectory,
@@ -29,8 +29,8 @@ import {
   getOutgoingPendingRequests,
   rejectFriendRequest,
   sendFriendRequestByUsername,
-} from "../../src/services/friendService";
-import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
+} from "../../src/services/social/friendService";
+import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
 
 // Animated number component for smooth transitions

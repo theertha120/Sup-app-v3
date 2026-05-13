@@ -10,13 +10,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
-import DeskPostureFigure from "../../src/components/DeskPostureFigure";
+import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
 import {
   MOCK_DESK_POSTURE_SEQUENCE,
   getScoreColor,
   getScoreLabel,
   type DeskPostureSnapshot,
-} from "../../src/data/mockDeskPostureData";
+} from "../../src/components/desk/mockDeskPostureData";
 
 const CYCLE_INTERVAL_MS = 3500; // how long each snapshot is shown
 

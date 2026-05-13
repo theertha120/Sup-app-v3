@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
 import { colours } from "@/theme/colours";
 
-export default function ModalScreen() {
+export default function PostureTipScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Posture Tip</Text>

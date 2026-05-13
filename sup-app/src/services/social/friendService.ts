@@ -1,4 +1,4 @@
-import type { User } from "../../constants/env";
+import type { User } from "@/constants/env";
 
 export type FriendRequestStatus = "pending" | "accepted" | "rejected";
 

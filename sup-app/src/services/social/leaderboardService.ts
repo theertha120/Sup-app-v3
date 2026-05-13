@@ -1,8 +1,8 @@
 import { supabase } from "@/src/lib/supabase";
-import type { User } from "../../constants/env";
-import { CURRENT_USER_ID } from "../../constants/env";
-import { getLocalSupsona } from "./profileService";
-import { MOCK_USERS } from "../data/mockUsers";
+import type { User } from "@/constants/env";
+import { CURRENT_USER_ID } from "@/constants/env";
+import { getLocalSupsona } from "../user/profileService";
+import { MOCK_USERS } from "@/src/data/mockUsers";
 
 type ProfileRow = {
   id: string;

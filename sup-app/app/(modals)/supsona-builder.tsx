@@ -8,9 +8,9 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
-import { colours } from "../theme/colours";
-import SupsonaAvatar from "../src/components/SupsonaAvatar";
-import { useToast } from "../src/contexts/ToastContext";
+import { colours } from "../../theme/colours";
+import SupsonaAvatar from "../../src/components/supsona/SupsonaAvatar";
+import { useToast } from "../../src/contexts/ToastContext";
 import type {
   Supsona,
   FaceShapeId,
@@ -18,7 +18,7 @@ import type {
   HairColourId,
   SkinToneId,
   ShirtColourId,
-} from "../src/types/supsona";
+} from "../../src/components/supsona/supsona";
 import {
   DEFAULT_SUPSONA,
   parseSupsona,
@@ -28,8 +28,11 @@ import {
   HAIR_COLOURS,
   SKIN_TONES,
   SHIRT_COLOURS,
-} from "../src/types/supsona";
-import { fetchCurrentUserProfileWithStats, updateCurrentUserProfile } from "../src/services/profileService";
+} from "../../src/components/supsona/supsona";
+import {
+  fetchCurrentUserProfileWithStats,
+  updateCurrentUserProfile,
+} from "../../src/services/user/profileService";
 
 const OPTION_LABELS: Record<string, string> = {
   round: "Round",
@@ -116,10 +119,7 @@ export default function SupsonaBuilderScreen() {
       {/* Live preview */}
       <View style={styles.previewSection}>
         <View style={styles.previewCircle}>
-          <SupsonaAvatar
-            avatar={stringifySupsona(supsona)}
-            size={160}
-          />
+          <SupsonaAvatar avatar={stringifySupsona(supsona)} size={160} />
         </View>
       </View>
 
@@ -130,7 +130,9 @@ export default function SupsonaBuilderScreen() {
             key={id}
             label={OPTION_LABELS[id] ?? id}
             selected={supsona.faceShape === id}
-            onPress={() => setSupsona((s) => ({ ...s, faceShape: id as FaceShapeId }))}
+            onPress={() =>
+              setSupsona((s) => ({ ...s, faceShape: id as FaceShapeId }))
+            }
           />
         ))}
       </Section>
@@ -142,7 +144,9 @@ export default function SupsonaBuilderScreen() {
             key={id}
             label={OPTION_LABELS[id] ?? id}
             selected={supsona.hairStyle === id}
-            onPress={() => setSupsona((s) => ({ ...s, hairStyle: id as HairStyleId }))}
+            onPress={() =>
+              setSupsona((s) => ({ ...s, hairStyle: id as HairStyleId }))
+            }
           />
         ))}
       </Section>
@@ -154,7 +158,9 @@ export default function SupsonaBuilderScreen() {
             key={id}
             label={OPTION_LABELS[id] ?? id}
             selected={supsona.hairColour === id}
-            onPress={() => setSupsona((s) => ({ ...s, hairColour: id as HairColourId }))}
+            onPress={() =>
+              setSupsona((s) => ({ ...s, hairColour: id as HairColourId }))
+            }
           />
         ))}
       </Section>
@@ -166,7 +172,9 @@ export default function SupsonaBuilderScreen() {
             key={id}
             label={OPTION_LABELS[id] ?? id}
             selected={supsona.skinTone === id}
-            onPress={() => setSupsona((s) => ({ ...s, skinTone: id as SkinToneId }))}
+            onPress={() =>
+              setSupsona((s) => ({ ...s, skinTone: id as SkinToneId }))
+            }
           />
         ))}
       </Section>
@@ -178,7 +186,9 @@ export default function SupsonaBuilderScreen() {
             key={id}
             label={OPTION_LABELS[id] ?? id}
             selected={supsona.shirtColour === id}
-            onPress={() => setSupsona((s) => ({ ...s, shirtColour: id as ShirtColourId }))}
+            onPress={() =>
+              setSupsona((s) => ({ ...s, shirtColour: id as ShirtColourId }))
+            }
           />
         ))}
       </Section>
@@ -231,7 +241,9 @@ function OptionChip({
       style={[sectionStyles.chip, selected && sectionStyles.chipSelected]}
       onPress={onPress}
     >
-      <Text style={[sectionStyles.chipText, selected && sectionStyles.chipTextSelected]}>
+      <Text
+        style={[sectionStyles.chipText, selected && sectionStyles.chipTextSelected]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -240,7 +252,12 @@ function OptionChip({
 
 const sectionStyles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginBottom: 24 },
-  title: { fontSize: 16, fontWeight: "600", color: colours.textPrimary, marginBottom: 10 },
+  title: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colours.textPrimary,
+    marginBottom: 10,
+  },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingVertical: 10,

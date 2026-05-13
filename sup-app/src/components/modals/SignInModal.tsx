@@ -32,10 +32,7 @@ export default function SignInModal() {
 
     const success = login(email, password);
     if (!success) {
-      Alert.alert(
-        "Sign In Failed",
-        "Invalid credentials. Please try again."
-      );
+      Alert.alert("Sign In Failed", "Invalid credentials. Please try again.");
     }
   };
 

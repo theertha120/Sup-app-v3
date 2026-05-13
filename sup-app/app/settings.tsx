@@ -16,7 +16,7 @@ import {
   getSettingsSnapshot,
   updateSettings,
   type AppSettings,
-} from "../src/services/settingsService";
+} from "../src/services/user/settingsService";
 
 const REMINDER_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
