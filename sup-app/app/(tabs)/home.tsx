@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback , useMemo } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -13,7 +13,7 @@ import {
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
-import { useMemo } from "react";
+
 import {
   analyzeIMUStream,
   type IMUReading,
@@ -136,7 +136,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Welcome back!</Text>
-            <Text style={styles.subtitle}>We're here to support your posture today</Text>
+            <Text style={styles.subtitle}>We&apos;re here to support your posture today</Text>
           </View>
           <Pressable style={styles.settingsButton} onPress={handleSettingsPress}>
             <Text style={styles.gearIcon}>⚙</Text>
@@ -188,7 +188,7 @@ export default function HomeScreen() {
           <>
             <Text style={styles.statusValue}>Not yet measured</Text>
             <Text style={styles.statusHint}>
-              Wear your S'pots to begin tracking
+              Wear your S&apos;pots to begin tracking
             </Text>
           </>
         )}

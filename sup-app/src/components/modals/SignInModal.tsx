@@ -45,7 +45,7 @@ export default function SignInModal() {
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          <Text style={styles.title}>Welcome to S'Up</Text>
+          <Text style={styles.title}>Welcome to S&apos;Up</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
           <View style={styles.form}>

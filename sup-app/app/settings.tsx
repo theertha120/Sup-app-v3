@@ -66,7 +66,7 @@ export default function SettingsScreen() {
 
   const handleLogout = () => {
     logout();
-    router.replace("/");
+    router.replace("/home");
   };
   
   const getThemeLabel = () => {
@@ -217,7 +217,7 @@ export default function SettingsScreen() {
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Connected Device</Text>
-            <Text style={styles.settingDescription}>S'pots Sensor #1234</Text>
+            <Text style={styles.settingDescription}>S&apos;pots Sensor #1234</Text>
           </View>
           <Text style={styles.deviceStatus}>●</Text>
         </Pressable>

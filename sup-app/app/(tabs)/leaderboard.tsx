@@ -319,7 +319,7 @@ export default function LeaderboardScreen() {
           </View>
         )}
         <Text style={styles.rankSubtext}>
-          Keep going! You're doing great
+          Keep going! You&apos;re doing great
         </Text>
       </View>
 
@@ -363,7 +363,7 @@ export default function LeaderboardScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>⚡</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S'pots
+              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S&apos;pots
             </Text>
           </View>
           <View style={styles.infoRow}>

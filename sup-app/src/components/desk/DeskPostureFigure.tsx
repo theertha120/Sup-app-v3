@@ -144,7 +144,7 @@ function lerp(a: number, b: number, t: number) {
 
 function lerpJoints(a: Joints, b: Joints, t: number): Joints {
   const out = {} as Joints;
-  (Object.keys(a) as Array<keyof Joints>).forEach((k) => {
+  (Object.keys(a) as (keyof Joints)[]).forEach((k) => {
     out[k] = lerp(a[k], b[k], t);
   });
   return out;
