@@ -215,44 +215,57 @@ export default function SensorSetupScreen() {
 
   // ── Auto-connect to saved devices ──────────────────────────────────────────
   const autoConnect = useCallback(async () => {
-    if (!savedTop && !savedBottom) return;
-    setIsAutoConnecting(true);
+  if (!savedTop && !savedBottom) return;
+  setIsAutoConnecting(true);
 
-    const found: Record<string, Device> = {};
-    let resolved = false;
+  // Step 1: collect all matching devices during the scan window
+  const foundDevices: Record<string, Device> = {};
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        bleService.stopScan();
-        setIsAutoConnecting(false);
-        if (Object.keys(found).length === 0) {
-          Alert.alert("Not found", "Could not find your saved sensors. Make sure they are powered on.");
-        }
-      }
-    }, 12000);
+  await new Promise<void>((resolve) => {
+    const scanTimeout = setTimeout(() => {
+      bleService.stopScan();
+      resolve();
+    }, 8000);
 
-    bleService.scan(async (device) => {
+    bleService.scan((device) => {
       const isTop    = savedTop    && device.id === savedTop.id;
       const isBottom = savedBottom && device.id === savedBottom.id;
       if (!isTop && !isBottom) return;
 
-      found[device.id] = device;
-      const slot: SensorSlot = isTop ? "top" : "bottom";
-      await connect(device, slot);
+      foundDevices[device.id] = device;
 
-      // If we've found both, stop early
-      const needBoth   = savedTop && savedBottom;
-      const foundBoth  = savedTop && savedBottom &&
-                         found[savedTop.id] && found[savedBottom.id];
-      if (!needBoth || foundBoth) {
-        clearTimeout(timeout);
-        resolved = true;
+      // If we already found all we need, stop scan early
+      const gotTop    = !savedTop    || foundDevices[savedTop.id];
+      const gotBottom = !savedBottom || foundDevices[savedBottom.id];
+      if (gotTop && gotBottom) {
+        clearTimeout(scanTimeout);
         bleService.stopScan();
-        setIsAutoConnecting(false);
+        resolve();
       }
-    }, 12000);
-  }, [savedTop, savedBottom, connect]);
+    }, 8000);
+  });
+
+  // Step 2: connect to all found devices in parallel
+  const connectPromises: Promise<void>[] = [];
+
+  if (savedTop && foundDevices[savedTop.id]) {
+    connectPromises.push(connect(foundDevices[savedTop.id], "top"));
+  }
+  if (savedBottom && foundDevices[savedBottom.id]) {
+    connectPromises.push(connect(foundDevices[savedBottom.id], "bottom"));
+  }
+
+  if (connectPromises.length === 0) {
+    Alert.alert(
+      "Sensors not found",
+      "Make sure both sensors are powered on and nearby."
+    );
+  } else {
+    await Promise.all(connectPromises);
+  }
+
+  setIsAutoConnecting(false);
+}, [savedTop, savedBottom, connect]);
 
   // ── Manual connect flow ─────────────────────────────────────────────────────
   const handleScan = async (slot: SensorSlot) => {
