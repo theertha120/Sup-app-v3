@@ -1,28 +1,28 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/contexts/AuthContext";
+import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/SignInModal";
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        {/* Tabs live inside the stack */}
-        <Stack.Screen name="(tabs)" />
+      {/* IMUProvider wraps everything so sensor state persists
+          across all screens — sensors never disconnect on navigation */}
+      <IMUProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        >
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          <Stack.Screen name="supsona-builder" options={{ presentation: "modal", title: "Supsona" }} />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="sensor-setup" />
+        </Stack>
 
-        {/* Optional modal screen */}
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-        <Stack.Screen name="supsona-builder" options={{ presentation: "modal", title: "Supsona" }} />
-
-        {/* Settings screen */}
-        <Stack.Screen name="settings" />
-      </Stack>
-
-      {/* Sign-in modal that shows on app open */}
-      <SignInModal />
+        <SignInModal />
+      </IMUProvider>
     </AuthProvider>
   );
 }

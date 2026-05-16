@@ -33,12 +33,31 @@
     },
     "plugins": [
       "expo-router",
-      "react-native-ble-plx",
-      "expo-build-properties"
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.leipakshi.supapp",
+            "entitlements": {
+              "aps-environment": null
+            }
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     }
   }
+  
 }
+

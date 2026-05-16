@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
@@ -135,9 +136,17 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Welcome back!</Text>
             <Text style={styles.subtitle}>We're here to support your posture today</Text>
           </View>
-          <Pressable style={styles.settingsButton} onPress={handleSettingsPress}>
-            <Text style={styles.gearIcon}>⚙</Text>
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              style={styles.iconButton}
+              onPress={() => router.push("/sensor-setup")}
+            >
+              <Ionicons name="hardware-chip-outline" size={24} color="#666" />
+            </Pressable>
+            <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
+              <Text style={styles.gearIcon}>⚙</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* User Profile Card */}
@@ -293,6 +302,18 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: "#666",
     opacity: 0.8,
+  },
+
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   profileCard: {
