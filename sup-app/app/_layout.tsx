@@ -16,7 +16,15 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
 
           {/* Optional modal screens */}
-          <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
+          <Stack.Screen
+            name="(modals)/posture-tip"
+            options={{ presentation: "modal" }}
+          />
+
+          <Stack.Screen
+            name="(modals)/supsona-builder"
+            options={{ presentation: "modal" }}
+          />
 
           {/* Settings screen */}
           <Stack.Screen name="settings" />
