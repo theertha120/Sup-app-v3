@@ -17,6 +17,11 @@ import {
   updateSettings,
   type AppSettings,
 } from "../src/services/user/settingsService";
+import CoachingSetupModal from "../src/components/onboarding/CoachingSetupModal";
+import {
+  fetchCurrentBehaviorProfile,
+  type BehaviorProfile,
+} from "../src/services/user/behaviorProfileService";
 
 const REMINDER_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
@@ -42,6 +47,8 @@ export default function SettingsScreen() {
   const { logout } = useAuth();
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
+  const [showCoachingModal, setShowCoachingModal] = useState(false);
+  const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
@@ -200,6 +207,25 @@ export default function SettingsScreen() {
             thumbColor="white"
           />
         </View>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={async () => {
+            setShowCoachingModal(true);
+            try {
+              const profile = await fetchCurrentBehaviorProfile();
+              setInitialBehaviorProfile(profile);
+            } catch {
+              setInitialBehaviorProfile(null);
+            }
+          }}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Coaching preferences</Text>
+            <Text style={styles.settingDescription}>Edit reminders, goals and active hours</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
 
         <Pressable style={styles.settingItem} onPress={() => setShowUnitsModal(true)}>
           <View style={styles.settingInfo}>
@@ -468,6 +494,20 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Coaching setup modal (edit existing or create) */}
+      <CoachingSetupModal
+        visible={showCoachingModal}
+        initialProfile={initialBehaviorProfile}
+        onComplete={() => {
+          setShowCoachingModal(false);
+          showToast("Coaching preferences saved", "success");
+        }}
+        onSkip={() => {
+          setShowCoachingModal(false);
+          showToast("Using default coaching setup", "success");
+        }}
+      />
     </ScrollView>
   );
 }

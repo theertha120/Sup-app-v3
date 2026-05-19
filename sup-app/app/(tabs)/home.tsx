@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
 import { router } from "expo-router";
 import React, { useState, useEffect, useRef, useCallback , useMemo } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -14,6 +14,8 @@ import {
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
+import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
+import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 
 import {
   analyzeIMUStream,
@@ -39,6 +41,7 @@ function getEncouragingMessage(score: number): string {
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
+  const { isAuthenticated } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -51,9 +54,9 @@ export default function HomeScreen() {
     }, [fadeAnim])
   );
 
-  const { logout } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   const loadProfile = () => {
@@ -68,8 +71,25 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setCurrentUser(null);
+      setShowProfileModal(false);
+      setShowCoachingSetupModal(false);
+      setIsLoadingProfile(true);
+      return;
+    }
+
     loadProfile();
-  }, []);
+
+    fetchCurrentBehaviorProfile()
+      .then((profile) => {
+        setShowCoachingSetupModal(profile == null);
+      })
+      .catch((err) => {
+        console.error("[HomeScreen] Failed to check behavior profile", err);
+        setShowCoachingSetupModal(true);
+      });
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
@@ -81,9 +101,11 @@ export default function HomeScreen() {
   }, []);
   useFocusEffect(
     useCallback(() => {
+      if (!isAuthenticated) return;
+
       // Refetch when returning from e.g. Supsona Builder so avatar updates
       loadProfile();
-    }, [])
+    }, [isAuthenticated])
   );
 
   const handleProfilePress = () => {
@@ -100,16 +122,18 @@ export default function HomeScreen() {
     showToast("Profile glow-up saved", "success");
   };
 
-  const handleSettingsPress = () => {
-    router.push("/settings");
+  const handleCoachingSetupComplete = () => {
+    setShowCoachingSetupModal(false);
+    showToast("Coaching setup saved", "success");
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
+  const handleCoachingSetupSkip = () => {
+    setShowCoachingSetupModal(false);
+    showToast("Using default coaching setup", "success");
+  };
+
+  const handleSettingsPress = () => {
+    router.push("/settings");
   };
 
   // Calculate posture stability score from IMU stream (same logic as stats page)
@@ -121,7 +145,7 @@ export default function HomeScreen() {
       if (mockStream?.length > 0) {
         return analyzeIMUStream(mockStream, calibration ?? undefined);
       }
-    } catch (e) {
+    } catch {
       // No IMU data available
     }
     return null;
@@ -250,6 +274,12 @@ export default function HomeScreen() {
         onClose={handleCloseProfile}
         onSave={handleSaveProfile}
         loading={isLoadingProfile}
+      />
+
+      <CoachingSetupModal
+        visible={showCoachingSetupModal}
+        onComplete={handleCoachingSetupComplete}
+        onSkip={handleCoachingSetupSkip}
       />
     </ScrollView>
     </Animated.View>

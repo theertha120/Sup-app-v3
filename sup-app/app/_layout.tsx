@@ -8,8 +8,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ToastProvider>
-        {/* IMUProvider wraps everything so sensor state persists
-            across all screens */}
+        {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
           <Stack
             screenOptions={{
@@ -19,19 +18,15 @@ export default function RootLayout() {
             {/* Main tabs */}
             <Stack.Screen name="(tabs)" />
 
-            {/* Modal group */}
+            {/* Modal screens */}
             <Stack.Screen
-              name="(modals)"
+              name="(modals)/posture-tip"
               options={{ presentation: "modal" }}
             />
 
-            {/* Existing modal routes */}
             <Stack.Screen
-              name="supsona-builder"
-              options={{
-                presentation: "modal",
-                title: "Supsona",
-              }}
+              name="(modals)/supsona-builder"
+              options={{ presentation: "modal" }}
             />
 
             {/* Settings */}
