@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/contexts/AuthContext";
+import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 
@@ -7,31 +8,37 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-          }}
-        >
-          {/* Tabs live inside the stack */}
-          <Stack.Screen name="(tabs)" />
+        {/* IMUProvider wraps everything so sensor state persists across screens */}
+        <IMUProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          >
+            {/* Main tabs */}
+            <Stack.Screen name="(tabs)" />
 
-          {/* Optional modal screens */}
-          <Stack.Screen
-            name="(modals)/posture-tip"
-            options={{ presentation: "modal" }}
-          />
+            {/* Modal screens */}
+            <Stack.Screen
+              name="(modals)/posture-tip"
+              options={{ presentation: "modal" }}
+            />
 
-          <Stack.Screen
-            name="(modals)/supsona-builder"
-            options={{ presentation: "modal" }}
-          />
+            <Stack.Screen
+              name="(modals)/supsona-builder"
+              options={{ presentation: "modal" }}
+            />
 
-          {/* Settings screen */}
-          <Stack.Screen name="settings" />
-        </Stack>
+            {/* Settings */}
+            <Stack.Screen name="settings" />
 
-        {/* Sign-in modal that shows on app open */}
-        <SignInModal />
+            {/* Sensor setup */}
+            <Stack.Screen name="sensor-setup" />
+          </Stack>
+
+          {/* Global auth modal */}
+          <SignInModal />
+        </IMUProvider>
       </ToastProvider>
     </AuthProvider>
   );
