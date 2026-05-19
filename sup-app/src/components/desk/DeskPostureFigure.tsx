@@ -16,7 +16,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Animated, StyleSheet, Easing } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
-import { DeskPostureState, getScoreColor } from "../data/mockDeskPostureData";
+import { DeskPostureState, getScoreColor } from "./mockDeskPostureData";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ function lerp(a: number, b: number, t: number) {
 
 function lerpJoints(a: Joints, b: Joints, t: number): Joints {
   const out = {} as Joints;
-  (Object.keys(a) as Array<keyof Joints>).forEach((k) => {
+  (Object.keys(a) as (keyof Joints)[]).forEach((k) => {
     out[k] = lerp(a[k], b[k], t);
   });
   return out;

@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { parseIMUPacket, classifySpinePosture, ParsedIMU } from "../lib/imuParser";
-import { DeskPostureState } from "../data/mockDeskPostureData";
+import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

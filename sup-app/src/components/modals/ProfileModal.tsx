@@ -10,15 +10,15 @@ import {
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
-import { colours } from "../../theme/colours";
-import type { User } from "../../constants/env";
+import { colours } from "../../../theme/colours";
+import type { User } from "../../../constants/env";
 import {
   fetchUserProfile,
   updateUserProfile,
   userProfileToUser,
   type ProfileUpdateInput,
-} from "../services/profileService";
-import { UserSupsonaAvatar } from "./SupsonaAvatar";
+} from "../../services/user/profileService";
+import { UserSupsonaAvatar } from "../supsona/SupsonaAvatar";
 
 interface ProfileModalProps {
   visible: boolean;
@@ -104,7 +104,7 @@ export default function ProfileModal({
 
       // Update via profileService
       const updatedProfile = await updateUserProfile(profileData.id, updates);
-      
+
       if (!updatedProfile) {
         throw new Error("Update returned null");
       }
@@ -121,7 +121,9 @@ export default function ProfileModal({
       setEditedName("");
     } catch (err) {
       console.error("[ProfileModal] Save error", err);
-      setError(err instanceof Error ? err.message : "Failed to save changes. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Failed to save changes. Please try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -167,7 +169,11 @@ export default function ProfileModal({
             <View style={styles.avatarContainer}>
               <UserSupsonaAvatar
                 avatar={profileData?.avatar}
-                name={isEditing ? editedName || profileData?.name || "" : profileData?.name || ""}
+                name={
+                  isEditing
+                    ? editedName || profileData?.name || ""
+                    : profileData?.name || ""
+                }
                 size={80}
                 style={styles.avatarLarge}
                 textStyle={styles.avatarLargeText}
@@ -358,86 +364,54 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingTop: 0,
   },
   name: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#222",
+    fontSize: 22,
+    fontWeight: "700",
+    color: colours.textPrimary,
     textAlign: "center",
-    marginBottom: 8,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#666",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#F6F6FA",
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    color: "#222",
-  },
-  errorContainer: {
-    backgroundColor: "#FEE",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: "#C00",
-    fontSize: 14,
   },
   statsContainer: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
+    justifyContent: "center",
+    marginTop: 24,
+    gap: 16,
   },
   statBox: {
-    flex: 1,
-    backgroundColor: "#F6F6FA",
-    padding: 16,
-    borderRadius: 16,
     alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colours.card,
+    minWidth: 120,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "700",
     color: colours.primary,
-    marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: "#666",
-    textAlign: "center",
+    color: colours.textSecondary,
+    marginTop: 4,
   },
   actions: {
-    flexDirection: "row",
-    gap: 12,
     padding: 20,
     paddingTop: 0,
+    gap: 12,
   },
   button: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
   },
   buttonPrimary: {
     backgroundColor: colours.primary,
   },
   buttonSecondary: {
-    backgroundColor: "#F6F6FA",
+    backgroundColor: "#F0F0F0",
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.7,
   },
   buttonTextPrimary: {
     color: "white",
@@ -445,8 +419,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   buttonTextSecondary: {
-    color: "#666",
+    color: "#555",
     fontSize: 16,
     fontWeight: "600",
+  },
+  inputGroup: {
+    marginTop: 8,
+  },
+  label: {
+    fontSize: 13,
+    color: colours.textSecondary,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: colours.card,
+    borderWidth: 1,
+    borderColor: colours.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colours.textPrimary,
+  },
+  errorContainer: {
+    marginTop: 10,
+    backgroundColor: "#FDECEC",
+    borderRadius: 10,
+    padding: 10,
+  },
+  errorText: {
+    color: "#C00",
+    fontSize: 13,
+    textAlign: "center",
   },
 });

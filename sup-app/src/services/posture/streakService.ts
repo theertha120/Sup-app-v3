@@ -1,4 +1,4 @@
-import type { PostureData, User } from "../../constants/env";
+import type { PostureData, User } from "@/constants/env";
 
 export const GOOD_POSTURE_SCORE_THRESHOLD = 70;
 

@@ -11,15 +11,15 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 // import leaderboardData from "../../src/data/leaderboard.json";
-import { fetchLeaderboardByStreak } from "../../src/services/leaderboardService";
+import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
 import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
-import { hasGoodPosture, updateStreak } from "../../src/services/streakService";
-import ProfileModal from "../../src/components/ProfileModal";
+import { hasGoodPosture, updateStreak } from "../../src/services/posture/streakService";
+import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
   subscribeToProfileUpdates,
   userProfileToUser,
-} from "../../src/services/profileService";
+} from "../../src/services/user/profileService";
 import {
   acceptFriendRequest,
   ensureFriendDirectory,
@@ -29,8 +29,9 @@ import {
   getOutgoingPendingRequests,
   rejectFriendRequest,
   sendFriendRequestByUsername,
-} from "../../src/services/friendService";
-import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
+} from "../../src/services/social/friendService";
+import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
+import { useToast } from "../../src/contexts/ToastContext";
 
 // Animated number component for smooth transitions
 function AnimatedNumber({ value, style }: { value: number; style?: any }) {
@@ -79,95 +80,9 @@ function AnimatedNumber({ value, style }: { value: number; style?: any }) {
   return <Text style={style}>{displayValue}</Text>;
 }
 
-// Animated rank component showing transition from previous rank to current
-function AnimatedRank({ 
-  previousRank, 
-  currentRank, 
-  isCurrentUser,
-  rankChangeDir
-}: { 
-  previousRank?: number; 
-  currentRank: number;
-  isCurrentUser: boolean;
-  rankChangeDir: "up" | "down" | null;
-}) {
-  const slideAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank) {
-      slideAnim.setValue(0);
-      Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 450,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      slideAnim.setValue(1);
-    }
-  }, [currentRank, previousRank, rankChangeDir, isCurrentUser, slideAnim]);
-
-  return (
-    <View style={{ position: "relative", overflow: "hidden", height: 20 }}>
-      {isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank && (
-        <Animated.Text
-          style={[
-            styles.rank,
-            isCurrentUser && styles.currentUserText,
-            {
-              position: "absolute",
-              top: 0,
-              transform: [
-                {
-                  translateY: slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, -20],
-                  }),
-                },
-              ],
-              opacity: slideAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 0],
-              }),
-            },
-          ]}
-        >
-          #{previousRank}
-        </Animated.Text>
-      )}
-      <Animated.Text
-        style={[
-          styles.rank,
-          isCurrentUser && styles.currentUserText,
-          {
-            transform: [
-              {
-                translateY:
-                  isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank
-                    ? slideAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [20, 0],
-                      })
-                    : 0,
-              },
-            ],
-            opacity:
-              isCurrentUser && rankChangeDir && previousRank && previousRank !== currentRank
-                ? slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 1],
-                  })
-                : 1,
-          },
-        ]}
-      >
-        #{currentRank}
-      </Animated.Text>
-    </View>
-  );
-}
-
 export default function LeaderboardScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -186,65 +101,7 @@ export default function LeaderboardScreen() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [friendUsernameInput, setFriendUsernameInput] = useState("");
-  const [sendFeedback, setSendFeedback] = useState("");
-  const [incomingActionFeedback, setIncomingActionFeedback] = useState("");
   const [friendStateVersion, setFriendStateVersion] = useState(0);
-  const sendFeedbackOpacity = useRef(new Animated.Value(0)).current;
-  const incomingFeedbackOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!sendFeedback) {
-      sendFeedbackOpacity.setValue(0);
-      return;
-    }
-
-    sendFeedbackOpacity.setValue(1);
-    const animation = Animated.sequence([
-      Animated.delay(4500),
-      Animated.timing(sendFeedbackOpacity, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]);
-
-    animation.start(({ finished }) => {
-      if (finished) {
-        setSendFeedback("");
-      }
-    });
-
-    return () => {
-      animation.stop();
-    };
-  }, [sendFeedback, sendFeedbackOpacity]);
-
-  useEffect(() => {
-    if (!incomingActionFeedback) {
-      incomingFeedbackOpacity.setValue(0);
-      return;
-    }
-
-    incomingFeedbackOpacity.setValue(1);
-    const animation = Animated.sequence([
-      Animated.delay(4500),
-      Animated.timing(incomingFeedbackOpacity, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]);
-
-    animation.start(({ finished }) => {
-      if (finished) {
-        setIncomingActionFeedback("");
-      }
-    });
-
-    return () => {
-      animation.stop();
-    };
-  }, [incomingActionFeedback, incomingFeedbackOpacity]);
 
   // For prototype: using Feb 27, 2026 as "today"
   const MOCK_TODAY = new Date("2026-02-27");
@@ -283,10 +140,13 @@ export default function LeaderboardScreen() {
       getOutgoingPendingRequests(CURRENT_USER_ID).length > 0;
 
     if (!hasAnyRequests && currentUsername) {
-      const demoSender = users.find((user) => user.id !== CURRENT_USER_ID);
-      if (demoSender) {
-        sendFriendRequestByUsername(demoSender.id, currentUsername, users);
-      }
+      const demoSenders = users
+        .filter((user) => user.id !== CURRENT_USER_ID)
+        .slice(0, 2);
+
+      demoSenders.forEach((sender) => {
+        sendFriendRequestByUsername(sender.id, currentUsername, users);
+      });
     }
 
     setFriendStateVersion((prev) => prev + 1);
@@ -308,13 +168,6 @@ export default function LeaderboardScreen() {
     }
     return b.weeklyTotalPoints - a.weeklyTotalPoints;
   });
-
-  const getPreviousRankForMode = (user: User) => {
-    if (sortMode === "streak") {
-      return user.previousWeekStreakRank;
-    }
-    return user.previousWeekWeeklyRank;
-  };
 
   const [hasGoodPostureToday, setHasGoodPostureToday] = useState(false);
   const [currentUserWithStreak, setCurrentUserWithStreak] =
@@ -369,6 +222,7 @@ export default function LeaderboardScreen() {
       );
       setUsers(updatedUsers);
       setSelectedUser(updatedUser);
+      showToast("Profile glow-up saved", "success");
     }
   };
 
@@ -378,17 +232,13 @@ export default function LeaderboardScreen() {
 
   const handleAcceptRequest = (requestId: string) => {
     const result = acceptFriendRequest(requestId, CURRENT_USER_ID);
-    setIncomingActionFeedback(
-      result.ok ? "Friend request accepted." : result.message
-    );
+    showToast(result.ok ? "New bestie unlocked" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
   const handleRejectRequest = (requestId: string) => {
     const result = rejectFriendRequest(requestId, CURRENT_USER_ID);
-    setIncomingActionFeedback(
-      result.ok ? "Friend request rejected." : result.message
-    );
+    showToast(result.ok ? "Request declined" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
@@ -469,7 +319,7 @@ export default function LeaderboardScreen() {
           </View>
         )}
         <Text style={styles.rankSubtext}>
-          Keep going! You're doing great
+          Keep going! You&apos;re doing great
         </Text>
       </View>
 
@@ -513,7 +363,7 @@ export default function LeaderboardScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>⚡</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S'pots
+              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S&apos;pots
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -575,7 +425,6 @@ export default function LeaderboardScreen() {
           <LeaderboardRow
             key={user.id}
             rank={index + 1}
-            previousRank={getPreviousRankForMode(user)}
             user={user}
             isCurrentUser={user.id === CURRENT_USER_ID}
             onPress={() => handleUserPress(user)}
@@ -597,12 +446,6 @@ export default function LeaderboardScreen() {
             placeholderTextColor="#9A9A9A"
           />
         </View>
-
-        {sendFeedback ? (
-          <Animated.Text style={[styles.friendFeedback, { opacity: sendFeedbackOpacity }]}>
-            {sendFeedback}
-          </Animated.Text>
-        ) : null}
 
         {normalizedSearch.length > 0 && (
           <View style={styles.searchResultsContainer}>
@@ -630,7 +473,10 @@ export default function LeaderboardScreen() {
                             user.name,
                             users
                           );
-                          setSendFeedback(result.ok ? "Friend request sent." : result.message);
+                          showToast(
+                            result.ok ? "Request sent" : result.message,
+                            result.ok ? "success" : "error"
+                          );
                           if (result.ok) refreshFriendState();
                         }}
                       >
@@ -656,13 +502,6 @@ export default function LeaderboardScreen() {
         )}
 
         <Text style={styles.friendBlockTitle}>Incoming Requests</Text>
-        {incomingActionFeedback ? (
-          <Animated.Text
-            style={[styles.friendFeedback, { opacity: incomingFeedbackOpacity }]}
-          >
-            {incomingActionFeedback}
-          </Animated.Text>
-        ) : null}
         {incomingRequests.length === 0 ? (
           <Text style={styles.friendEmptyText}>No incoming requests.</Text>
         ) : (
@@ -752,73 +591,21 @@ export default function LeaderboardScreen() {
 
 interface LeaderboardRowProps {
   rank: number;
-  previousRank?: number;
   user: User;
   isCurrentUser: boolean;
   onPress: () => void;
 }
 
-function LeaderboardRow({ rank, previousRank, user, isCurrentUser, onPress }: LeaderboardRowProps) {
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  
-  // Rank change indicator (only for current user)
-  let rankChange = 0;
-  let rankChangeDir: "up" | "down" | null = null;
-  
-  if (isCurrentUser && previousRank) {
-    rankChange = previousRank - rank; // Positive = improved (move up)
-    if (rankChange > 0) rankChangeDir = "up";
-    if (rankChange < 0) rankChangeDir = "down";
-  }
-
-  // Animate badge in when it appears
-  useEffect(() => {
-    if (rankChangeDir) {
-      Animated.parallel([
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      scaleAnim.setValue(0.5);
-      opacityAnim.setValue(0);
-    }
-  }, [rankChangeDir]);
-
+function LeaderboardRow({ rank, user, isCurrentUser, onPress }: LeaderboardRowProps) {
   return (
     <Pressable 
       style={[styles.row, isCurrentUser && styles.currentUserRow]} 
       onPress={onPress}
     >
       <View style={styles.rankContainer}>
-        <AnimatedRank
-          previousRank={isCurrentUser ? previousRank : undefined}
-          currentRank={rank}
-          isCurrentUser={isCurrentUser}
-          rankChangeDir={rankChangeDir}
-        />
-        {isCurrentUser && rankChangeDir && (
-          <Animated.View style={[
-            styles.rankChangeIndicator,
-            rankChangeDir === "up" ? styles.rankChangeUp : styles.rankChangeDown,
-            {
-              transform: [{ scale: scaleAnim }],
-              opacity: opacityAnim,
-            }
-          ]}>
-            <Text style={[styles.rankChangeText, { color: rankChangeDir === "up" ? "#4CAF50" : "#F44336" }]}>
-              {`${rankChangeDir === "up" ? "↑" : "↓"}${Math.abs(rankChange)}`}
-            </Text>
-          </Animated.View>
-        )}
+        <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
+          #{rank}
+        </Text>
       </View>
       
       <View style={[styles.avatar, isCurrentUser && styles.currentUserAvatar]}>
@@ -1014,7 +801,7 @@ const styles = StyleSheet.create({
   rankContainer: {
     position: "relative",
     alignItems: "center",
-    width: 58,
+    width: 34,
   },
   rankChangeIndicator: {
     position: "absolute",

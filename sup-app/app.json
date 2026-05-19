@@ -7,10 +7,12 @@
     "scheme": "supapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.leipakshi.supapp"
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -18,21 +20,27 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
+
       "package": "com.anonymous.supapp"
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
+
       [
         "react-native-ble-plx",
         {
@@ -40,6 +48,7 @@
           "modes": ["central"]
         }
       ],
+
       [
         "expo-build-properties",
         {
@@ -51,13 +60,14 @@
             }
           }
         }
-      ]
+      ],
+
+      "expo-web-browser"
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     }
   }
-  
 }
-

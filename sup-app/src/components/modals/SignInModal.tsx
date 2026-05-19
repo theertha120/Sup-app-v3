@@ -32,10 +32,7 @@ export default function SignInModal() {
 
     const success = login(email, password);
     if (!success) {
-      Alert.alert(
-        "Sign In Failed",
-        "Invalid credentials. Please try again."
-      );
+      Alert.alert("Sign In Failed", "Invalid credentials. Please try again.");
     }
   };
 
@@ -48,7 +45,7 @@ export default function SignInModal() {
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          <Text style={styles.title}>Welcome to S'Up</Text>
+          <Text style={styles.title}>Welcome to S&apos;Up</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
           <View style={styles.form}>

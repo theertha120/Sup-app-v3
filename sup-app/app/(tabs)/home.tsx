@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback , useMemo } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -10,14 +10,15 @@ import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
-} from "../../src/services/profileService";
-import ProfileModal from "../../src/components/ProfileModal";
-import { UserSupsonaAvatar } from "../../src/components/SupsonaAvatar";
-import { useMemo } from "react";
+} from "../../src/services/user/profileService";
+import ProfileModal from "../../src/components/modals/ProfileModal";
+import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
+import { useToast } from "../../src/contexts/ToastContext";
+
 import {
   analyzeIMUStream,
   type IMUReading,
-} from "../../src/services/postureAnalysisService";
+} from "../../src/services/posture/postureAnalysisService";
 
 // Helper to derive status from stability score
 function getPostureStatus(score: number): string {
@@ -37,6 +38,7 @@ function getEncouragingMessage(score: number): string {
 
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +97,7 @@ export default function HomeScreen() {
   const handleSaveProfile = async (updatedUser: User) => {
     // Update local state with the updated user from profileService
     setCurrentUser(updatedUser);
+    showToast("Profile glow-up saved", "success");
   };
 
   const handleSettingsPress = () => {
@@ -134,7 +137,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Welcome back!</Text>
-            <Text style={styles.subtitle}>We're here to support your posture today</Text>
+            <Text style={styles.subtitle}>We&apos;re here to support your posture today</Text>
           </View>
           <View style={styles.headerButtons}>
             <Pressable
@@ -194,7 +197,7 @@ export default function HomeScreen() {
           <>
             <Text style={styles.statusValue}>Not yet measured</Text>
             <Text style={styles.statusHint}>
-              Wear your S'pots to begin tracking
+              Wear your S&apos;pots to begin tracking
             </Text>
           </>
         )}
@@ -209,7 +212,7 @@ export default function HomeScreen() {
 
         <Pressable
           style={styles.promptButton}
-          onPress={() => router.push("/modal")}
+          onPress={() => router.push("/posture-tip")}
         >
           <Text style={styles.promptButtonText}>View posture tip</Text>
         </Pressable>
