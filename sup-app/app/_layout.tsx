@@ -3,8 +3,12 @@ import { AuthProvider } from "@/src/contexts/AuthContext";
 import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
+import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 
 export default function RootLayout() {
+  // Initialize reminder notifications
+  useReminderNotifications();
+
   return (
     <AuthProvider>
       <ToastProvider>

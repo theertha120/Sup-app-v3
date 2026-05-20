@@ -23,25 +23,7 @@ import {
   type BehaviorProfile,
 } from "../src/services/user/behaviorProfileService";
 
-const REMINDER_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2);
-  const minute = index % 2 === 0 ? 0 : 30;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-});
 
-function formatReminderTime(value: string): string {
-  const [hoursRaw, minutesRaw] = value.split(":");
-  const hours = Number(hoursRaw);
-  const minutes = Number(minutesRaw);
-
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-    return value;
-  }
-
-  const period = hours >= 12 ? "PM" : "AM";
-  const twelveHour = hours % 12 === 0 ? 12 : hours % 12;
-  return `${twelveHour}:${String(minutes).padStart(2, "0")} ${period}`;
-}
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
@@ -53,7 +35,6 @@ export default function SettingsScreen() {
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
-  const [showReminderTimeModal, setShowReminderTimeModal] = useState(false);
 
   const updateSetting = <K extends keyof AppSettings>(
     key: K,
@@ -95,90 +76,6 @@ export default function SettingsScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.placeholder} />
-      </View>
-
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Push Notifications</Text>
-            <Text style={styles.settingDescription}>
-              Get notified about your progress
-            </Text>
-          </View>
-          <Switch
-            value={settings.notificationsEnabled}
-            onValueChange={(value) => updateSetting("notificationsEnabled", value)}
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Friend Request Notifications</Text>
-            <Text style={styles.settingDescription}>
-              Get notified when someone sends you a friend request
-            </Text>
-          </View>
-          <Switch
-            value={settings.friendRequestNotificationsEnabled}
-            onValueChange={(value) =>
-              updateSetting("friendRequestNotificationsEnabled", value)
-            }
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Posture Reminders</Text>
-            <Text style={styles.settingDescription}>
-              Gentle reminders to check your posture
-            </Text>
-          </View>
-          <Switch
-            value={settings.postureRemindersEnabled}
-            onValueChange={(value) =>
-              updateSetting("postureRemindersEnabled", value, {
-                toastMessage: value ? "Nudges on" : "Nudges off",
-              })
-            }
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <Pressable
-          style={styles.settingItem}
-          onPress={() => setShowReminderTimeModal(true)}
-        >
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Posture Reminder Time</Text>
-            <Text style={styles.settingDescription}>
-              Currently saved: {formatReminderTime(settings.postureReminderTime)}
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Daily Goal Alerts</Text>
-            <Text style={styles.settingDescription}>
-              Celebrate when you hit your goals
-            </Text>
-          </View>
-          <Switch
-            value={settings.dailyGoalsEnabled}
-            onValueChange={(value) => updateSetting("dailyGoalsEnabled", value)}
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
       </View>
 
       {/* Preferences Section */}
@@ -236,43 +133,10 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
-      {/* Device Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Device</Text>
-        
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Connected Device</Text>
-            <Text style={styles.settingDescription}>S&apos;pots Sensor #1234</Text>
-          </View>
-          <Text style={styles.deviceStatus}>●</Text>
-        </Pressable>
-
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Calibration</Text>
-            <Text style={styles.settingDescription}>
-              Recalibrate your sensor
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-      </View>
-
       {/* Data & Privacy Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
         
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Export Data</Text>
-            <Text style={styles.settingDescription}>
-              Download your posture data
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
@@ -436,58 +300,6 @@ export default function SettingsScreen() {
             <Pressable
               style={styles.modalCancel}
               onPress={() => setShowUnitsModal(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Reminder Time Selection Modal */}
-      <Modal
-        visible={showReminderTimeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowReminderTimeModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowReminderTimeModal(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Posture Reminder Time</Text>
-
-            <ScrollView style={styles.timeList} showsVerticalScrollIndicator={false}>
-              {REMINDER_TIME_OPTIONS.map((timeValue) => {
-                const selected = settings.postureReminderTime === timeValue;
-                return (
-                  <Pressable
-                    key={timeValue}
-                    style={[styles.modalOption, selected && styles.modalOptionSelected]}
-                    onPress={() => {
-                      updateSetting("postureReminderTime", timeValue, {
-                        toastMessage: "Reminder saved",
-                      });
-                      setShowReminderTimeModal(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.modalOptionText,
-                        selected && styles.modalOptionTextSelected,
-                      ]}
-                    >
-                      {formatReminderTime(timeValue)}
-                    </Text>
-                    {selected ? <Text style={styles.checkmark}>✓</Text> : null}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Pressable
-              style={styles.modalCancel}
-              onPress={() => setShowReminderTimeModal(false)}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
@@ -671,8 +483,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontWeight: "600",
-  },
-  timeList: {
-    maxHeight: 300,
   },
 });
