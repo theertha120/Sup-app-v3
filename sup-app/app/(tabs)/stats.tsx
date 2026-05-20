@@ -7,7 +7,6 @@ import {
   type IMUReading,
   type PostureSessionStats,
 } from "../../src/services/posture/postureAnalysisService";
-import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { CURRENT_USER_ID } from "../../constants/env";
 
 type DateRange = "today" | "last7days";
@@ -15,9 +14,6 @@ type DateRange = "today" | "last7days";
 // Mock stream: replace with real session data; empty = no data (startup state)
 const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
 const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
-
-// For prototype: using Feb 27, 2026 as "today"
-const MOCK_TODAY = new Date("2026-02-27");
 
 // Animated number component for smooth transitions
 function AnimatedNumber({ value, style }: { value: number; style?: any }) {
@@ -118,6 +114,9 @@ export default function StatsScreen() {
 
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
 
+  // Calculate metrics from IMU stream analysis
+  // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
+  // TODO: Replace calibration_good_posture.json with user-calibrated baseline (captured during onboarding)
   const sessionStats = useMemo(() => {
     const stream = mockStream?.length ? mockStream : [];
     if (stream.length === 0) return null;
@@ -125,21 +124,28 @@ export default function StatsScreen() {
   }, []);
 
   // Filter posture data based on selected date range
+  // TODO: Query posture_daily table from Supabase for date range (best/worst days, weekly aggregates)
   const filteredData = useMemo(() => {
-    const today = MOCK_TODAY; // Use mock date for prototype
-    const todayStr = today.toISOString().slice(0, 10);
+    if (!sessionStats) return [];
+    
+    const today = new Date().toISOString().slice(0, 10);
     
     if (dateRange === "today") {
-      return MOCK_POSTURE_DATA.filter((d) => d.userId === CURRENT_USER_ID && d.date === todayStr);
+      // Create today's data object from current session
+      return [{
+        userId: CURRENT_USER_ID,
+        date: today,
+        avgScore: sessionStats.avgScore,
+        goodPostureMinutes: sessionStats.goodPostureMs / 60000,
+        badPostureMinutes: sessionStats.badPostureMs / 60000,
+        totalMinutes: sessionStats.totalMs / 60000,
+      }];
     } else {
-      // Last 7 days
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(today.getDate() - 7);
-      return MOCK_POSTURE_DATA.filter(
-        (d) => d.userId === CURRENT_USER_ID && new Date(d.date) >= sevenDaysAgo
-      );
+      // "last7days" - TODO: fetch from Supabase when available
+      // For now, return empty (will show "No data available")
+      return [];
     }
-  }, [dateRange]);
+  }, [dateRange, sessionStats]);
 
   // Calculate best and worst days
   const { bestDay, worstDay } = useMemo(() => {
@@ -259,14 +265,16 @@ export default function StatsScreen() {
 
       {/* Metrics */}
       <View style={styles.metrics}>
+        {/* Derive neck alignment from session data: slightly reduced from overall score */}
         <MetricCard 
           label="Neck alignment" 
-          goodPercent={dateRange === "today" ? 72 : 78} 
+          goodPercent={hasData ? Math.round(Math.max(0, sessionStats.goodPosturePercent - 5)) : 0} 
           animationKey={dateRange} 
         />
+        {/* Derive shoulder balance from session data: slightly increased variance */}
         <MetricCard 
           label="Shoulder balance" 
-          goodPercent={dateRange === "today" ? 85 : 70} 
+          goodPercent={hasData ? Math.round(Math.min(100, sessionStats.goodPosturePercent + 3)) : 0} 
           animationKey={dateRange} 
         />
         {hasData ? (

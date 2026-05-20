@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "@/constants/env";
 import { CURRENT_USER_ID } from "@/constants/env";
-import { MOCK_USERS } from "@/src/data/mockUsers";
 
 const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
 
@@ -134,17 +133,7 @@ export function consumeLastProfileSaveMode(): ProfileSaveMode {
 }
 
 function getMockUserById(userId: string): User | undefined {
-  const baseUser = MOCK_USERS.find((u) => u.id === userId);
-  if (!baseUser) return undefined;
-
-  const override = localProfileOverrides.get(userId);
-  if (!override) return baseUser;
-
-  return {
-    ...baseUser,
-    name: override.name,
-    avatar: override.avatar,
-  };
+  return undefined;
 }
 
 function applyLocalProfileOverride(userId: string, updates: ProfileUpdateInput): void {
@@ -581,35 +570,30 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       .single();
 
     if (error) {
-      // If profile doesn't exist, fall through to mock
-      if (error.code !== "PGRST116") {
-        console.warn(
-          "[profile] Failed to fetch user profile, falling back to mock data",
-          error
-        );
-      }
-    } else if (data) {
-      const profile = mapRowToUserProfile(data as ProfileRow);
-      if (userId === CURRENT_USER_ID) {
-        const local = await getLocalSupsona(userId);
-        if (local != null) profile.avatar = local;
-      }
-      return profile;
+      console.error(
+        "[profile] Failed to fetch user profile:",
+        error
+      );
+      return null;
     }
+
+    if (!data) {
+      return null;
+    }
+
+    const profile = mapRowToUserProfile(data as ProfileRow);
+    if (userId === CURRENT_USER_ID) {
+      const local = await getLocalSupsona(userId);
+      if (local != null) profile.avatar = local;
+    }
+    return profile;
   } catch (err) {
-    console.warn(
-      "[profile] Supabase user profile fetch threw, falling back to mock data",
+    console.error(
+      "[profile] Exception while fetching user profile:",
       err
     );
+    return null;
   }
-
-  const mock = MOCK_USERS.find((u) => u.id === userId);
-  const profile = mock ? userToUserProfile(mock) : null;
-  if (profile && userId === CURRENT_USER_ID) {
-    const local = await getLocalSupsona(userId);
-    if (local != null) profile.avatar = local;
-  }
-  return profile;
 }
 
 /**
