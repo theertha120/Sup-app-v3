@@ -7,7 +7,7 @@ const PRESETS: { id: ActiveTimePreset; label: string }[] = [
   { id: "afternoon", label: "afternoon" },
   { id: "evening", label: "evening" },
   { id: "late_night", label: "late night" },
-  { id: "custom_time_range", label: "custom time range" },
+  
 ];
 
 export default function ActiveHoursStep({
@@ -39,34 +39,7 @@ export default function ActiveHoursStep({
         ))}
       </View>
 
-      {preset === "custom_time_range" ? (
-        <View style={styles.customRange}>
-          <View style={styles.timeField}>
-            <Text style={styles.timeLabel}>Start time</Text>
-            <TextInput
-              style={styles.input}
-              value={activeTimeStart}
-              onChangeText={onStartTimeChange}
-              placeholder="09:00"
-              placeholderTextColor="#8D8D8D"
-              keyboardType="numbers-and-punctuation"
-              maxLength={5}
-            />
-          </View>
-          <View style={styles.timeField}>
-            <Text style={styles.timeLabel}>End time</Text>
-            <TextInput
-              style={styles.input}
-              value={activeTimeEnd}
-              onChangeText={onEndTimeChange}
-              placeholder="17:00"
-              placeholderTextColor="#8D8D8D"
-              keyboardType="numbers-and-punctuation"
-              maxLength={5}
-            />
-          </View>
-        </View>
-      ) : null}
+      {/* custom time range removed — only presets shown */}
     </View>
   );
 }

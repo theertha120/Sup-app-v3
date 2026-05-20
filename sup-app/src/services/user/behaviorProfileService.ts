@@ -15,22 +15,18 @@ export type ReminderTone =
   | "funny"
   | "coach_like";
 
-export type ReminderFrequency = "light" | "medium" | "active" | "custom";
+export type ReminderFrequency = "light" | "medium" | "active";
 
 export type WeeklyGoalId =
   | "3_resets_per_day"
   | "reduce_slouching_sessions"
-  | "awareness_only"
-  | "custom";
-
-export type NotificationSensitivity = "low" | "normal" | "high";
+  | "awareness_only";
 
 export type ActiveTimePreset =
   | "morning"
   | "afternoon"
   | "evening"
-  | "late_night"
-  | "custom_time_range";
+  | "late_night";
 
 export interface BehaviorProfile {
   primaryGoal: BehaviorGoalId;
@@ -39,8 +35,6 @@ export interface BehaviorProfile {
   activeTimeStart: string;
   activeTimeEnd: string;
   weeklyGoal: WeeklyGoalId;
-  weeklyGoalCustomText?: string;
-  notificationSensitivity: NotificationSensitivity;
 }
 
 export interface BehaviorProfileInput {
@@ -50,7 +44,6 @@ export interface BehaviorProfileInput {
   activeTimeStart: string;
   activeTimeEnd: string;
   weeklyGoal: WeeklyGoalId;
-  weeklyGoalCustomText?: string;
 }
 
 type BehaviorProfileRow = {
@@ -60,8 +53,6 @@ type BehaviorProfileRow = {
   active_time_start: string | null;
   active_time_end: string | null;
   weekly_goal: WeeklyGoalId | null;
-  weekly_goal_custom?: string | null;
-  notification_sensitivity: NotificationSensitivity | null;
 };
 
 // Persistence now uses Supabase table `user_profile`.
@@ -73,11 +64,10 @@ export const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
   activeTimeStart: "09:00",
   activeTimeEnd: "17:00",
   weeklyGoal: "awareness_only",
-  notificationSensitivity: "normal",
 };
 
 const PRESET_RANGES: Record<
-  Exclude<ActiveTimePreset, "custom_time_range">,
+  ActiveTimePreset,
   { start: string; end: string }
 > = {
   morning: { start: "07:00", end: "11:59" },
@@ -85,16 +75,6 @@ const PRESET_RANGES: Record<
   evening: { start: "17:00", end: "20:59" },
   late_night: { start: "21:00", end: "01:00" },
 };
-
-function getNotificationSensitivity(
-  frequency: ReminderFrequency
-): NotificationSensitivity {
-  if (frequency === "light") return "low";
-  if (frequency === "active") return "high";
-  return "normal";
-}
-
-// storage helper removed
 
 async function getCurrentUserId(): Promise<string> {
   try {
@@ -120,8 +100,7 @@ function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | nul
     !row.reminder_frequency ||
     !row.active_time_start ||
     !row.active_time_end ||
-    !row.weekly_goal ||
-    !row.notification_sensitivity
+    !row.weekly_goal 
   ) {
     return null;
   }
@@ -133,22 +112,17 @@ function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | nul
     activeTimeStart: row.active_time_start,
     activeTimeEnd: row.active_time_end,
     weeklyGoal: row.weekly_goal,
-    weeklyGoalCustomText: row.weekly_goal_custom ?? undefined,
-    notificationSensitivity: row.notification_sensitivity,
   };
 }
 
 function toProfileInput(profile: BehaviorProfileInput): BehaviorProfile {
   return {
     ...profile,
-    notificationSensitivity: getNotificationSensitivity(profile.reminderFrequency),
   };
 }
 
-// Local AsyncStorage fallback removed — writes/reads go to Supabase `user_profile`.
-
 export function getPresetBehaviorHours(
-  preset: Exclude<ActiveTimePreset, "custom_time_range">
+  preset: ActiveTimePreset
 ): { start: string; end: string } {
   return PRESET_RANGES[preset];
 }
@@ -172,7 +146,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     const { data, error } = await supabase
       .from("user_profile")
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal, weekly_goal_custom, notification_sensitivity"
+        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -200,18 +174,13 @@ export async function saveCurrentBehaviorProfile(
   const userId = await getCurrentUserId();
   const profile = toProfileInput(profileInput);
 
-  const payload = {
+    const payload = {
     primary_goal: profile.primaryGoal,
     preferred_tone: profile.preferredTone,
     reminder_frequency: profile.reminderFrequency,
     active_time_start: profile.activeTimeStart,
     active_time_end: profile.activeTimeEnd,
     weekly_goal: profile.weeklyGoal,
-    weekly_goal_custom:
-      profile.weeklyGoal === "custom"
-        ? profile.weeklyGoalCustomText?.trim() || null
-        : null,
-    notification_sensitivity: profile.notificationSensitivity,
   };
 
   // Upsert into `user_profile` table. Throw on error so callers know if save failed.
@@ -222,7 +191,7 @@ export async function saveCurrentBehaviorProfile(
       .from("user_profile")
       .upsert(payloadWithAuthId, { onConflict: "id" })
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal, weekly_goal_custom, notification_sensitivity"
+        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
       )
       .maybeSingle();
 

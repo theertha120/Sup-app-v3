@@ -49,7 +49,7 @@ export default function CoachingSetupModal({
   const initial = initialProfile ?? null;
 
   const inferPreset = (start: string, end: string): ActiveTimePreset => {
-    const candidates: Exclude<ActiveTimePreset, "custom_time_range">[] = [
+    const candidates: ActiveTimePreset[] = [
       "morning",
       "afternoon",
       "evening",
@@ -59,7 +59,7 @@ export default function CoachingSetupModal({
       const r = getPresetBehaviorHours(p);
       if (r.start === start && r.end === end) return p;
     }
-    return "custom_time_range";
+    return "afternoon";
   };
 
   const [primaryGoal, setPrimaryGoal] = useState<BehaviorGoalId>(
@@ -83,9 +83,6 @@ export default function CoachingSetupModal({
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoalId>(
     initial ? initial.weeklyGoal : defaults.weeklyGoal
   );
-  const [customWeeklyGoal, setCustomWeeklyGoal] = useState(
-    initial ? initial.weeklyGoalCustomText ?? "" : ""
-  );
 
   if (!visible) return null;
 
@@ -94,28 +91,18 @@ export default function CoachingSetupModal({
 
   const applyPreset = (nextPreset: ActiveTimePreset) => {
     setPreset(nextPreset);
-    if (nextPreset !== "custom_time_range") {
-      const range = getPresetBehaviorHours(nextPreset);
-      setActiveTimeStart(range.start);
-      setActiveTimeEnd(range.end);
-    }
+    const range = getPresetBehaviorHours(nextPreset);
+    setActiveTimeStart(range.start);
+    setActiveTimeEnd(range.end);
   };
 
   const buildProfileInput = (): BehaviorProfileInput => ({
     primaryGoal,
     preferredTone,
     reminderFrequency,
-    activeTimeStart:
-      preset === "custom_time_range"
-        ? activeTimeStart
-        : getPresetBehaviorHours(preset).start,
-    activeTimeEnd:
-      preset === "custom_time_range"
-        ? activeTimeEnd
-        : getPresetBehaviorHours(preset).end,
-    weeklyGoal: weeklyGoal === "custom" && customWeeklyGoal.trim().length > 0 ? "custom" : weeklyGoal,
-    weeklyGoalCustomText:
-      weeklyGoal === "custom" ? customWeeklyGoal.trim() : undefined,
+    activeTimeStart: getPresetBehaviorHours(preset).start,
+    activeTimeEnd: getPresetBehaviorHours(preset).end,
+    weeklyGoal,
   });
 
   const handleNext = async () => {
@@ -130,11 +117,6 @@ export default function CoachingSetupModal({
 
     if (!isValidTime(profile.activeTimeStart) || !isValidTime(profile.activeTimeEnd)) {
       setError("Use 24-hour time like 09:00 and 17:00.");
-      return;
-    }
-
-    if (profile.weeklyGoal === "custom" && customWeeklyGoal.trim().length === 0) {
-      setError("Add a custom weekly goal or choose a preset.");
       return;
     }
 
@@ -199,9 +181,7 @@ export default function CoachingSetupModal({
             {step === 3 ? (
               <WeeklyGoalStep
                 value={weeklyGoal}
-                customValue={customWeeklyGoal}
                 onChange={setWeeklyGoal}
-                onCustomValueChange={setCustomWeeklyGoal}
               />
             ) : null}
 

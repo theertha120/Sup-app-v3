@@ -6,19 +6,14 @@ const GOALS: { id: WeeklyGoalId; label: string }[] = [
   { id: "3_resets_per_day", label: "complete 3 posture resets/day" },
   { id: "reduce_slouching_sessions", label: "reduce slouching sessions" },
   { id: "awareness_only", label: "build awareness only" },
-  { id: "custom", label: "custom" },
 ];
 
 export default function WeeklyGoalStep({
   value,
-  customValue,
   onChange,
-  onCustomValueChange,
 }: {
   value: WeeklyGoalId;
-  customValue: string;
   onChange: (value: WeeklyGoalId) => void;
-  onCustomValueChange: (value: string) => void;
 }) {
   return (
     <View style={styles.step}>
@@ -34,18 +29,7 @@ export default function WeeklyGoalStep({
         ))}
       </View>
 
-      {value === "custom" ? (
-        <View style={styles.customField}>
-          <Text style={styles.customLabel}>Custom weekly goal</Text>
-          <TextInput
-            style={styles.input}
-            value={customValue}
-            onChangeText={onCustomValueChange}
-            placeholder="e.g. stay consistent during exam week"
-            placeholderTextColor="#8D8D8D"
-          />
-        </View>
-      ) : null}
+      {/* custom weekly goal removed */}
     </View>
   );
 }

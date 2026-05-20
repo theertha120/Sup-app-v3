@@ -14,7 +14,7 @@ const FREQUENCIES: { id: ReminderFrequency; label: string }[] = [
   { id: "light", label: "light" },
   { id: "medium", label: "medium" },
   { id: "active", label: "active" },
-  { id: "custom", label: "custom" },
+  
 ];
 
 export default function ReminderPreferencesStep({
