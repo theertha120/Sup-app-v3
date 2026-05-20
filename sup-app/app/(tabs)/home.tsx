@@ -137,6 +137,8 @@ export default function HomeScreen() {
   };
 
   // Calculate posture stability score from IMU stream (same logic as stats page)
+  // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
+  // TODO: Replace calibration_good_posture.json with user-calibrated baseline (captured during onboarding)
   const postureStats = useMemo(() => {
     try {
       const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];

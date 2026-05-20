@@ -10,10 +10,8 @@ import {
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
-// import leaderboardData from "../../src/data/leaderboard.json";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import { CURRENT_USER_ID, type User } from "../../constants/env";
-import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
 import { hasGoodPosture, updateStreak } from "../../src/services/posture/streakService";
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
@@ -103,9 +101,6 @@ export default function LeaderboardScreen() {
   const [friendUsernameInput, setFriendUsernameInput] = useState("");
   const [friendStateVersion, setFriendStateVersion] = useState(0);
 
-  // For prototype: using Feb 27, 2026 as "today"
-  const MOCK_TODAY = new Date("2026-02-27");
-
   const loadLeaderboard = useCallback(() => {
     fetchLeaderboardByStreak()
       .then(setUsers)
@@ -180,22 +175,10 @@ export default function LeaderboardScreen() {
       return;
     }
 
-    const todayIso = MOCK_TODAY.toISOString().slice(0, 10); // Use mock date for prototype
-    const todayData = MOCK_POSTURE_DATA.find((data) => {
-      return data.userId === CURRENT_USER_ID && data.date === todayIso;
-    });
-
-    if (!todayData) {
-      setCurrentUserWithStreak(baseUser);
-      setHasGoodPostureToday(false);
-      return;
-    }
-
-    const goodToday = hasGoodPosture(todayData);
-    setHasGoodPostureToday(goodToday);
-
-    // For prototype: Don't recalculate streak, use data from leaderboard.json
+    // TODO: Query posture_daily table from Supabase for today's posture data
+    // For now, just use the user from leaderboard
     setCurrentUserWithStreak(baseUser);
+    setHasGoodPostureToday(false);
   }, [users]);
 
   const currentUser = currentUserWithStreak ??
