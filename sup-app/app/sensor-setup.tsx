@@ -27,11 +27,9 @@ import { colours } from "../theme/colours";
 import { useIMUContext } from "../src/contexts/IMUContext";
 import { bleService, SensorSlot } from "../src/services/BLEService";
 import { Device } from "react-native-ble-plx";
-import { CURRENT_USER_ID } from "../constants/env";
+import { useAuth } from "../src/contexts/AuthContext";
 
-// ── AsyncStorage keys ─────────────────────────────────────────────────────────
-const KEY_TOP_DEVICE    = `spot_device_top_${CURRENT_USER_ID}`;
-const KEY_BOTTOM_DEVICE = `spot_device_bottom_${CURRENT_USER_ID}`;
+// AsyncStorage keys are now per-authenticated-user; computed at runtime.
 
 interface SavedDevice {
   id: string;
@@ -154,13 +152,18 @@ export default function SensorSetupScreen() {
   const [savedBottom, setSavedBottom] = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
 
-  // ── Load saved device IDs on mount ─────────────────────────────────────────
+  const { userId } = useAuth();
+
+  // ── Load saved device IDs when authenticated user available ───────────────
   useEffect(() => {
+    if (!userId) return;
     const load = async () => {
       try {
+        const topKey = `spot_device_top_${userId}`;
+        const bottomKey = `spot_device_bottom_${userId}`;
         const [topRaw, bottomRaw] = await Promise.all([
-          AsyncStorage.getItem(KEY_TOP_DEVICE),
-          AsyncStorage.getItem(KEY_BOTTOM_DEVICE),
+          AsyncStorage.getItem(topKey),
+          AsyncStorage.getItem(bottomKey),
         ]);
         if (topRaw)    setSavedTop(JSON.parse(topRaw));
         if (bottomRaw) setSavedBottom(JSON.parse(bottomRaw));
@@ -169,7 +172,7 @@ export default function SensorSetupScreen() {
       }
     };
     load();
-  }, []);
+  }, [userId]);
 
   // Auto-close calibration modal after done
   useEffect(() => {
@@ -182,7 +185,8 @@ export default function SensorSetupScreen() {
   const saveDevice = async (slot: SensorSlot, device: Device) => {
     const saved: SavedDevice = { id: device.id, name: device.name ?? device.id };
     try {
-      const key = slot === "top" ? KEY_TOP_DEVICE : KEY_BOTTOM_DEVICE;
+      if (!userId) throw new Error("Not authenticated");
+      const key = slot === "top" ? `spot_device_top_${userId}` : `spot_device_bottom_${userId}`;
       await AsyncStorage.setItem(key, JSON.stringify(saved));
       if (slot === "top")    setSavedTop(saved);
       else                   setSavedBottom(saved);
@@ -201,12 +205,17 @@ export default function SensorSetupScreen() {
         {
           text: "Forget",
           style: "destructive",
-          onPress: async () => {
-            const key = slot === "top" ? KEY_TOP_DEVICE : KEY_BOTTOM_DEVICE;
-            await AsyncStorage.removeItem(key);
-            if (slot === "top") setSavedTop(null);
-            else setSavedBottom(null);
-            await disconnect(slot);
+            onPress: async () => {
+            try {
+              if (!userId) throw new Error("Not authenticated");
+              const key = slot === "top" ? `spot_device_top_${userId}` : `spot_device_bottom_${userId}`;
+              await AsyncStorage.removeItem(key);
+              if (slot === "top") setSavedTop(null);
+              else setSavedBottom(null);
+              await disconnect(slot);
+            } catch (e) {
+              console.warn("[Setup] Failed to forget device", e);
+            }
           },
         },
       ]

@@ -2,12 +2,13 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
+import { useAuth } from "../../src/contexts/AuthContext";
 import {
   analyzeIMUStream,
   type IMUReading,
   type PostureSessionStats,
 } from "../../src/services/posture/postureAnalysisService";
-import { CURRENT_USER_ID } from "../../constants/env";
+
 
 type DateRange = "today" | "last7days";
 
@@ -113,6 +114,7 @@ export default function StatsScreen() {
   );
 
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
+  const { userId } = useAuth();
 
   // Calculate metrics from IMU stream analysis
   // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
@@ -132,8 +134,8 @@ export default function StatsScreen() {
     
     if (dateRange === "today") {
       // Create today's data object from current session
-      return [{
-        userId: CURRENT_USER_ID,
+        return [{
+        userId: userId ?? "",
         date: today,
         avgScore: sessionStats.avgScore,
         goodPostureMinutes: sessionStats.goodPostureMs / 60000,
