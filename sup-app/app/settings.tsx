@@ -97,89 +97,7 @@ export default function SettingsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Push Notifications</Text>
-            <Text style={styles.settingDescription}>
-              Get notified about your progress
-            </Text>
-          </View>
-          <Switch
-            value={settings.notificationsEnabled}
-            onValueChange={(value) => updateSetting("notificationsEnabled", value)}
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Friend Request Notifications</Text>
-            <Text style={styles.settingDescription}>
-              Get notified when someone sends you a friend request
-            </Text>
-          </View>
-          <Switch
-            value={settings.friendRequestNotificationsEnabled}
-            onValueChange={(value) =>
-              updateSetting("friendRequestNotificationsEnabled", value)
-            }
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Posture Reminders</Text>
-            <Text style={styles.settingDescription}>
-              Gentle reminders to check your posture
-            </Text>
-          </View>
-          <Switch
-            value={settings.postureRemindersEnabled}
-            onValueChange={(value) =>
-              updateSetting("postureRemindersEnabled", value, {
-                toastMessage: value ? "Nudges on" : "Nudges off",
-              })
-            }
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-
-        <Pressable
-          style={styles.settingItem}
-          onPress={() => setShowReminderTimeModal(true)}
-        >
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Posture Reminder Time</Text>
-            <Text style={styles.settingDescription}>
-              Currently saved: {formatReminderTime(settings.postureReminderTime)}
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Daily Goal Alerts</Text>
-            <Text style={styles.settingDescription}>
-              Celebrate when you hit your goals
-            </Text>
-          </View>
-          <Switch
-            value={settings.dailyGoalsEnabled}
-            onValueChange={(value) => updateSetting("dailyGoalsEnabled", value)}
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
-      </View>
+      {/* Notifications removed — handled by reminder engine and local notifications only */}
 
       {/* Preferences Section */}
       <View style={styles.section}>
@@ -236,42 +154,12 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
-      {/* Device Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Device</Text>
-        
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Connected Device</Text>
-            <Text style={styles.settingDescription}>S&apos;pots Sensor #1234</Text>
-          </View>
-          <Text style={styles.deviceStatus}>●</Text>
-        </Pressable>
-
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Calibration</Text>
-            <Text style={styles.settingDescription}>
-              Recalibrate your sensor
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-      </View>
+      {/* Device section removed — device management moved to Sensor Setup screen */}
 
       {/* Data & Privacy Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
-        
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Export Data</Text>
-            <Text style={styles.settingDescription}>
-              Download your posture data
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
+        {/* Export Data removed — data export not supported in this build */}
 
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>

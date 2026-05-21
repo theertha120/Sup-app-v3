@@ -5,7 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { CURRENT_USER_ID, type User } from "../../constants/env";
+import { type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
@@ -41,7 +41,7 @@ function getEncouragingMessage(score: number): string {
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userId } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -93,7 +93,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
-      if (updatedProfile.id !== CURRENT_USER_ID) return;
+      if (!userId) return;
+      if (updatedProfile.id !== userId) return;
       setCurrentUser(userProfileToUser(updatedProfile));
     });
 

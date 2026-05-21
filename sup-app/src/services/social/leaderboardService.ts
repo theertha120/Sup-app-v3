@@ -1,6 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "@/constants/env";
-import { CURRENT_USER_ID } from "@/constants/env";
 import { getLocalSupsona } from "../user/profileService";
 
 type ProfileRow = {
@@ -39,9 +38,19 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
       weeklyTotalPoints: row.weekly_total_points,
     }));
 
-    const local = await getLocalSupsona(CURRENT_USER_ID);
-    const testUser = users.find((u) => u.id === CURRENT_USER_ID);
-    if (testUser && local != null) testUser.avatar = local;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const currentId = user?.id ?? null;
+      if (currentId) {
+        const local = await getLocalSupsona(currentId);
+        const testUser = users.find((u) => u.id === currentId);
+        if (testUser && local != null) testUser.avatar = local;
+      }
+    } catch {
+      // ignore — no authenticated user
+    }
 
     return users;
   } catch (err) {
@@ -77,9 +86,19 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
       weeklyTotalPoints: row.weekly_total_points,
     }));
 
-    const local = await getLocalSupsona(CURRENT_USER_ID);
-    const testUser = users.find((u) => u.id === CURRENT_USER_ID);
-    if (testUser && local != null) testUser.avatar = local;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const currentId = user?.id ?? null;
+      if (currentId) {
+        const local = await getLocalSupsona(currentId);
+        const testUser = users.find((u) => u.id === currentId);
+        if (testUser && local != null) testUser.avatar = local;
+      }
+    } catch {
+      // ignore — no authenticated user
+    }
 
     return users;
   } catch (err) {

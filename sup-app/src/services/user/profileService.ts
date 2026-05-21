@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
 import type { User } from "@/constants/env";
-import { CURRENT_USER_ID } from "@/constants/env";
 
 const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
 
@@ -206,7 +205,7 @@ function userToUserProfile(user: User): UserProfile {
  * Get the currently authenticated Supabase user id.
  *
  * This relies on Supabase Auth being configured in the app. If there is no
- * active session, falls back to CURRENT_USER_ID from env for development/testing.
+ * active session, the function will throw.
  */
 async function getCurrentUserId(): Promise<string> {
   try {
@@ -214,29 +213,14 @@ async function getCurrentUserId(): Promise<string> {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-
-    if (error) {
-      console.warn(
-        "[profile] Failed to resolve current user from auth, falling back to CURRENT_USER_ID",
-        error
-      );
-      return CURRENT_USER_ID;
-    }
-
-    if (!user) {
-      console.warn(
-        "[profile] No authenticated user found, falling back to CURRENT_USER_ID"
-      );
-      return CURRENT_USER_ID;
+    if (error || !user) {
+      throw new Error("No authenticated user");
     }
 
     return user.id;
   } catch (err) {
-    console.warn(
-      "[profile] Auth check failed, falling back to CURRENT_USER_ID",
-      err
-    );
-    return CURRENT_USER_ID;
+    console.warn("[profile] Auth check failed", err);
+    throw new Error("No authenticated user");
   }
 }
 
@@ -348,10 +332,11 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
       // fall through to mock below
     } else if (data) {
       const profile = mapRowToUserProfile(data as ProfileRow);
-      if (userId === CURRENT_USER_ID) {
+      // If there's a locally stored supsona for this user, prefer it for avatar
+      try {
         const local = await getLocalSupsona(userId);
         if (local != null) profile.avatar = local;
-      }
+      } catch {}
       return profile;
     }
   } catch (err) {
@@ -368,10 +353,10 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
     );
   }
   const profile = userToUserProfile(mock);
-  if (userId === CURRENT_USER_ID) {
+  try {
     const local = await getLocalSupsona(userId);
     if (local != null) profile.avatar = local;
-  }
+  } catch {}
   return profile;
 }
 
@@ -421,8 +406,8 @@ export async function updateCurrentUserProfile(
     return fetchCurrentUserProfileWithStats();
   }
 
-  // For test user, always persist supsona (avatar) locally so it works when Supabase is down
-  if (userId === CURRENT_USER_ID && Object.prototype.hasOwnProperty.call(updates, "avatar")) {
+  // Persist supsona (avatar) locally as a cache copy for this user
+  if (Object.prototype.hasOwnProperty.call(updates, "avatar")) {
     await setLocalSupsona(userId, updates.avatar ?? null);
   }
 
@@ -436,10 +421,7 @@ export async function updateCurrentUserProfile(
     .single();
 
   if (error) {
-    console.warn("[profile] Failed to update profile (Supabase), using local fallback for test user", error);
-    if (userId === CURRENT_USER_ID) {
-      return fetchCurrentUserProfileWithStats();
-    }
+    console.warn("[profile] Failed to update profile (Supabase)", error);
     console.error("[profile] Failed to update profile", error);
 
     const isNetworkError = /network request failed|failed to fetch|fetch failed|network/i.test(
@@ -582,10 +564,10 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     }
 
     const profile = mapRowToUserProfile(data as ProfileRow);
-    if (userId === CURRENT_USER_ID) {
+    try {
       const local = await getLocalSupsona(userId);
       if (local != null) profile.avatar = local;
-    }
+    } catch {}
     return profile;
   } catch (err) {
     console.error(
@@ -662,8 +644,8 @@ export async function updateUserProfile(
     return fetchUserProfile(userId);
   }
 
-  // For test user, always persist supsona (avatar) locally so it works when Supabase is down
-  if (userId === CURRENT_USER_ID && updates.avatar !== undefined) {
+  // Persist supsona (avatar) locally as a cache copy for this user
+  if (updates.avatar !== undefined) {
     await setLocalSupsona(userId, updates.avatar ?? null);
   }
 
@@ -676,10 +658,7 @@ export async function updateUserProfile(
     .single();
 
   if (error) {
-    if (userId === CURRENT_USER_ID) {
-      console.warn("[profile] Failed to update user profile (Supabase), using local fallback for test user", error);
-      return fetchUserProfile(userId);
-    }
+    console.warn("[profile] Failed to update user profile (Supabase)", error);
     if (error.code === "PGRST116") {
       return null; // Profile not found
     }
@@ -716,10 +695,10 @@ export async function updateUserProfile(
 
   const updatedProfile = mapRowToUserProfile(data as ProfileRow);
 
-  if (userId === CURRENT_USER_ID) {
+  try {
     const local = await getLocalSupsona(userId);
     if (local != null) updatedProfile.avatar = local;
-  }
+  } catch {}
 
   notifyProfileUpdated(updatedProfile);
   return updatedProfile;
