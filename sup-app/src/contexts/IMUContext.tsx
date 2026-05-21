@@ -17,7 +17,7 @@ import React, {
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { parseIMUPacket, classifySpinePosture, ParsedIMU } from "../lib/imuParser";
-import { DeskPostureState } from "../data/mockDeskPostureData";
+import { DeskPostureState } from "../desk/mockDeskPostureData";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,6 +77,9 @@ const POSTURE_DESCRIPTIONS: Record<DeskPostureState, string> = {
   slouched:     "Back curved and rounded. Sit up straight.",
   tilted_left:  "Weight shifted to left side. Even out.",
   tilted_right: "Weight shifted to right side. Even out.",
+  severe: "your spinal load is elevated. a small position change now significantly reduces disc pressure.",
+
+
 };
 
 const POSTURE_LABELS: Record<DeskPostureState, string> = {
@@ -85,6 +88,7 @@ const POSTURE_LABELS: Record<DeskPostureState, string> = {
   slouched:     "Slouching",
   tilted_left:  "Leaning Left",
   tilted_right: "Leaning Right",
+  severe: "high spinal load",
 };
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -145,7 +149,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           const result = classifySpinePosture(adjustedTop, adjustedBottom);
           setPosture({
             state: result.state,
-            score: result.score,
+            score: result.pli,
             label: POSTURE_LABELS[result.state],
             description: POSTURE_DESCRIPTIONS[result.state],
             pitchDiff: result.pitchDiff,

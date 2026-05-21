@@ -2,6 +2,7 @@ export type DeskPostureState =
   | "upright"
   | "forward_lean"
   | "slouched"
+  | "severe"
   | "tilted_left"
   | "tilted_right";
 
@@ -18,6 +19,8 @@ export const POSTURE_ANGLES: Record<
   slouched:     { torso: 34,  head: 22,  shoulder: 0   },
   tilted_left:  { torso: 0,   head: -8,  shoulder: -22 },
   tilted_right: { torso: 0,   head: 8,   shoulder: 22  },
+  severe: { torso: 34, head: 22, shoulder: 0 }, // same as slouched
+
 };
 
 // Score thresholds
