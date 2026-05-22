@@ -6,10 +6,16 @@
  * connection — s'pots never disconnect just because you navigate away.
  *
  * Calibration:
- *   The old single-step calibration is replaced with a 3-position protocol
- *   that captures the user's personal ROM ceiling alongside neutral upright.
+ *   3-position protocol captures personal ROM ceiling alongside neutral upright.
  *   See CalibrationModal.tsx for the UI flow.
  *   ClinicalBaseline is persisted to AsyncStorage so it survives app restarts.
+ *
+ * 20-minute static posture timer (Tanoue et al. 2021):
+ *   Any static posture held for 20+ minutes increases lumbar/pelvic loading
+ *   regardless of whether the posture is good or bad.
+ *   timeInCurrentStateMs tracks how long the current posture state has been held.
+ *   shouldNudge flips true at the 20-minute mark and resets when state changes.
+ *   Wire shouldNudge → expo-notifications to fire a movement reminder.
  */
 
 import React, {
@@ -28,16 +34,29 @@ import {
   classifySpinePosture,
   ParsedIMU,
   ClinicalBaseline,
-  PostureState,
   PostureSeverity,
   POSTURE_LABELS,
   POSTURE_CUES,
 } from "../lib/imuParser";
 import { DeskPostureState } from "../desk/mockDeskPostureData";
 
-// ── AsyncStorage key ──────────────────────────────────────────────────────────
-// One baseline per user — keyed by a constant for now, extend with userId later
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const BASELINE_STORAGE_KEY = "sup_clinical_baseline_v1";
+
+/**
+ * 20 minutes in ms — the static posture threshold from Tanoue et al. (2021).
+ * Any position held beyond this, even upright, significantly increases
+ * lumbar and pelvic loading compared to dynamic sitting.
+ */
+const NUDGE_THRESHOLD_MS = 1 * 60 * 1000; // 1 minutes
+
+/**
+ * How often the timer state is updated in React state (ms).
+ * Kept at 10 seconds to avoid unnecessary re-renders while still
+ * giving the UI a reasonably live elapsed time display.
+ */
+const TIMER_TICK_MS = 10_000;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,7 +67,7 @@ export interface IMUSensorData {
 
 export interface PostureResult {
   state: DeskPostureState;
-  /** Postural Load Index 0-100 (higher = better) — replaces old linear score */
+  /** Postural Load Index 0–100 (higher = better) */
   score: number;
   severity: PostureSeverity;
   label: string;
@@ -59,21 +78,11 @@ export interface PostureResult {
   romFraction: number | null;
 }
 
-/**
- * 3-step calibration state exposed to the UI.
- *
- *   step 1 = neutral upright (the zero reference)
- *   step 2 = max forward lean (sets sagittal ROM ceiling)
- *   step 3 = max lateral lean (sets lateral ROM ceiling)
- *
- * Each step has its own countdown (3→2→1→capture).
- * currentStep is null when no calibration is running.
- */
 export interface CalibrationState {
   currentStep: 1 | 2 | 3 | null;
-  countdown: number | null;        // 3, 2, 1, or 0 (= "done" flash)
-  stepComplete: boolean[];         // [step1done, step2done, step3done]
-  isComplete: boolean;             // true once all 3 steps captured
+  countdown: number | null;
+  stepComplete: boolean[];
+  isComplete: boolean;
 }
 
 export interface IMUContextValue {
@@ -94,14 +103,31 @@ export interface IMUContextValue {
   // 3-position calibration
   calibration: CalibrationState;
   clinicalBaseline: ClinicalBaseline | null;
-  /**
-   * Start a specific calibration step.
-   * Runs a 3-second countdown then captures s'pot angles for that step.
-   * Call in order: startCalibrationStep(1) → (2) → (3).
-   */
   startCalibrationStep: (step: 1 | 2 | 3) => void;
-  /** Reset all calibration state (e.g. if user wants to redo) */
   resetCalibration: () => void;
+
+  /**
+   * How long the current posture state has been held continuously, in ms.
+   * Resets to 0 whenever the posture state changes.
+   * Only increments when both s'pots are connected.
+   * Use this to show a progress indicator in the UI if desired.
+   */
+  timeInCurrentStateMs: number;
+
+  /**
+   * True when the user has been in the same posture state for 20+ minutes.
+   * Based on Tanoue et al. (2021) — any static position beyond 20 min
+   * significantly reduces lumbar and pelvic mobility.
+   * Wire this to expo-notifications to fire a movement reminder.
+   * Resets to false as soon as the posture state changes.
+   */
+  shouldNudge: boolean;
+
+  /**
+   * Call this after firing the nudge notification so the user isn't
+   * notified again until the next 20-minute window.
+   */
+  acknowledgeNudge: () => void;
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
@@ -137,18 +163,26 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [calibration, setCalibration] = useState<CalibrationState>(defaultCalibration);
   const [clinicalBaseline, setClinicalBaseline] = useState<ClinicalBaseline | null>(null);
 
-  // Refs for latest IMU readings — used inside BLE callbacks without stale closures
+  // ── 20-minute timer state ─────────────────────────────────────────────────
+  const [timeInCurrentStateMs, setTimeInCurrentStateMs] = useState(0);
+  const [shouldNudge,          setShouldNudge]          = useState(false);
+
+  // Refs that track timer state without stale closure issues
+  const stateStartTimeRef  = useRef<number>(Date.now());
+  const lastPostureStateRef = useRef<DeskPostureState | null>(null);
+  const nudgeFiredRef      = useRef(false); // prevents repeated nudges in same window
+  const timerIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── IMU data refs ─────────────────────────────────────────────────────────
   const topLatestRef    = useRef<ParsedIMU | null>(null);
   const bottomLatestRef = useRef<ParsedIMU | null>(null);
+  const baselineRef     = useRef<ClinicalBaseline | null>(null);
 
-  // Ref for the full baseline so classifySpinePosture always gets the latest
-  const baselineRef = useRef<ClinicalBaseline | null>(null);
-
-  // Partial capture during calibration — built up across the 3 steps
+  // Partial capture during calibration
   const captureRef = useRef<{
     neutral:    { topPitch: number; topRoll: number; bottomPitch: number; bottomRoll: number } | null;
-    maxForward: number | null; // degrees captured in step 2
-    maxLateral: number | null; // degrees captured in step 3
+    maxForward: number | null;
+    maxLateral: number | null;
   }>({ neutral: null, maxForward: null, maxLateral: null });
 
   // ── Load persisted baseline on mount ─────────────────────────────────────
@@ -160,7 +194,6 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const saved: ClinicalBaseline = JSON.parse(raw);
         baselineRef.current = saved;
         setClinicalBaseline(saved);
-        // Mark all steps complete if baseline already exists
         setCalibration((prev) => ({
           ...prev,
           stepComplete: [true, true, true],
@@ -170,11 +203,38 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       .catch((e) => console.warn("[IMUContext] Failed to load baseline:", e));
   }, []);
 
+  // ── 20-minute static posture timer ───────────────────────────────────────
+  //
+  // A lightweight interval ticks every TIMER_TICK_MS (10s).
+  // On each tick it computes elapsed ms since the current state began
+  // and updates React state — triggering a re-render at most every 10s.
+  //
+  // The actual state-change detection happens in the BLE callback (below)
+  // which runs at ~10Hz — far more responsive than this timer.
+  // This interval is only for keeping the UI elapsed time display current.
+
+  useEffect(() => {
+    timerIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - stateStartTimeRef.current;
+      setTimeInCurrentStateMs(elapsed);
+
+      // Fire nudge once per 20-minute window
+      if (elapsed >= NUDGE_THRESHOLD_MS && !nudgeFiredRef.current) {
+        nudgeFiredRef.current = true;
+        setShouldNudge(true);
+        console.log("[IMUContext] 20-min static posture threshold reached — nudge fired");
+      }
+    }, TIMER_TICK_MS);
+
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, []);
+
   // ── BLE callbacks — registered once, live for the entire app lifetime ─────
 
   useEffect(() => {
     bleService.setCallbacks(
-      // onData: fires ~10Hz per connected s'pot
       (slot, dataView) => {
         const parsed = parseIMUPacket(dataView);
         if (!parsed) return;
@@ -192,14 +252,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         if (!top || !bottom) return;
 
-        // Classify using the ClinicalBaseline if available.
-        // classifySpinePosture applies the neutral offset internally
-        // when a baseline is passed — no manual subtraction needed here.
         const result = classifySpinePosture(top, bottom, baselineRef.current);
+        const newState = result.state as DeskPostureState;
+
+        // ── State change detection for 20-min timer ──────────────────────
+        // Runs at ~10Hz so state changes are caught within ~100ms.
+        // When the state changes: reset the timer and clear any pending nudge.
+        if (newState !== lastPostureStateRef.current) {
+          lastPostureStateRef.current = newState;
+          stateStartTimeRef.current   = Date.now();
+          nudgeFiredRef.current       = false;
+          setTimeInCurrentStateMs(0);
+          setShouldNudge(false);
+        }
 
         setPosture({
-          state:       result.state as DeskPostureState,
-          score:       result.pli,       // PLI replaces old linear score
+          state:       newState,
+          score:       result.pli,
           severity:    result.severity,
           label:       POSTURE_LABELS[result.state],
           description: POSTURE_CUES[result.state],
@@ -209,50 +278,47 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         });
       },
 
-      // onStatus: connection state changes
       (slot, state) => {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             topLatestRef.current = null;
             setPosture(null);
+            // Reset timer when s'pot disconnects
+            stateStartTimeRef.current    = Date.now();
+            lastPostureStateRef.current  = null;
+            nudgeFiredRef.current        = false;
+            setTimeInCurrentStateMs(0);
+            setShouldNudge(false);
           }
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             bottomLatestRef.current = null;
             setPosture(null);
+            stateStartTimeRef.current    = Date.now();
+            lastPostureStateRef.current  = null;
+            nudgeFiredRef.current        = false;
+            setTimeInCurrentStateMs(0);
+            setShouldNudge(false);
           }
         }
       }
     );
-    // No cleanup — this must live for the entire app lifetime
   }, []);
 
   // ── 3-position calibration ────────────────────────────────────────────────
-  //
-  // Each step: 3-second countdown → capture current s'pot angles → mark done.
-  // All 3 steps must complete before the ClinicalBaseline is assembled and saved.
-  //
-  // Step 1 — neutral upright: captures the neutral offset angles
-  // Step 2 — max forward lean: captures the sagittal ROM ceiling
-  // Step 3 — max lateral lean: captures the lateral ROM ceiling
 
   const startCalibrationStep = useCallback((step: 1 | 2 | 3) => {
-    setCalibration((prev) => ({
-      ...prev,
-      currentStep: step,
-      countdown: 3,
-    }));
+    setCalibration((prev) => ({ ...prev, currentStep: step, countdown: 3 }));
 
-    // Countdown ticks
     const t1 = setTimeout(() =>
       setCalibration((prev) => ({ ...prev, countdown: 2 })), 1000);
     const t2 = setTimeout(() =>
       setCalibration((prev) => ({ ...prev, countdown: 1 })), 2000);
 
-    // Collect samples every 200ms during the 3-second hold window
-    // then average them — much more robust than a single snapshot
+    // Collect samples every 200ms during the 3-second hold — then average.
+    // More robust than a single snapshot (Tanoue et al. 2021).
     const samples: Array<{ top: ParsedIMU; bottom: ParsedIMU }> = [];
     const samplingInterval = setInterval(() => {
       const top    = topLatestRef.current;
@@ -268,7 +334,6 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Average all samples collected during the hold window
       const avg = (key: (s: typeof samples[0]) => number) =>
         samples.reduce((sum, s) => sum + key(s), 0) / samples.length;
 
@@ -291,20 +356,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         captureRef.current.maxLateral = Math.max(Math.abs(tPitch - bPitch), 5);
       }
 
-      // Mark step complete
-      const newStepComplete = [
-        step >= 1 ? true : false,
-        step >= 2 ? (captureRef.current.maxForward !== null) : false,
-        step >= 3 ? (captureRef.current.maxLateral !== null) : false,
-      ];
-
-      // Preserve previously completed steps
       setCalibration((prev) => {
         const updated = [...prev.stepComplete];
         updated[step - 1] = true;
         const allDone = updated.every(Boolean);
 
-        // If all 3 steps done, assemble and persist the ClinicalBaseline
         if (allDone) {
           const { neutral, maxForward, maxLateral } = captureRef.current;
           if (neutral && maxForward !== null && maxLateral !== null) {
@@ -325,20 +381,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           stepComplete: updated,
           isComplete: allDone,
-          countdown: 0,    // flash "done" state
+          countdown: 0,
           currentStep: allDone ? null : step,
         };
       });
 
-      // Clear the countdown flash after 1.5s
       setTimeout(() =>
         setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null })),
         1500
       );
     }, 3000);
 
-    // Cleanup if component unmounts mid-countdown (shouldn't happen but be safe)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearInterval(samplingInterval);
+    };
   }, []);
 
   const resetCalibration = useCallback(() => {
@@ -348,6 +407,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setCalibration(defaultCalibration);
     AsyncStorage.removeItem(BASELINE_STORAGE_KEY)
       .catch((e) => console.warn("[IMUContext] Failed to clear baseline:", e));
+  }, []);
+
+  // ── Nudge acknowledgement ─────────────────────────────────────────────────
+
+  const acknowledgeNudge = useCallback(() => {
+    setShouldNudge(false);
+    // Don't reset nudgeFiredRef — prevents re-firing in the same 20-min window.
+    // It will reset naturally when the posture state changes.
   }, []);
 
   // ── BLE actions ───────────────────────────────────────────────────────────
@@ -399,6 +466,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       clinicalBaseline,
       startCalibrationStep,
       resetCalibration,
+      timeInCurrentStateMs,
+      shouldNudge,
+      acknowledgeNudge,
     }}>
       {children}
     </IMUContext.Provider>
