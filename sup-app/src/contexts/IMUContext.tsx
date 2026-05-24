@@ -5,20 +5,20 @@
  * Wrap the whole app in <IMUProvider> so every screen shares the same
  * connection — s'pots never disconnect just because you navigate away.
  *
- * Calibration:
- *   The old single-step calibration is replaced with a 3-position protocol
- *   that captures the user's personal ROM ceiling alongside neutral upright.
- *   See CalibrationModal.tsx for the UI flow.
- *   ClinicalBaseline is persisted to AsyncStorage so it survives app restarts.
+ * KEY FIX: Neutral offset is applied from calibration step 1 onwards.
+ * Previously the baseline was only applied after ALL 5 steps completed,
+ * meaning raw sensor offsets (±40° from mounting orientation) were used
+ * for classification — making all thresholds meaningless.
+ * Now: step 1 capture → neutralOffsetRef updated immediately → classification
+ * works correctly from that point, even before steps 2-5 are done.
+ *
+ * Scoring: Spine Health Score (SHS) — session-accumulated, starts at 100.
+ * Timers: Per-state intervention alerts + 20-min static nudge.
  */
 
 import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
+  createContext, useContext, useState,
+  useEffect, useCallback, useRef,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
@@ -28,16 +28,30 @@ import {
   classifySpinePosture,
   ParsedIMU,
   ClinicalBaseline,
+  NeutralOffset,
   PostureState,
   PostureSeverity,
   POSTURE_LABELS,
   POSTURE_CUES,
+  INTERVENTION_THRESHOLDS_MS,
+  INTERVENTION_MESSAGES,
+  SHS_RATES,
+  SHS_GRACE_PERIODS_MS,
+  MOVEMENT_NUDGE,
 } from "../lib/imuParser";
 import { DeskPostureState } from "../desk/mockDeskPostureData";
 
-// ── AsyncStorage key ──────────────────────────────────────────────────────────
-// One baseline per user — keyed by a constant for now, extend with userId later
-const BASELINE_STORAGE_KEY = "sup_clinical_baseline_v1";
+// ── Storage keys ──────────────────────────────────────────────────────────────
+
+const BASELINE_STORAGE_KEY      = "sup_clinical_baseline_v2";
+const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
+
+// ── Timer constants ───────────────────────────────────────────────────────────
+
+// Change to 20 * 60 * 1000 for production
+const STATIC_NUDGE_THRESHOLD_MS = 1 * 60 * 1000; // 1 min for testing
+const SHS_TICK_MS     = 1_000;
+const DISPLAY_TICK_MS = 10_000;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,42 +62,36 @@ export interface IMUSensorData {
 
 export interface PostureResult {
   state: DeskPostureState;
-  /** Postural Load Index 0-100 (higher = better) — replaces old linear score */
-  score: number;
+  /** Instant posture quality — used for figure colour only, not the session SHS */
+  instantScore: number;
   severity: PostureSeverity;
   label: string;
   description: string;
   pitchDiff: number;
   rollDiff: number;
-  /** Fraction of personal ROM used — null until calibrated */
-  romFraction: number | null;
 }
 
-/**
- * 3-step calibration state exposed to the UI.
- *
- *   step 1 = neutral upright (the zero reference)
- *   step 2 = max forward lean (sets sagittal ROM ceiling)
- *   step 3 = max lateral lean (sets lateral ROM ceiling)
- *
- * Each step has its own countdown (3→2→1→capture).
- * currentStep is null when no calibration is running.
- */
 export interface CalibrationState {
-  currentStep: 1 | 2 | 3 | null;
-  countdown: number | null;        // 3, 2, 1, or 0 (= "done" flash)
-  stepComplete: boolean[];         // [step1done, step2done, step3done]
-  isComplete: boolean;             // true once all 3 steps captured
+  currentStep: 1 | 2 | 3 | 4 | 5 | null;
+  countdown: number | null;
+  stepComplete: boolean[]; // length 5
+  isComplete: boolean;
+}
+
+export interface InterventionAlert {
+  state: PostureState;
+  title: string;
+  body: string;
+  cue: string;
+  durationMs: number;
 }
 
 export interface IMUContextValue {
-  // s'pot data
   topSensor: IMUSensorData;
   bottomSensor: IMUSensorData;
   posture: PostureResult | null;
   bothConnected: boolean;
 
-  // BLE scanning / connection
   discoveredDevices: Device[];
   isScanning: boolean;
   scan: () => Promise<void>;
@@ -91,37 +99,30 @@ export interface IMUContextValue {
   disconnect: (slot: SensorSlot) => Promise<void>;
   disconnectAll: () => Promise<void>;
 
-  // 3-position calibration
   calibration: CalibrationState;
   clinicalBaseline: ClinicalBaseline | null;
-  /**
-   * Start a specific calibration step.
-   * Runs a 3-second countdown then captures s'pot angles for that step.
-   * Call in order: startCalibrationStep(1) → (2) → (3).
-   */
-  startCalibrationStep: (step: 1 | 2 | 3) => void;
-  /** Reset all calibration state (e.g. if user wants to redo) */
+  /** Whether step 1 (neutral) has been captured — enables live classification */
+  isNeutralCalibrated: boolean;
+  startCalibrationStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   resetCalibration: () => void;
+
+  /** Session Spine Health Score 0–100 */
+  shs: number;
+  timeInCurrentStateMs: number;
+  shouldNudge: boolean;
+  activeIntervention: InterventionAlert | null;
+  confirmMovement: () => void;
+  dismissIntervention: (moved: boolean) => void;
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const defaultSensorState: SensorState = {
-  connected: false,
-  deviceId: null,
-  deviceName: null,
-};
-
-const defaultSensorData: IMUSensorData = {
-  latest: null,
-  state: defaultSensorState,
-};
-
+const defaultSensorState: SensorState = { connected: false, deviceId: null, deviceName: null };
+const defaultSensorData: IMUSensorData = { latest: null, state: defaultSensorState };
 const defaultCalibration: CalibrationState = {
-  currentStep:  null,
-  countdown:    null,
-  stepComplete: [false, false, false],
-  isComplete:   false,
+  currentStep: null, countdown: null,
+  stepComplete: [false, false, false, false, false],
+  isComplete: false,
 };
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -136,45 +137,144 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [isScanning, setIsScanning] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationState>(defaultCalibration);
   const [clinicalBaseline, setClinicalBaseline] = useState<ClinicalBaseline | null>(null);
+  const [isNeutralCalibrated, setIsNeutralCalibrated] = useState(false);
 
-  // Refs for latest IMU readings — used inside BLE callbacks without stale closures
+  const [shs,                  setShs]                  = useState(100);
+  const [timeInCurrentStateMs, setTimeInCurrentStateMs] = useState(0);
+  const [shouldNudge,          setShouldNudge]          = useState(false);
+  const [activeIntervention,   setActiveIntervention]   = useState<InterventionAlert | null>(null);
+
+  // ── Refs ──────────────────────────────────────────────────────────────────
+
   const topLatestRef    = useRef<ParsedIMU | null>(null);
   const bottomLatestRef = useRef<ParsedIMU | null>(null);
 
-  // Ref for the full baseline so classifySpinePosture always gets the latest
+  /**
+   * neutralOffsetRef — applied to EVERY classification call.
+   * Set as soon as step 1 is captured (not after all 5 steps).
+   * This is the critical fix: without this, raw sensor offsets make
+   * all classification thresholds meaningless.
+   */
+  const neutralOffsetRef = useRef<NeutralOffset | null>(null);
+
+  /**
+   * baselineRef — the full 5-position calibration.
+   * Only set once all 5 steps complete.
+   * Used for personalised ROM ceilings in SHS scoring (v1 feature).
+   */
   const baselineRef = useRef<ClinicalBaseline | null>(null);
 
-  // Partial capture during calibration — built up across the 3 steps
-  const captureRef = useRef<{
-    neutral:    { topPitch: number; topRoll: number; bottomPitch: number; bottomRoll: number } | null;
-    maxForward: number | null; // degrees captured in step 2
-    maxLateral: number | null; // degrees captured in step 3
-  }>({ neutral: null, maxForward: null, maxLateral: null });
+  const stateStartTimeRef       = useRef<number>(Date.now());
+  const stateGraceStartRef      = useRef<number>(Date.now());
+  const lastPostureStateRef     = useRef<PostureState | null>(null);
+  const interventionFiredRef    = useRef(false);
+  const staticNudgeFiredRef     = useRef(false);
+  const staticStartTimeRef      = useRef<number>(Date.now());
+  const shsRef                  = useRef(100);
+  const shsIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const displayIntervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Load persisted baseline on mount ─────────────────────────────────────
+  const captureRef = useRef<{
+    neutral:     NeutralOffset | null;
+    maxForward:  number | null;
+    maxBackward: number | null;
+    maxRight:    number | null;
+    maxLeft:     number | null;
+  }>({ neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null });
+
+  // ── Load persisted data on mount ──────────────────────────────────────────
 
   useEffect(() => {
-    AsyncStorage.getItem(BASELINE_STORAGE_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const saved: ClinicalBaseline = JSON.parse(raw);
-        baselineRef.current = saved;
-        setClinicalBaseline(saved);
-        // Mark all steps complete if baseline already exists
-        setCalibration((prev) => ({
-          ...prev,
-          stepComplete: [true, true, true],
-          isComplete: true,
-        }));
-      })
-      .catch((e) => console.warn("[IMUContext] Failed to load baseline:", e));
+    // Load full baseline if exists
+    AsyncStorage.getItem(BASELINE_STORAGE_KEY).then((raw) => {
+      if (!raw) return;
+      const saved: ClinicalBaseline = JSON.parse(raw);
+      baselineRef.current    = saved;
+      neutralOffsetRef.current = saved.neutral;
+      setClinicalBaseline(saved);
+      setIsNeutralCalibrated(true);
+      setCalibration((prev) => ({
+        ...prev, stepComplete: [true, true, true, true, true], isComplete: true,
+      }));
+    }).catch((e) => console.warn("[IMUContext] Failed to load baseline:", e));
+
+    // Load neutral offset separately (available after step 1 even without full baseline)
+    AsyncStorage.getItem(NEUTRAL_OFFSET_STORAGE_KEY).then((raw) => {
+      if (!raw) return;
+      const saved: NeutralOffset = JSON.parse(raw);
+      // Only apply if no full baseline already loaded
+      if (!neutralOffsetRef.current) {
+        neutralOffsetRef.current = saved;
+        setIsNeutralCalibrated(true);
+        setCalibration((prev) => {
+          const updated = [...prev.stepComplete];
+          updated[0] = true;
+          return { ...prev, stepComplete: updated };
+        });
+      }
+    }).catch((e) => console.warn("[IMUContext] Failed to load neutral offset:", e));
   }, []);
 
-  // ── BLE callbacks — registered once, live for the entire app lifetime ─────
+  // ── SHS accumulation — ticks every second ─────────────────────────────────
+
+  useEffect(() => {
+    shsIntervalRef.current = setInterval(() => {
+      const state = lastPostureStateRef.current;
+      if (!state) return;
+
+      const rate        = SHS_RATES[state] ?? 0;
+      const gracePeriod = SHS_GRACE_PERIODS_MS[state] ?? 0;
+      const elapsed     = Date.now() - stateGraceStartRef.current;
+
+      if (rate > 0 || elapsed >= gracePeriod) {
+        const newShs = Math.max(0, Math.min(100, shsRef.current + rate));
+        shsRef.current = newShs;
+        setShs(Math.round(newShs));
+      }
+    }, SHS_TICK_MS);
+    return () => { if (shsIntervalRef.current) clearInterval(shsIntervalRef.current); };
+  }, []);
+
+  // ── Display timer + intervention checker — ticks every 10 seconds ─────────
+
+  useEffect(() => {
+    displayIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - stateStartTimeRef.current;
+      setTimeInCurrentStateMs(elapsed);
+
+      // Static movement nudge
+      const staticElapsed = Date.now() - staticStartTimeRef.current;
+      if (staticElapsed >= STATIC_NUDGE_THRESHOLD_MS && !staticNudgeFiredRef.current) {
+        staticNudgeFiredRef.current = true;
+        setShouldNudge(true);
+        // PHONE: wire to expo-notifications here
+        // PHONE: Vibration.vibrate([0, 300, 100, 300]);
+        // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
+        console.log("[IMUContext] static nudge fired");
+      }
+
+      // Per-state intervention
+      const state = lastPostureStateRef.current;
+      if (!state || interventionFiredRef.current) return;
+      const threshold = INTERVENTION_THRESHOLDS_MS[state];
+      if (threshold !== undefined && elapsed >= threshold) {
+        interventionFiredRef.current = true;
+        const msg = INTERVENTION_MESSAGES[state];
+        if (msg) {
+          setActiveIntervention({ state, ...msg, durationMs: elapsed });
+          // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
+          // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
+          console.log("[IMUContext] intervention fired for", state);
+        }
+      }
+    }, DISPLAY_TICK_MS);
+    return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
+  }, []);
+
+  // ── BLE callbacks ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     bleService.setCallbacks(
-      // onData: fires ~10Hz per connected s'pot
       (slot, dataView) => {
         const parsed = parseIMUPacket(dataView);
         if (!parsed) return;
@@ -189,86 +289,70 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         const top    = slot === "top"    ? parsed : topLatestRef.current;
         const bottom = slot === "bottom" ? parsed : bottomLatestRef.current;
-
         if (!top || !bottom) return;
 
-        // Classify using the ClinicalBaseline if available.
-        // classifySpinePosture applies the neutral offset internally
-        // when a baseline is passed — no manual subtraction needed here.
-        const result = classifySpinePosture(top, bottom, baselineRef.current);
+        // Use full baseline if available, else use neutral offset alone.
+        // Either way, the offset is applied and classification is meaningful.
+        const offsetToUse = baselineRef.current ?? neutralOffsetRef.current;
+        const result      = classifySpinePosture(top, bottom, offsetToUse);
+        const newState    = result.state as DeskPostureState;
+
+        if (result.state !== lastPostureStateRef.current) {
+          lastPostureStateRef.current  = result.state;
+          stateStartTimeRef.current    = Date.now();
+          stateGraceStartRef.current   = Date.now();
+          interventionFiredRef.current = false;
+          staticStartTimeRef.current   = Date.now();
+          staticNudgeFiredRef.current  = false;
+          setTimeInCurrentStateMs(0);
+          setShouldNudge(false);
+          setActiveIntervention(null);
+        }
 
         setPosture({
-          state:       result.state as DeskPostureState,
-          score:       result.pli,       // PLI replaces old linear score
-          severity:    result.severity,
-          label:       POSTURE_LABELS[result.state],
-          description: POSTURE_CUES[result.state],
-          pitchDiff:   result.pitchDiff,
-          rollDiff:    result.rollDiff,
-          romFraction: result.romFraction,
+          state:        newState,
+          instantScore: result.instantScore,
+          severity:     result.severity,
+          label:        POSTURE_LABELS[result.state],
+          description:  POSTURE_CUES[result.state],
+          pitchDiff:    result.pitchDiff,
+          rollDiff:     result.rollDiff,
         });
       },
 
-      // onStatus: connection state changes
       (slot, state) => {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
-          if (!state.connected) {
-            topLatestRef.current = null;
-            setPosture(null);
-          }
+          if (!state.connected) { topLatestRef.current = null; setPosture(null); lastPostureStateRef.current = null; }
         } else {
           setBottomData((prev) => ({ ...prev, state }));
-          if (!state.connected) {
-            bottomLatestRef.current = null;
-            setPosture(null);
-          }
+          if (!state.connected) { bottomLatestRef.current = null; setPosture(null); lastPostureStateRef.current = null; }
         }
       }
     );
-    // No cleanup — this must live for the entire app lifetime
   }, []);
 
-  // ── 3-position calibration ────────────────────────────────────────────────
-  //
-  // Each step: 3-second countdown → capture current s'pot angles → mark done.
-  // All 3 steps must complete before the ClinicalBaseline is assembled and saved.
-  //
-  // Step 1 — neutral upright: captures the neutral offset angles
-  // Step 2 — max forward lean: captures the sagittal ROM ceiling
-  // Step 3 — max lateral lean: captures the lateral ROM ceiling
+  // ── 5-position calibration ────────────────────────────────────────────────
 
-  const startCalibrationStep = useCallback((step: 1 | 2 | 3) => {
-    setCalibration((prev) => ({
-      ...prev,
-      currentStep: step,
-      countdown: 3,
-    }));
+  const startCalibrationStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => {
+    setCalibration((prev) => ({ ...prev, currentStep: step, countdown: 3 }));
 
-    // Countdown ticks
-    const t1 = setTimeout(() =>
-      setCalibration((prev) => ({ ...prev, countdown: 2 })), 1000);
-    const t2 = setTimeout(() =>
-      setCalibration((prev) => ({ ...prev, countdown: 1 })), 2000);
+    const t1 = setTimeout(() => setCalibration((prev) => ({ ...prev, countdown: 2 })), 1000);
+    const t2 = setTimeout(() => setCalibration((prev) => ({ ...prev, countdown: 1 })), 2000);
 
-    // Collect samples every 200ms during the 3-second hold window
-    // then average them — much more robust than a single snapshot
     const samples: Array<{ top: ParsedIMU; bottom: ParsedIMU }> = [];
     const samplingInterval = setInterval(() => {
-      const top    = topLatestRef.current;
-      const bottom = bottomLatestRef.current;
+      const top = topLatestRef.current; const bottom = bottomLatestRef.current;
       if (top && bottom) samples.push({ top, bottom });
     }, 200);
 
     const t3 = setTimeout(() => {
       clearInterval(samplingInterval);
-
       if (samples.length === 0) {
         setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null }));
         return;
       }
 
-      // Average all samples collected during the hold window
       const avg = (key: (s: typeof samples[0]) => number) =>
         samples.reduce((sum, s) => sum + key(s), 0) / samples.length;
 
@@ -278,40 +362,55 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       const bottomRoll  = avg((s) => s.bottom.angle.roll);
 
       if (step === 1) {
-        captureRef.current.neutral = { topPitch, topRoll, bottomPitch, bottomRoll };
+        const offset: NeutralOffset = { topPitch, topRoll, bottomPitch, bottomRoll };
+        captureRef.current.neutral = offset;
+
+        // ── KEY FIX: Apply neutral offset IMMEDIATELY after step 1 ──────────
+        // This makes classification meaningful right away, even before steps 2-5.
+        // Without this, raw sensor offsets (±40°) corrupt all thresholds.
+        neutralOffsetRef.current = offset;
+        setIsNeutralCalibrated(true);
+
+        // Persist neutral offset separately so it survives app restart
+        AsyncStorage.setItem(NEUTRAL_OFFSET_STORAGE_KEY, JSON.stringify(offset))
+          .catch((e) => console.warn("[IMUContext] Failed to save neutral offset:", e));
+
       } else if (step === 2) {
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
         const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
-        captureRef.current.maxForward = Math.max(Math.abs(tRoll - bRoll), 10);
+        captureRef.current.maxForward  = Math.max(Math.abs(tRoll - bRoll), 10);
+
       } else if (step === 3) {
+        const neutral = captureRef.current.neutral;
+        const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
+        const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
+        captureRef.current.maxBackward = Math.max(Math.abs(tRoll - bRoll), 5);
+
+      } else if (step === 4) {
         const neutral = captureRef.current.neutral;
         const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
         const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
-        captureRef.current.maxLateral = Math.max(Math.abs(tPitch - bPitch), 5);
+        captureRef.current.maxRight    = Math.max(Math.abs(tPitch - bPitch), 5);
+
+      } else if (step === 5) {
+        const neutral = captureRef.current.neutral;
+        const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
+        const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
+        captureRef.current.maxLeft     = Math.max(Math.abs(tPitch - bPitch), 5);
       }
 
-      // Mark step complete
-      const newStepComplete = [
-        step >= 1 ? true : false,
-        step >= 2 ? (captureRef.current.maxForward !== null) : false,
-        step >= 3 ? (captureRef.current.maxLateral !== null) : false,
-      ];
-
-      // Preserve previously completed steps
       setCalibration((prev) => {
-        const updated = [...prev.stepComplete];
+        const updated  = [...prev.stepComplete];
         updated[step - 1] = true;
-        const allDone = updated.every(Boolean);
+        const allDone  = updated.every(Boolean);
 
-        // If all 3 steps done, assemble and persist the ClinicalBaseline
         if (allDone) {
-          const { neutral, maxForward, maxLateral } = captureRef.current;
-          if (neutral && maxForward !== null && maxLateral !== null) {
+          const { neutral, maxForward, maxBackward, maxRight, maxLeft } = captureRef.current;
+          if (neutral && maxForward !== null && maxBackward !== null && maxRight !== null && maxLeft !== null) {
             const baseline: ClinicalBaseline = {
-              neutral,
-              maxForwardDeg: maxForward,
-              maxLateralDeg: maxLateral,
+              neutral, maxForwardDeg: maxForward, maxBackwardDeg: maxBackward,
+              maxRightDeg: maxRight, maxLeftDeg: maxLeft,
               capturedAt: new Date().toISOString(),
             };
             baselineRef.current = baseline;
@@ -322,39 +421,52 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         }
 
         return {
-          ...prev,
-          stepComplete: updated,
-          isComplete: allDone,
-          countdown: 0,    // flash "done" state
-          currentStep: allDone ? null : step,
+          ...prev, stepComplete: updated, isComplete: allDone,
+          countdown: 0, currentStep: allDone ? null : step,
         };
       });
 
-      // Clear the countdown flash after 1.5s
       setTimeout(() =>
-        setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null })),
-        1500
-      );
+        setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null })), 1500);
     }, 3000);
 
-    // Cleanup if component unmounts mid-countdown (shouldn't happen but be safe)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearInterval(samplingInterval); };
   }, []);
 
   const resetCalibration = useCallback(() => {
-    captureRef.current = { neutral: null, maxForward: null, maxLateral: null };
-    baselineRef.current = null;
+    captureRef.current   = { neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null };
+    baselineRef.current  = null;
+    neutralOffsetRef.current = null;
     setClinicalBaseline(null);
+    setIsNeutralCalibrated(false);
     setCalibration(defaultCalibration);
-    AsyncStorage.removeItem(BASELINE_STORAGE_KEY)
-      .catch((e) => console.warn("[IMUContext] Failed to clear baseline:", e));
+    AsyncStorage.removeItem(BASELINE_STORAGE_KEY).catch(() => {});
+    AsyncStorage.removeItem(NEUTRAL_OFFSET_STORAGE_KEY).catch(() => {});
+  }, []);
+
+  // ── User actions ──────────────────────────────────────────────────────────
+
+  const confirmMovement = useCallback(() => {
+    setShouldNudge(false);
+    staticNudgeFiredRef.current = false;
+    staticStartTimeRef.current  = Date.now();
+  }, []);
+
+  const dismissIntervention = useCallback((moved: boolean) => {
+    if (!moved) {
+      const penalised = Math.max(0, shsRef.current - 5);
+      shsRef.current  = penalised;
+      setShs(Math.round(penalised));
+      console.log("[IMUContext] intervention ignored — -5 SHS structural debt");
+    }
+    setActiveIntervention(null);
   }, []);
 
   // ── BLE actions ───────────────────────────────────────────────────────────
 
   const scan = useCallback(async () => {
-    const hasPermission = await bleService.requestPermissions();
-    if (!hasPermission) return;
+    const ok = await bleService.requestPermissions();
+    if (!ok) return;
     setDiscoveredDevices([]);
     setIsScanning(true);
     bleService.scan((device) => {
@@ -367,45 +479,28 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connect = useCallback(async (device: Device, slot: SensorSlot) => {
-    bleService.stopScan();
-    setIsScanning(false);
+    bleService.stopScan(); setIsScanning(false);
     await bleService.connectDevice(device, slot);
   }, []);
 
-  const disconnect = useCallback(async (slot: SensorSlot) => {
-    await bleService.disconnectSlot(slot);
-  }, []);
-
-  const disconnectAll = useCallback(async () => {
-    await bleService.disconnectAll();
-    setPosture(null);
-  }, []);
+  const disconnect  = useCallback(async (slot: SensorSlot)  => { await bleService.disconnectSlot(slot); }, []);
+  const disconnectAll = useCallback(async () => { await bleService.disconnectAll(); setPosture(null); }, []);
 
   const bothConnected = topData.state.connected && bottomData.state.connected;
 
   return (
     <IMUContext.Provider value={{
-      topSensor:    topData,
-      bottomSensor: bottomData,
-      posture,
-      bothConnected,
-      discoveredDevices,
-      isScanning,
-      scan,
-      connect,
-      disconnect,
-      disconnectAll,
-      calibration,
-      clinicalBaseline,
-      startCalibrationStep,
-      resetCalibration,
+      topSensor: topData, bottomSensor: bottomData, posture, bothConnected,
+      discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
+      calibration, clinicalBaseline, isNeutralCalibrated,
+      startCalibrationStep, resetCalibration,
+      shs, timeInCurrentStateMs, shouldNudge, activeIntervention,
+      confirmMovement, dismissIntervention,
     }}>
       {children}
     </IMUContext.Provider>
   );
 }
-
-// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useIMUContext(): IMUContextValue {
   const ctx = useContext(IMUContext);

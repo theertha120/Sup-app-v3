@@ -5,26 +5,17 @@
  * Accessible from the home screen via the chip icon next to ⚙.
  * NOT on the bottom tab bar.
  *
- * Changes in this version:
- *   1. Device identity — each s'pot is stored with a user-scoped display name
- *      ("username_top" / "username_bottom") generated at pairing time.
- *      The hardware name is preserved separately for reference.
- *   2. Picker filter — s'pots already connected to either slot are hidden
- *      from the picker so the user can't assign one device to two slots.
- *   3. Forget when saved — the Forget action is available even when the
- *      s'pot is not currently connected (as long as it's saved in storage).
- *   4. Updated UI copy to use s'up brand language (s'pot, lowercase).
+ * Updates in this version:
+ *   1. Calibration updated to 5-position protocol (neutral, forward, backward, right, left).
+ *   2. ClinicalBaseline summary shows all 4 ROM ceilings.
+ *   3. startCalibrationStep now typed as 1|2|3|4|5.
+ *   4. All existing identity management, picker filter, and forget logic preserved.
  */
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
+  View, Text, StyleSheet, ScrollView,
+  Pressable, ActivityIndicator, Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -47,10 +38,8 @@ interface SavedDevice {
   hardwareName: string;
   /**
    * User-scoped display name shown in the app UI.
-   * Format: "{username}_top" or "{username}_bottom"
-   * Generated at pairing time and stored in AsyncStorage.
-   * The hardware name on the s'pot itself is NOT changed —
-   * this is a software-side label only.
+   * Format: "{userId}_top" or "{userId}_bottom"
+   * Software-side label only — hardware name is never changed.
    */
   displayName: string;
 }
@@ -61,7 +50,7 @@ function storageKey(slot: SensorSlot, userId: string): string {
   return `spot_device_${slot}_${userId}`;
 }
 
-// ── Posture diagram (for calibration section) ─────────────────────────────────
+// ── Posture diagram ───────────────────────────────────────────────────────────
 
 function IdealPostureDiagram({ size = 140 }: { size?: number }) {
   const accent = colours.primary;
@@ -90,19 +79,14 @@ function IdealPostureDiagram({ size = 140 }: { size?: number }) {
 
 export default function SensorSetupScreen() {
   const {
-    topSensor,
-    bottomSensor,
-    discoveredDevices,
-    isScanning,
-    calibration,
-    clinicalBaseline,
-    scan,
-    connect,
-    disconnect,
+    topSensor, bottomSensor,
+    discoveredDevices, isScanning,
+    calibration, clinicalBaseline,
+    scan, connect, disconnect,
     bothConnected,
   } = useIMUContext();
 
-const { userId } = useAuth();
+  const { userId } = useAuth();
 
   const [assigningSlot,    setAssigningSlot]    = useState<SensorSlot | null>(null);
   const [showCalibModal,   setShowCalibModal]   = useState(false);
@@ -110,7 +94,7 @@ const { userId } = useAuth();
   const [savedBottom,      setSavedBottom]      = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
 
-  // ── Load saved device identity from AsyncStorage on mount / userId change ──
+  // ── Load saved device identity ────────────────────────────────────────────
 
   useEffect(() => {
     if (!userId) return;
@@ -129,19 +113,17 @@ const { userId } = useAuth();
     load();
   }, [userId]);
 
-  // ── Generate user-scoped display name ────────────────────────────────────
-  // Uses the authenticated user's username/email prefix.
-  // Result e.g.: "leipakshi_top", "leipakshi_bottom"
+  // ── Display name ──────────────────────────────────────────────────────────
 
   function makeDisplayName(slot: SensorSlot): string {
     const base = (userId ?? "user")
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
-      .slice(0, 12); // keep it short
+      .slice(0, 12);
     return `${base}_${slot}`;
   }
 
-  // ── Save device identity ──────────────────────────────────────────────────
+  // ── Save device ───────────────────────────────────────────────────────────
 
   const saveDevice = async (slot: SensorSlot, device: Device) => {
     if (!userId) return;
@@ -160,12 +142,9 @@ const { userId } = useAuth();
   };
 
   // ── Forget device ─────────────────────────────────────────────────────────
-  // Available even when s'pot is not connected — works on saved state alone.
 
   const forgetDevice = (slot: SensorSlot) => {
-    const saved = slot === "top" ? savedTop : savedBottom;
     const label = slot === "top" ? "top s'pot" : "bottom s'pot";
-
     Alert.alert(
       `forget ${label}?`,
       `this will remove your saved ${label}. you can re-pair it any time.`,
@@ -180,7 +159,6 @@ const { userId } = useAuth();
               await AsyncStorage.removeItem(storageKey(slot, userId));
               if (slot === "top") setSavedTop(null);
               else                setSavedBottom(null);
-              // Disconnect if currently connected
               const sensor = slot === "top" ? topSensor : bottomSensor;
               if (sensor.state.connected) await disconnect(slot);
             } catch (e) {
@@ -193,7 +171,6 @@ const { userId } = useAuth();
   };
 
   // ── Auto-connect ──────────────────────────────────────────────────────────
-  // Scan → collect both saved devices → connect in parallel.
 
   const autoConnect = useCallback(async () => {
     if (!savedTop && !savedBottom) return;
@@ -224,35 +201,34 @@ const { userId } = useAuth();
       }, 8000);
     });
 
-    // Connect sequentially — parallel BLE connections cancel each other
-  let connected = 0;
-  if (savedTop && foundDevices[savedTop.id]) {
-    await connect(foundDevices[savedTop.id], "top");
-    connected++;
-    // Small pause between connections so the BLE stack settles
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (savedBottom && foundDevices[savedBottom.id]) {
-    await connect(foundDevices[savedBottom.id], "bottom");
-    connected++;
-  }
+    // Sequential connection — parallel BLE connections cancel each other
+    let connected = 0;
+    if (savedTop && foundDevices[savedTop.id]) {
+      await connect(foundDevices[savedTop.id], "top");
+      connected++;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    if (savedBottom && foundDevices[savedBottom.id]) {
+      await connect(foundDevices[savedBottom.id], "bottom");
+      connected++;
+    }
 
-  if (connected === 0) {
-    Alert.alert(
-      "s'pots not found",
-      "make sure both s'pots are powered on and nearby, then try again."
-    );
-  }
+    if (connected === 0) {
+      Alert.alert(
+        "s'pots not found",
+        "make sure both s'pots are powered on and nearby, then try again."
+      );
+    }
 
-      setIsAutoConnecting(false);
-    }, [savedTop, savedBottom, connect]);
+    setIsAutoConnecting(false);
+  }, [savedTop, savedBottom, connect]);
 
-    // ── Manual connect ────────────────────────────────────────────────────────
+  // ── Manual connect ────────────────────────────────────────────────────────
 
-    const handleScan = async (slot: SensorSlot) => {
-      setAssigningSlot(slot);
-      await scan();
-    };
+  const handleScan = async (slot: SensorSlot) => {
+    setAssigningSlot(slot);
+    await scan();
+  };
 
   const handleConnect = async (device: Device) => {
     if (!assigningSlot) return;
@@ -261,34 +237,19 @@ const { userId } = useAuth();
     setAssigningSlot(null);
   };
 
-  // ── Picker: filter out already-connected devices ──────────────────────────
-  // A s'pot already assigned to a slot should not appear in the other slot's
-  // picker — prevents accidentally assigning one device to two slots.
+  // Filter already-connected devices from picker
+  const connectedIds     = bleService.getConnectedDeviceIds();
+  const availableDevices = discoveredDevices.filter((d) => !connectedIds.includes(d.id));
 
-  const connectedIds = bleService.getConnectedDeviceIds();
-  const availableDevices = discoveredDevices.filter(
-    (d) => !connectedIds.includes(d.id)
-  );
+  // ── Sensor row ────────────────────────────────────────────────────────────
 
-  // ── Sensor row component ──────────────────────────────────────────────────
-
-  function SensorRow({
-    slot,
-    label,
-    position,
-  }: {
-    slot: SensorSlot;
-    label: string;
-    position: string;
+  function SensorRow({ slot, label, position }: {
+    slot: SensorSlot; label: string; position: string;
   }) {
     const sensor    = slot === "top" ? topSensor    : bottomSensor;
     const saved     = slot === "top" ? savedTop     : savedBottom;
     const connected = sensor.state.connected;
 
-    // Display name priority:
-    //   1. User-scoped display name from storage (e.g. "leipakshi_top")
-    //   2. Live hardware name from BLE connection
-    //   3. "not paired" fallback
     const displayName = saved?.displayName
       ?? sensor.state.deviceName
       ?? "not paired";
@@ -297,16 +258,10 @@ const { userId } = useAuth();
 
     return (
       <View style={styles.sensorRow}>
-        {/* Status icon */}
         <View style={[styles.sensorIcon, { backgroundColor: connected ? "#E8F5E9" : "#F5F5F5" }]}>
-          <Ionicons
-            name="hardware-chip-outline"
-            size={24}
-            color={connected ? "#4CAF50" : "#999"}
-          />
+          <Ionicons name="hardware-chip-outline" size={24} color={connected ? "#4CAF50" : "#999"} />
         </View>
 
-        {/* Info */}
         <View style={styles.sensorInfo}>
           <Text style={styles.sensorLabel}>{label}</Text>
           <Text style={styles.sensorPosition}>{position}</Text>
@@ -317,16 +272,13 @@ const { userId } = useAuth();
           {saved && !connected && (
             <Text style={styles.savedHint}>saved — tap auto-connect to reconnect</Text>
           )}
-          {/* Show hardware name as a sub-label when connected */}
           {connected && saved?.hardwareName && (
             <Text style={styles.hardwareName}>{saved.hardwareName}</Text>
           )}
         </View>
 
-        {/* Actions */}
         <View style={styles.sensorActions}>
           {hasSavedOrConnected ? (
-            // Forget available whenever saved, regardless of connection state
             <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice(slot)}>
               <Text style={styles.actionBtnDangerText}>forget</Text>
             </Pressable>
@@ -345,12 +297,7 @@ const { userId } = useAuth();
 
   return (
     <SafeAreaView style={styles.safe}>
-
-      {/* 3-position calibration modal */}
-      <CalibrationModal
-        visible={showCalibModal}
-        onClose={() => setShowCalibModal(false)}
-      />
+      <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
@@ -393,7 +340,7 @@ const { userId } = useAuth();
           <SensorRow slot="bottom" label="bottom s'pot" position="lower back, just above your waistband" />
         </View>
 
-        {/* Auto-connect — only show when there are saved devices and not both connected */}
+        {/* Auto-connect button */}
         {(savedTop || savedBottom) && !bothConnected && (
           <Pressable
             style={[styles.primaryBtn, isAutoConnecting && { opacity: 0.6 }]}
@@ -414,28 +361,20 @@ const { userId } = useAuth();
           </Pressable>
         )}
 
-        {/* Device picker — filtered to hide already-connected devices */}
+        {/* Device picker */}
         {assigningSlot !== null && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              {isScanning
-                ? "scanning for s'pots…"
-                : `select your ${assigningSlot} s'pot`}
+              {isScanning ? "scanning for s'pots…" : `select your ${assigningSlot} s'pot`}
             </Text>
-            {isScanning && (
-              <ActivityIndicator color={colours.primary} style={{ marginVertical: 12 }} />
-            )}
+            {isScanning && <ActivityIndicator color={colours.primary} style={{ marginVertical: 12 }} />}
             {availableDevices.length === 0 && !isScanning && (
               <Text style={styles.emptyText}>
                 no s'pots found. make sure yours is powered on and nearby.
               </Text>
             )}
             {availableDevices.map((device: Device) => (
-              <Pressable
-                key={device.id}
-                style={styles.deviceRow}
-                onPress={() => handleConnect(device)}
-              >
+              <Pressable key={device.id} style={styles.deviceRow} onPress={() => handleConnect(device)}>
                 <Ionicons name="hardware-chip-outline" size={18} color={colours.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.deviceName}>{device.name ?? "unknown s'pot"}</Text>
@@ -454,24 +393,32 @@ const { userId } = useAuth();
         <View style={styles.card}>
           <Text style={styles.cardTitle}>posture calibration</Text>
           <Text style={styles.cardDesc}>
-            calibrate while sitting in your ideal posture. this sets your personal
-            range of motion — all scores are measured relative to your body, not a population average.
+            5-position calibration captures your personal range of motion in all directions.
+            scores are relative to your body, not a population average.
           </Text>
 
           <View style={styles.calibrateContent}>
             <IdealPostureDiagram size={110} />
             <View style={styles.calibrateRight}>
               <View style={styles.checklistSmall}>
-                {["feet flat", "back straight", "shoulders relaxed", "eyes level"].map((t) => (
+                {["upright neutral","max forward lean","max backward lean","max right lean","max left lean"].map((t, i) => (
                   <View key={t} style={styles.checkRowSmall}>
-                    <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                    <Ionicons
+                      name={calibration.stepComplete[i] ? "checkmark-circle" : "ellipse-outline"}
+                      size={14}
+                      color={calibration.stepComplete[i] ? "#4CAF50" : "#ccc"}
+                    />
                     <Text style={styles.checkTextSmall}>{t}</Text>
                   </View>
                 ))}
               </View>
 
               <Pressable
-                style={[styles.calibrateBtn, !bothConnected && { opacity: 0.4 }]}
+                style={[
+                  styles.calibrateBtn,
+                  !bothConnected && { opacity: 0.4 },
+                  calibration.isComplete && { backgroundColor: colours.primary, borderColor: colours.primary },
+                ]}
                 onPress={() => bothConnected && setShowCalibModal(true)}
                 disabled={!bothConnected}
               >
@@ -498,6 +445,23 @@ const { userId } = useAuth();
               )}
             </View>
           </View>
+
+          {/* ROM summary — shown once calibrated */}
+          {calibration.isComplete && clinicalBaseline && (
+            <View style={styles.romSummary}>
+              {[
+                { label: "forward",  value: clinicalBaseline.maxForwardDeg.toFixed(1)  },
+                { label: "backward", value: clinicalBaseline.maxBackwardDeg.toFixed(1) },
+                { label: "right",    value: clinicalBaseline.maxRightDeg.toFixed(1)    },
+                { label: "left",     value: clinicalBaseline.maxLeftDeg.toFixed(1)     },
+              ].map((row) => (
+                <View key={row.label} style={styles.romRow}>
+                  <Text style={styles.romLabel}>{row.label}</Text>
+                  <Text style={styles.romValue}>{row.value}°</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Placement guide */}
@@ -537,8 +501,8 @@ const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: "#F5F3FF" },
   container: { paddingHorizontal: 16, paddingTop: 8 },
 
-  header:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-  backBtn:   { padding: 4 },
+  header:      { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  backBtn:     { padding: 4 },
   headerTitle: { fontSize: 22, fontWeight: "700", color: colours.textPrimary },
   headerSub:   { fontSize: 13, color: colours.textSecondary },
 
@@ -564,48 +528,37 @@ const styles = StyleSheet.create({
   savedHint:       { fontSize: 11, color: colours.primary, marginTop: 3 },
   sensorActions:   { alignItems: "flex-end", gap: 6 },
 
-  actionBtn: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    borderWidth: 1.5, borderColor: colours.primary,
-    borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12,
-  },
+  actionBtn:           { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
   actionBtnText:       { fontSize: 12, fontWeight: "600", color: colours.primary },
   actionBtnDanger:     { borderWidth: 1.5, borderColor: "#F44336", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
   actionBtnDangerText: { fontSize: 12, fontWeight: "600", color: "#F44336" },
 
   divider: { height: 1, backgroundColor: "#F0F0F0", marginVertical: 8 },
 
-  primaryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, backgroundColor: colours.primary,
-    borderRadius: 30, paddingVertical: 14, marginBottom: 16,
-  },
+  primaryBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, marginBottom: 16 },
   primaryBtnText: { fontSize: 15, fontWeight: "700", color: "#fff" },
 
-  deviceRow: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0",
-  },
+  deviceRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   deviceName: { fontSize: 14, fontWeight: "600", color: colours.textPrimary },
   deviceId:   { fontSize: 11, color: colours.textSecondary, marginTop: 2 },
   emptyText:  { fontSize: 13, color: colours.textSecondary, marginVertical: 12, textAlign: "center" },
   cancelRow:  { alignItems: "center", marginTop: 12 },
   cancelText: { fontSize: 14, color: colours.textSecondary },
 
-  calibrateContent: { flexDirection: "row", alignItems: "center", gap: 16 },
-  calibrateRight:   { flex: 1, gap: 12 },
-  checklistSmall:   { gap: 6 },
-  checkRowSmall:    { flexDirection: "row", alignItems: "center", gap: 6 },
-  checkTextSmall:   { fontSize: 12, color: colours.textPrimary },
-  calibrateBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderWidth: 1.5, borderColor: colours.primary,
-    borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14,
-    justifyContent: "center",
-  },
-  calibrateBtnText: { fontSize: 13, fontWeight: "600", color: colours.primary },
-  calibratedNote:   { fontSize: 11, color: "#4CAF50", fontWeight: "600" },
-  disabledNote:     { fontSize: 11, color: colours.textSecondary },
+  calibrateContent:  { flexDirection: "row", alignItems: "center", gap: 16 },
+  calibrateRight:    { flex: 1, gap: 12 },
+  checklistSmall:    { gap: 6 },
+  checkRowSmall:     { flexDirection: "row", alignItems: "center", gap: 6 },
+  checkTextSmall:    { fontSize: 12, color: colours.textPrimary },
+  calibrateBtn:      { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, justifyContent: "center" },
+  calibrateBtnText:  { fontSize: 13, fontWeight: "600", color: colours.primary },
+  calibratedNote:    { fontSize: 11, color: "#4CAF50", fontWeight: "600" },
+  disabledNote:      { fontSize: 11, color: colours.textSecondary },
+
+  romSummary: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
+  romRow:     { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#F5F3FF", borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10 },
+  romLabel:   { fontSize: 12, color: colours.textSecondary },
+  romValue:   { fontSize: 12, fontWeight: "700", color: colours.primary },
 
   guideRow:   { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
   guideTitle: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, marginBottom: 2 },
