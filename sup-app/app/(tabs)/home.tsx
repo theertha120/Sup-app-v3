@@ -154,7 +154,9 @@ export default function HomeScreen() {
     return null;
   }, []);
 
-  const hasScore = postureStats !== null;
+  const MIN_MS = 30 * 60_000; // 30 minutes
+  const hasData = postureStats !== null && postureStats.totalMs > 0;
+  const hasEnoughData = postureStats !== null && postureStats.totalMs >= MIN_MS;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -213,11 +215,18 @@ export default function HomeScreen() {
       {/* Status Card */}
       <View style={styles.statusCard}>
         <Text style={styles.statusTitle}>Your posture status</Text>
-        {hasScore ? (
+        {hasEnoughData ? (
           <>
-            <Text style={styles.statusValue}>{getPostureStatus(postureStats.avgScore)}</Text>
+            <Text style={styles.statusValue}>{getPostureStatus(postureStats!.avgScore)}</Text>
             <Text style={styles.statusHint}>
-              {postureStats.goodPosturePercent.toFixed(0)}% good posture · {(postureStats.totalMs / 60000).toFixed(1)} min tracked · {getEncouragingMessage(postureStats.avgScore)}
+              {postureStats!.goodPosturePercent.toFixed(0)}% good posture · {(postureStats!.totalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(postureStats!.avgScore)}
+            </Text>
+          </>
+        ) : hasData ? (
+          <>
+            <Text style={styles.statusValue}>Not enough data</Text>
+            <Text style={styles.statusHint}>
+              Use your s'pots to get insights
             </Text>
           </>
         ) : (
