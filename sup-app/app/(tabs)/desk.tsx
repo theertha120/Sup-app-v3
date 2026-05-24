@@ -126,7 +126,7 @@ export default function DeskScreen() {
 
   const shsColor     = getScoreColor(shs);
   const shsLabel     = getScoreLabel(shs);
-  const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(1);
+  const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
   // Whether posture tracking is live — needs both connected AND neutral calibrated
   const isTracking = bothConnected && isNeutralCalibrated;
@@ -143,7 +143,7 @@ export default function DeskScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>desk mode</Text>
+            <Text style={styles.headerTitle}>Desk Mode</Text>
             <Text style={styles.headerSub}>
               {!bothConnected
                 ? "connect s'pots via s'pot setup"
@@ -226,7 +226,7 @@ export default function DeskScreen() {
             {/* Debug line — pitchDiff and rollDiff only, bottomAbsolutePitch removed */}
             {isTracking && posture && (
               <Text style={styles.debugText}>
-                Δpitch {posture.pitchDiff.toFixed(1)}°  Δroll {posture.rollDiff.toFixed(1)}°{"  "}{timeInStateMin}min
+                Δpitch {posture.pitchDiff.toFixed(2)}°  Δroll {posture.rollDiff.toFixed(2)}°{"  "}{timeInStateMin}min
               </Text>
             )}
           </View>
@@ -283,9 +283,9 @@ export default function DeskScreen() {
                 <Text style={styles.sensorDetailTitle}>{label}</Text>
                 {data ? (
                   <>
-                    <Text style={styles.sensorDetailValue}>pitch {data.angle.pitch.toFixed(1)}°</Text>
-                    <Text style={styles.sensorDetailValue}>roll  {data.angle.roll.toFixed(1)}°</Text>
-                    <Text style={styles.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(1)}°</Text>
+                    <Text style={styles.sensorDetailValue}>pitch {data.angle.pitch.toFixed(2)}°</Text>
+                    <Text style={styles.sensorDetailValue}>roll  {data.angle.roll.toFixed(2)}°</Text>
+                    <Text style={styles.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(2)}°</Text>
                   </>
                 ) : (
                   <Text style={styles.sensorDetailValue}>waiting…</Text>
