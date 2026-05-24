@@ -12,14 +12,14 @@
  * Classification approach:
  *   Works on OFFSET-CORRECTED relative angles between the two s'pots.
  *   A NeutralOffset (captured at step 1 of calibration) MUST be applied
- *   before classification is meaningful — without it, raw sensor offsets
- *   (which can be ±40° depending on how the s'pots are mounted) make
- *   all thresholds meaningless.
+ *   before classification is meaningful.
  *
- *   Hip hinge vs slouch discrimination (bottomAbsPitch) is a v0.2 feature
- *   requiring full 5-position calibration. For v1, all forward flexion
- *   beyond the neutral band is classified by relative angle alone — which
- *   is clinically valid and far more reliable than guessing from raw data.
+ *   KEY FIX: Backward lean is now handled by sign, not absolute value.
+ *   Previous version used Math.abs(pitchDiff) which caused backward lean
+ *   to be classified as forward lean. Now:
+ *     pitchDiff > 0  → forward flexion (disc compression risk)
+ *     pitchDiff < 0  → backward extension (facet joint loading, less urgent)
+ *     Both directions beyond neutral band → upright (not penalised in v1)
  *
  * Science references:
  *   Cho et al. (2023) Bioengineering 10(9):1051 — FEM intradiscal pressure
@@ -58,9 +58,6 @@ export type PostureState =
   | "tilted_left"    // lateral asymmetric loading (left)
   | "tilted_right";  // lateral asymmetric loading (right)
 
-// NOTE: hip_hinge removed from v1 — requires full calibration + bottomAbsPitch
-// to distinguish reliably from slouch. Reintroduce in v0.2 with quaternion math.
-
 export type PostureSeverity = "minimal" | "mild" | "moderate" | "severe";
 
 export interface PostureClassification {
@@ -69,7 +66,6 @@ export interface PostureClassification {
   /**
    * Instant posture quality 0–100.
    * Used for the animated figure colour ONLY — not the session SHS.
-   * Reflects posture at this moment, not duration.
    */
   instantScore: number;
   /** Offset-corrected sagittal inter-s'pot angle (deg). Positive = forward. */
@@ -82,9 +78,6 @@ export interface PostureClassification {
  * Neutral offset captured at calibration step 1.
  * Applied to every reading so classification is relative to the user's
  * actual upright sitting position, not raw sensor mounting orientation.
- *
- * This is the MINIMUM required for correct classification.
- * Without it, raw sensor offsets (±40°) make thresholds meaningless.
  */
 export interface NeutralOffset {
   topPitch:    number;
@@ -95,9 +88,6 @@ export interface NeutralOffset {
 
 /**
  * Full 5-position calibration baseline.
- * Extends NeutralOffset with personal ROM ceilings.
- * Used for personalised SHS scoring (v1).
- * Required for hip hinge discrimination (v0.2).
  */
 export interface ClinicalBaseline {
   neutral:        NeutralOffset;
@@ -113,31 +103,38 @@ export interface ClinicalBaseline {
 // Applied to OFFSET-CORRECTED relative inter-s'pot angles.
 // At neutral upright (after offset applied), pitchDiff ≈ 0° and rollDiff ≈ 0°.
 //
-// Sagittal (forward/back) bands — relative lumbar flexion:
-//   -5° to +10°   upright      neutral lordosis preserved
-//   +10° to +15°  transition   early flexion — watch and wait
-//   +15° to +25°  forward_lean lumbar flexion beginning (disc loading)
-//   +25° to +40°  slouched     significant rounding (ligament stretch)
-//   >+40°         severe       passive ligament zone (McGill creep)
+// Sagittal classification uses SIGNED pitchDiff:
+//   pitchDiff > 0 = forward flexion (the clinically significant direction)
+//   pitchDiff < 0 = backward extension (generally benign when seated)
 //
-// Lateral bands — relative lateral bending:
-//   ±8°           neutral      within normal micro-movement range
-//   >±8°          tilted       asymmetric disc loading begins
+// Bands (forward only — positive pitchDiff):
+//   0° to +12°    upright      neutral lordosis preserved (widened from 10°)
+//   +12° to +18°  transition   early flexion — watch and wait
+//   +18° to +28°  forward_lean lumbar flexion beginning
+//   +28° to +42°  slouched     significant rounding
+//   >+42°         severe       passive ligament zone
 //
-// NOTE: These thresholds apply AFTER neutral offset is subtracted.
-// Raw sensor values without offset are meaningless for classification.
+// Backward extension (negative pitchDiff):
+//   0° to -15°    upright      normal seated extension, no concern
+//   < -15°        upright      still classified upright — facet loading
+//                              is less acute than disc compression seated
+//                              (v0.2 may add back_lean state if needed)
+//
+// Lateral bands:
+//   ±8°           neutral
+//   >±8°          tilted
 
-const NEUTRAL_MAX   =  10; // deg — upright ceiling
-const TRANSITION_MAX=  15; // deg — transition ceiling
-const FORWARD_MAX   =  25; // deg — forward_lean ceiling
-const SLOUCH_MAX    =  40; // deg — slouched ceiling (>40 = severe)
-const LATERAL_MAX   =   8; // deg — neutral lateral ceiling
+const NEUTRAL_FORWARD_MAX =  12; // deg — forward neutral ceiling (widened from 10)
+const TRANSITION_MAX      =  18; // deg
+const FORWARD_MAX         =  28; // deg
+const SLOUCH_MAX          =  42; // deg
+const LATERAL_MAX         =   8; // deg
 
 // ── BLE packet parser ─────────────────────────────────────────────────────────
 
 /**
  * Parse a 20-byte BLE notification packet from the IMU inside a s'pot.
- * Returns null if invalid (wrong header, wrong flag, or too short).
+ * Returns null if invalid.
  */
 export function parseIMUPacket(data: DataView): ParsedIMU | null {
   if (data.byteLength < 20) return null;
@@ -169,21 +166,16 @@ export function parseIMUPacket(data: DataView): ParsedIMU | null {
 }
 
 // ── Instant score helper ──────────────────────────────────────────────────────
-//
-// Per the spec:
-//   forward/transition → green (keep working, no penalty)
-//   lateral tilt       → yellow (duration-dependent)
-//   slouched/severe    → red (significant disc risk)
 
 function computeInstantScore(state: PostureState): number {
   switch (state) {
     case "upright":      return 100;
-    case "transition":   return 90;  // green — early drift, no alarm
-    case "forward_lean": return 80;  // green — forward tilt, no penalty short-term
+    case "transition":   return 90;
+    case "forward_lean": return 80;
     case "tilted_left":
-    case "tilted_right": return 65;  // yellow — lateral loading
-    case "slouched":     return 45;  // orange/red — disc compression
-    case "severe":       return 20;  // red — urgent
+    case "tilted_right": return 65;
+    case "slouched":     return 45;
+    case "severe":       return 20;
     default:             return 80;
   }
 }
@@ -196,14 +188,12 @@ function computeInstantScore(state: PostureState): number {
  * topSensor    = top s'pot    — upper back (T4–T6)
  * bottomSensor = bottom s'pot — lower back (L2–L4)
  *
- * IMPORTANT: Pass a NeutralOffset or ClinicalBaseline whenever available.
- * Without it, raw sensor mounting offsets (which can be ±40°) make all
- * classification thresholds meaningless. The user MUST complete calibration
- * step 1 (neutral upright) before posture tracking is reliable.
- *
  * Axis mapping (confirmed from physical device testing on WT9011DCL):
- *   sagittal flex  → roll axis  (sensor mounted vertically; roll = forward/back)
- *   lateral tilt   → pitch axis (negated for correct L/R direction)
+ *   sagittal flex → roll axis  (mounted vertically; roll = forward/back)
+ *   lateral tilt  → pitch axis (negated for correct L/R direction)
+ *
+ * IMPORTANT: Classification uses SIGNED pitchDiff, not absolute value.
+ * This correctly treats backward lean as upright rather than forward lean.
  */
 export function classifySpinePosture(
   topSensor:    ParsedIMU,
@@ -211,13 +201,12 @@ export function classifySpinePosture(
   baseline:     ClinicalBaseline | NeutralOffset | null = null
 ): PostureClassification {
 
-  // Extract neutral offset — works with either ClinicalBaseline or bare NeutralOffset
+  // Extract neutral offset from either type
   const neutral = baseline
     ? ("neutral" in baseline ? baseline.neutral : baseline)
     : null;
 
-  // Apply neutral offset so all angles are relative to the user's upright position.
-  // Without this, a -37° raw offset means neutral reads as -37° and all thresholds fail.
+  // Apply neutral offset — without this, raw mounting offsets corrupt all thresholds
   const topAngle = neutral ? {
     roll:  topSensor.angle.roll  - neutral.topRoll,
     pitch: topSensor.angle.pitch - neutral.topPitch,
@@ -230,53 +219,54 @@ export function classifySpinePosture(
     yaw:   bottomSensor.angle.yaw,
   } : bottomSensor.angle;
 
-  // Inter-s'pot relative angles (offset-corrected).
-  // At neutral upright these will be ≈0° regardless of mounting orientation.
-  // pitchDiff = sagittal lumbar flexion (positive = forward rounding)
-  // rollDiff  = lateral bending (positive = right tilt)
+  // Inter-s'pot relative angles (offset-corrected)
+  // pitchDiff POSITIVE = forward flexion (spine rounding forward)
+  // pitchDiff NEGATIVE = backward extension (leaning back)
+  // rollDiff  POSITIVE = right lateral tilt
   const pitchDiff = topAngle.roll   - bottomAngle.roll;    // sagittal (confirmed axis)
   const rollDiff  = -(topAngle.pitch - bottomAngle.pitch); // lateral  (confirmed axis)
 
-  const absPitch = Math.abs(pitchDiff);
-  const absRoll  = Math.abs(rollDiff);
+  const absRoll = Math.abs(rollDiff);
 
   // ── State classification ──────────────────────────────────────────────────
   //
-  // Lateral takes priority when it dominates.
-  // Sagittal classification uses absolute value — both forward and backward
-  // flexion beyond neutral is tracked (though backward is less common seated).
+  // Order of priority:
+  //   1. Lateral if dominant
+  //   2. Backward lean → upright (benign seated extension, not penalised)
+  //   3. Forward bands by signed pitchDiff
 
   let state:    PostureState;
   let severity: PostureSeverity;
 
-  if (absRoll > LATERAL_MAX && absRoll > absPitch * 0.7) {
+  if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff) * 0.7) {
     // Lateral bending is dominant
-    // 0.7 factor prevents lateral from overriding clear forward flexion
     state    = rollDiff > 0 ? "tilted_right" : "tilted_left";
     severity = absRoll > LATERAL_MAX * 2 ? "moderate" : "mild";
 
-  } else if (absPitch <= NEUTRAL_MAX) {
-    // Within neutral band — upright
+  } else if (pitchDiff <= NEUTRAL_FORWARD_MAX) {
+    // At or behind neutral (includes all backward lean) → upright
+    // Backward extension in seated posture is generally benign and self-limiting.
+    // The chair backrest prevents extreme extension naturally.
     state    = "upright";
     severity = "minimal";
 
-  } else if (absPitch <= TRANSITION_MAX) {
-    // 10–15° — early flexion, watch and wait
+  } else if (pitchDiff <= TRANSITION_MAX) {
+    // +12° to +18° — early forward flexion, watch and wait
     state    = "transition";
     severity = "mild";
 
-  } else if (absPitch <= FORWARD_MAX) {
-    // 15–25° — lumbar flexion beginning
+  } else if (pitchDiff <= FORWARD_MAX) {
+    // +18° to +28° — lumbar flexion beginning
     state    = "forward_lean";
     severity = "mild";
 
-  } else if (absPitch <= SLOUCH_MAX) {
-    // 25–40° — significant rounding, disc compression zone
+  } else if (pitchDiff <= SLOUCH_MAX) {
+    // +28° to +42° — significant rounding, disc compression
     state    = "slouched";
     severity = "moderate";
 
   } else {
-    // >40° — passive ligament loading zone (McGill & Solomonow)
+    // >+42° — passive ligament loading zone
     state    = "severe";
     severity = "severe";
   }
@@ -291,33 +281,24 @@ export function classifySpinePosture(
 }
 
 // ── Intervention timer thresholds ─────────────────────────────────────────────
-//
-// Time in state before an intervention alert fires.
-// Based on EMG fatigue and McGill/Solomonow creep research.
-// Values in milliseconds.
 
 export const INTERVENTION_THRESHOLDS_MS: Partial<Record<PostureState, number>> = {
-  forward_lean: 15 * 60 * 1000,   // 15 min — disc loading accumulates
-  slouched:     20 * 60 * 1000,   // 20 min — ligament creep threshold (McGill)
-  severe:        5 * 60 * 1000,   // 5 min  — passive ligament zone, urgent
-  tilted_left:  15 * 60 * 1000,   // 15 min — asymmetric disc loading
+  forward_lean: 15 * 60 * 1000,
+  slouched:     20 * 60 * 1000,
+  severe:        5 * 60 * 1000,
+  tilted_left:  15 * 60 * 1000,
   tilted_right: 15 * 60 * 1000,
-  // upright, transition: no intervention
 };
 
-// ── SHS accumulation rates ────────────────────────────────────────────────────
-//
-// Spine Health Score (SHS) rates in points per SECOND.
-// Positive = recovery (neutral), negative = deduction (bad posture).
-// Grace periods apply before deduction starts.
+// ── SHS accumulation rates (pts/second) ──────────────────────────────────────
 
 export const SHS_RATES: Record<PostureState, number> = {
-  upright:       0.033,   // +2 pts/min — active recovery
-  transition:    0,       // no penalty — too early to penalise
-  forward_lean:  0,       // no penalty — forward tilt kept green per spec
-  slouched:     -0.033,   // -2 pts/min — disc compression
-  severe:       -0.067,   // -4 pts/min — urgent
-  tilted_left:  -0.020,   // -1.2 pts/min — lateral loading
+  upright:       0.033,
+  transition:    0,
+  forward_lean:  0,
+  slouched:     -0.033,
+  severe:       -0.067,
+  tilted_left:  -0.020,
   tilted_right: -0.020,
 };
 
@@ -325,13 +306,13 @@ export const SHS_GRACE_PERIODS_MS: Record<PostureState, number> = {
   upright:       0,
   transition:    0,
   forward_lean:  0,
-  slouched:      3 * 60 * 1000,  // 3-min grace — short slouches are normal
-  severe:        0,               // no grace
+  slouched:      3 * 60 * 1000,
+  severe:        0,
   tilted_left:   2 * 60 * 1000,
   tilted_right:  2 * 60 * 1000,
 };
 
-// ── UI strings (s'up brand language) ─────────────────────────────────────────
+// ── UI strings ────────────────────────────────────────────────────────────────
 
 export const POSTURE_LABELS: Record<PostureState, string> = {
   upright:      "good alignment",
@@ -367,8 +348,6 @@ export const SEVERITY_DESCRIPTIONS: Record<PostureSeverity, string> = {
   severe:   "high spinal loading — adjust your position now.",
 };
 
-// ── Intervention messages ─────────────────────────────────────────────────────
-
 export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
   title: string; body: string; cue: string;
 }>> = {
@@ -399,7 +378,6 @@ export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
   },
 };
 
-/** Shown when user has been static for 20+ min in any state */
 export const MOVEMENT_NUDGE = {
   title: "time to move",
   body:  "you've been in the same position for a while. even a small shift significantly preserves lumbar and pelvic mobility.",
