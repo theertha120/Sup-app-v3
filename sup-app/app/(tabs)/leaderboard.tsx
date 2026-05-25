@@ -10,10 +10,9 @@ import {
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
-// import leaderboardData from "../../src/data/leaderboard.json";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
-import { CURRENT_USER_ID, type User } from "../../constants/env";
-import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
+import type { User } from "../../constants/env";
+import { supabase } from "../../src/lib/supabase";
 import { hasGoodPosture, updateStreak } from "../../src/services/posture/streakService";
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
@@ -99,12 +98,13 @@ export default function LeaderboardScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [sortMode, setSortMode] = useState<"streak" | "weekly">("streak");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [friendUsernameInput, setFriendUsernameInput] = useState("");
   const [friendStateVersion, setFriendStateVersion] = useState(0);
-
-  // For prototype: using Feb 27, 2026 as "today"
-  const MOCK_TODAY = new Date("2026-02-27");
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+  const [friends, setFriends] = useState<string[]>([]);
 
   const loadLeaderboard = useCallback(() => {
     fetchLeaderboardByStreak()
@@ -134,27 +134,68 @@ export default function LeaderboardScreen() {
     if (users.length === 0) return;
     ensureFriendDirectory(users);
 
-    const currentUsername = getUsernameForUser(CURRENT_USER_ID);
-    const hasAnyRequests =
-      getIncomingPendingRequests(CURRENT_USER_ID).length > 0 ||
-      getOutgoingPendingRequests(CURRENT_USER_ID).length > 0;
-
-    if (!hasAnyRequests && currentUsername) {
-      const demoSenders = users
-        .filter((user) => user.id !== CURRENT_USER_ID)
-        .slice(0, 2);
-
-      demoSenders.forEach((sender) => {
-        sendFriendRequestByUsername(sender.id, currentUsername, users);
-      });
+    const effectiveUserId = authUserId;
+    if (!effectiveUserId) {
+      // No authenticated user — clear friend state
+      setIncomingRequests([]);
+      setOutgoingRequests([]);
+      setFriends([]);
+      return;
     }
 
-    setFriendStateVersion((prev) => prev + 1);
-  }, [users]);
+    const currentUsername = getUsernameForUser(effectiveUserId);
+    (async () => {
+      try {
+        const inc = await getIncomingPendingRequests(effectiveUserId);
+        const out = await getOutgoingPendingRequests(effectiveUserId);
+        const fr = await getFriendsForUser(effectiveUserId);
+        setIncomingRequests(inc);
+        setOutgoingRequests(out);
+        setFriends(fr);
+
+        const hasAnyRequests = (inc?.length || 0) > 0 || (out?.length || 0) > 0;
+        if (!hasAnyRequests && currentUsername) {
+          const demoSenders = users
+            .filter((user) => user.id !== effectiveUserId)
+            .slice(0, 2);
+
+          for (const sender of demoSenders) {
+            // fire-and-forget demo requests
+            try {
+              await sendFriendRequestByUsername(sender.id, currentUsername, users);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("[leaderboard] friend data load failed", err);
+        setIncomingRequests([]);
+        setOutgoingRequests([]);
+        setFriends([]);
+      }
+    })();
+  }, [users, friendStateVersion, authUserId]);
 
   useEffect(() => {
     loadLeaderboard();
   }, [loadLeaderboard]);
+
+  // Fetch authenticated user id (if any) and use as effective current user
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!mounted) return;
+        if (data?.user) setAuthUserId(data.user.id);
+      } catch (err) {
+        // ignore
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -175,33 +216,24 @@ export default function LeaderboardScreen() {
 
   useEffect(() => {
     // NOTE: do NOT depend on `sortedUsers` here; it's a new array every render.
-    const baseUser = users.find((user) => user.id === CURRENT_USER_ID);
+    const effectiveUserId = authUserId;
+    if (!effectiveUserId) return;
+
+    const baseUser = users.find((user) => user.id === effectiveUserId);
     if (!baseUser) {
       return;
     }
 
-    const todayIso = MOCK_TODAY.toISOString().slice(0, 10); // Use mock date for prototype
-    const todayData = MOCK_POSTURE_DATA.find((data) => {
-      return data.userId === CURRENT_USER_ID && data.date === todayIso;
-    });
-
-    if (!todayData) {
-      setCurrentUserWithStreak(baseUser);
-      setHasGoodPostureToday(false);
-      return;
-    }
-
-    const goodToday = hasGoodPosture(todayData);
-    setHasGoodPostureToday(goodToday);
-
-    // For prototype: Don't recalculate streak, use data from leaderboard.json
+    // TODO: Query posture_daily table from Supabase for today's posture data
+    // For now, just use the user from leaderboard
     setCurrentUserWithStreak(baseUser);
-  }, [users]);
+    setHasGoodPostureToday(false);
+  }, [users, authUserId]);
 
-  const currentUser = currentUserWithStreak ??
-    users.find((user) => user.id === CURRENT_USER_ID);
-  const currentUserRank = currentUser
-    ? sortedUsers.findIndex((user) => user.id === CURRENT_USER_ID) + 1
+  const effectiveUserId = authUserId;
+  const currentUser = currentUserWithStreak ?? users.find((user) => user.id === effectiveUserId);
+  const currentUserRank = currentUser && effectiveUserId
+    ? sortedUsers.findIndex((user) => user.id === effectiveUserId) + 1
     : 0;
 
   const handleUserPress = (user: User) => {
@@ -230,22 +262,54 @@ export default function LeaderboardScreen() {
     setFriendStateVersion((prev) => prev + 1);
   };
 
-  const handleAcceptRequest = (requestId: string) => {
-    const result = acceptFriendRequest(requestId, CURRENT_USER_ID);
+  const handleAcceptRequest = async (requestId: string) => {
+    if (!authUserId) {
+      showToast("You must be signed in to accept requests", "error");
+      return;
+    }
+    // Optimistically update UI
+    const pending = incomingRequests.find((r) => r.id === requestId);
+    const fromId = pending?.fromUserId ?? null;
+    if (fromId) {
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setFriends((prev) => (prev.includes(fromId as string) ? prev : [...prev, fromId as string]));
+    }
+
+    const result = await acceptFriendRequest(requestId, authUserId);
+    if (!result.ok) {
+      // revert optimistic update
+      if (fromId) {
+        setIncomingRequests((prev) => [{ id: requestId, fromUserId: fromId, toUserId: authUserId, status: "pending", createdAt: null }, ...prev]);
+        setFriends((prev) => prev.filter((id) => id !== fromId));
+      }
+    }
     showToast(result.ok ? "New bestie unlocked" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
-  const handleRejectRequest = (requestId: string) => {
-    const result = rejectFriendRequest(requestId, CURRENT_USER_ID);
+  const handleRejectRequest = async (requestId: string) => {
+    if (!authUserId) {
+      showToast("You must be signed in to reject requests", "error");
+      return;
+    }
+    // Optimistically remove from incoming
+    const pending = incomingRequests.find((r) => r.id === requestId);
+    const fromId = pending?.fromUserId ?? null;
+    if (fromId) {
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+    }
+
+    const result = await rejectFriendRequest(requestId, authUserId);
+    if (!result.ok) {
+      // revert optimistic removal
+      if (pending) setIncomingRequests((prev) => [pending, ...prev]);
+    }
     showToast(result.ok ? "Request declined" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
-  const incomingRequests = getIncomingPendingRequests(CURRENT_USER_ID);
-  const outgoingRequests = getOutgoingPendingRequests(CURRENT_USER_ID);
-  const friends = getFriendsForUser(CURRENT_USER_ID);
-  const currentUsername = getUsernameForUser(CURRENT_USER_ID) ?? "Unknown User";
+  const effectiveUserIdForHelpers = authUserId;
+  const currentUsername = effectiveUserIdForHelpers ? getUsernameForUser(effectiveUserIdForHelpers) ?? "Unknown User" : "Unknown User";
   const normalizedSearch = friendUsernameInput.trim().toLowerCase();
 
   const incomingFromSet = new Set(incomingRequests.map((request) => request.fromUserId));
@@ -291,7 +355,7 @@ export default function LeaderboardScreen() {
       : users
           .filter(
             (user) =>
-              user.id !== CURRENT_USER_ID &&
+              (authUserId ? user.id !== authUserId : true) &&
               user.name.toLowerCase().startsWith(normalizedSearch)
           )
           .slice(0, 5);
@@ -426,7 +490,7 @@ export default function LeaderboardScreen() {
             key={user.id}
             rank={index + 1}
             user={user}
-            isCurrentUser={user.id === CURRENT_USER_ID}
+            isCurrentUser={authUserId ? user.id === authUserId : false}
             onPress={() => handleUserPress(user)}
           />
         ))}
@@ -467,12 +531,26 @@ export default function LeaderboardScreen() {
                     {status === "none" ? (
                       <Pressable
                         style={[styles.requestActionBtn, styles.acceptBtn]}
-                        onPress={() => {
-                          const result = sendFriendRequestByUsername(
-                            CURRENT_USER_ID,
+                        onPress={async () => {
+                          if (!effectiveUserIdForHelpers) {
+                            showToast("You must be signed in to send requests", "error");
+                            return;
+                          }
+                          // Optimistically add to outgoingRequests
+                          const toId = user.id;
+                          const tempId = `tmp-${Date.now()}`;
+                          const optimistic = { id: tempId, fromUserId: effectiveUserIdForHelpers, toUserId: toId, status: "pending", createdAt: null };
+                          setOutgoingRequests((prev) => [optimistic, ...prev]);
+
+                          const result = await sendFriendRequestByUsername(
+                            effectiveUserIdForHelpers,
                             user.name,
                             users
                           );
+                          if (!result.ok) {
+                            // revert optimistic
+                            setOutgoingRequests((prev) => prev.filter((r) => r.id !== tempId));
+                          }
                           showToast(
                             result.ok ? "Request sent" : result.message,
                             result.ok ? "success" : "error"
@@ -575,7 +653,7 @@ export default function LeaderboardScreen() {
       <ProfileModal
         visible={showProfileModal}
         user={selectedUser}
-        isCurrentUser={selectedUser?.id === CURRENT_USER_ID}
+        isCurrentUser={authUserId ? selectedUser?.id === authUserId : false}
         onClose={handleCloseProfile}
         onSave={handleSaveProfile}
       />

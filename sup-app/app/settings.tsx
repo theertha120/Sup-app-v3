@@ -80,6 +80,8 @@ export default function SettingsScreen() {
         <View style={styles.placeholder} />
       </View>
 
+      {/* Notifications removed — handled by reminder engine and local notifications only */}
+
       {/* Preferences Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
@@ -141,10 +143,13 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
+      {/* Device section removed — device management moved to Sensor Setup screen */}
+
       {/* Data & Privacy Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
-        
+        {/* Export Data removed — data export not supported in this build */}
+
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>

@@ -1,5 +1,4 @@
 import { supabase } from "@/src/lib/supabase";
-import { CURRENT_USER_ID } from "@/constants/env";
 
 export type BehaviorGoalId =
   | "study_posture"
@@ -95,12 +94,12 @@ async function getCurrentUserId(): Promise<string> {
     } = await supabase.auth.getUser();
 
     if (error || !user) {
-      return CURRENT_USER_ID;
+      throw new Error("No authenticated user");
     }
 
     return user.id;
   } catch {
-    return CURRENT_USER_ID;
+    throw new Error("No authenticated user");
   }
 }
 
