@@ -14,8 +14,8 @@ export default function GoalSelectionStep({
   value,
   onChange,
 }: {
-  value: BehaviorGoalId;
-  onChange: (value: BehaviorGoalId) => void;
+  value: BehaviorGoalId[];
+  onChange: (value: BehaviorGoalId[]) => void;
 }) {
   return (
     <View style={styles.step}>
@@ -25,8 +25,14 @@ export default function GoalSelectionStep({
           <Chip
             key={goal.id}
             label={goal.label}
-            selected={value === goal.id}
-            onPress={() => onChange(goal.id)}
+            selected={value.includes(goal.id)}
+            onPress={() => {
+              if (value.includes(goal.id)) {
+                onChange(value.filter((id) => id !== goal.id));
+              } else {
+                onChange([...value, goal.id]);
+              }
+            }}
           />
         ))}
       </View>

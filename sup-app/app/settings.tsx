@@ -6,6 +6,7 @@ import {
   Pressable,
   Switch,
   Modal,
+  ActivityIndicator
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -23,25 +24,7 @@ import {
   type BehaviorProfile,
 } from "../src/services/user/behaviorProfileService";
 
-const REMINDER_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2);
-  const minute = index % 2 === 0 ? 0 : 30;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-});
 
-function formatReminderTime(value: string): string {
-  const [hoursRaw, minutesRaw] = value.split(":");
-  const hours = Number(hoursRaw);
-  const minutes = Number(minutesRaw);
-
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-    return value;
-  }
-
-  const period = hours >= 12 ? "PM" : "AM";
-  const twelveHour = hours % 12 === 0 ? 12 : hours % 12;
-  return `${twelveHour}:${String(minutes).padStart(2, "0")} ${period}`;
-}
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
@@ -49,11 +32,11 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
+  const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
   
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
-  const [showReminderTimeModal, setShowReminderTimeModal] = useState(false);
 
   const updateSetting = <K extends keyof AppSettings>(
     key: K,
@@ -129,12 +112,15 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.settingItem}
           onPress={async () => {
-            setShowCoachingModal(true);
+            setLoadingCoachingProfile(true);
             try {
               const profile = await fetchCurrentBehaviorProfile();
               setInitialBehaviorProfile(profile);
             } catch {
               setInitialBehaviorProfile(null);
+            } finally {
+              setLoadingCoachingProfile(false);
+              setShowCoachingModal(true);
             }
           }}
         >
@@ -142,7 +128,10 @@ export default function SettingsScreen() {
             <Text style={styles.settingLabel}>Coaching preferences</Text>
             <Text style={styles.settingDescription}>Edit reminders, goals and active hours</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          {loadingCoachingProfile
+            ? <ActivityIndicator size="small" color={colours.primary} />
+            : <Text style={styles.chevron}>›</Text>
+          }
         </Pressable>
 
         <Pressable style={styles.settingItem} onPress={() => setShowUnitsModal(true)}>
@@ -331,60 +320,9 @@ export default function SettingsScreen() {
         </Pressable>
       </Modal>
 
-      {/* Reminder Time Selection Modal */}
-      <Modal
-        visible={showReminderTimeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowReminderTimeModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowReminderTimeModal(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Posture Reminder Time</Text>
-
-            <ScrollView style={styles.timeList} showsVerticalScrollIndicator={false}>
-              {REMINDER_TIME_OPTIONS.map((timeValue) => {
-                const selected = settings.postureReminderTime === timeValue;
-                return (
-                  <Pressable
-                    key={timeValue}
-                    style={[styles.modalOption, selected && styles.modalOptionSelected]}
-                    onPress={() => {
-                      updateSetting("postureReminderTime", timeValue, {
-                        toastMessage: "Reminder saved",
-                      });
-                      setShowReminderTimeModal(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.modalOptionText,
-                        selected && styles.modalOptionTextSelected,
-                      ]}
-                    >
-                      {formatReminderTime(timeValue)}
-                    </Text>
-                    {selected ? <Text style={styles.checkmark}>✓</Text> : null}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Pressable
-              style={styles.modalCancel}
-              onPress={() => setShowReminderTimeModal(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-
       {/* Coaching setup modal (edit existing or create) */}
       <CoachingSetupModal
+        key={showCoachingModal ? "open" : "closed"}
         visible={showCoachingModal}
         initialProfile={initialBehaviorProfile}
         onComplete={() => {
@@ -559,8 +497,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontWeight: "600",
-  },
-  timeList: {
-    maxHeight: 300,
   },
 });

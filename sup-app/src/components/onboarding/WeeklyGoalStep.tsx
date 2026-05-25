@@ -12,8 +12,8 @@ export default function WeeklyGoalStep({
   value,
   onChange,
 }: {
-  value: WeeklyGoalId;
-  onChange: (value: WeeklyGoalId) => void;
+  value: WeeklyGoalId[];
+  onChange: (value: WeeklyGoalId[]) => void;
 }) {
   return (
     <View style={styles.step}>
@@ -23,8 +23,14 @@ export default function WeeklyGoalStep({
           <Chip
             key={option.id}
             label={option.label}
-            selected={value === option.id}
-            onPress={() => onChange(option.id)}
+            selected={value.includes(option.id)}
+            onPress={() => {
+              if (value.includes(option.id)) {
+                onChange(value.filter((id) => id !== option.id));
+              } else {
+                onChange([...value, option.id]);
+              }
+            }}
           />
         ))}
       </View>

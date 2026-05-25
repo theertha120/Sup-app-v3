@@ -28,41 +28,45 @@ export type ActiveTimePreset =
   | "late_night";
 
 export interface BehaviorProfile {
-  primaryGoal: BehaviorGoalId;
-  preferredTone: ReminderTone;
+  primaryGoals: BehaviorGoalId[];
+  preferredTones: ReminderTone[];
   reminderFrequency: ReminderFrequency;
+  activeTimePresets: ActiveTimePreset[]; // replaces activeTimeStart/End
   activeTimeStart: string;
   activeTimeEnd: string;
-  weeklyGoal: WeeklyGoalId;
+  weeklyGoals: WeeklyGoalId[];
 }
 
 export interface BehaviorProfileInput {
-  primaryGoal: BehaviorGoalId;
-  preferredTone: ReminderTone;
+  primaryGoals: BehaviorGoalId[];
+  preferredTones: ReminderTone[];
   reminderFrequency: ReminderFrequency;
+  activeTimePresets: ActiveTimePreset[];
   activeTimeStart: string;
   activeTimeEnd: string;
-  weeklyGoal: WeeklyGoalId;
+  weeklyGoals: WeeklyGoalId[];
 }
 
 type BehaviorProfileRow = {
-  primary_goal: BehaviorGoalId | null;
-  preferred_tone: ReminderTone | null;
+  primary_goals: BehaviorGoalId[] | null;
+  preferred_tones: ReminderTone[] | null;
   reminder_frequency: ReminderFrequency | null;
   active_time_start: string | null;
   active_time_end: string | null;
-  weekly_goal: WeeklyGoalId | null;
+  active_time_presets: ActiveTimePreset[] | null;
+  weekly_goals: WeeklyGoalId[] | null;
 };
 
 // Persistence now uses Supabase table `user_profile`.
 
 export const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
-  primaryGoal: "general_posture_awareness",
-  preferredTone: "gentle",
+  primaryGoals: ["general_posture_awareness"],
+  preferredTones: ["gentle"],
   reminderFrequency: "light",
-  activeTimeStart: "09:00",
-  activeTimeEnd: "17:00",
-  weeklyGoal: "awareness_only",
+  activeTimePresets: ["afternoon"],
+  activeTimeStart: "12:00",
+  activeTimeEnd: "16:59",
+  weeklyGoals: ["awareness_only"],
 };
 
 const PRESET_RANGES: Record<
@@ -74,6 +78,13 @@ const PRESET_RANGES: Record<
   evening: { start: "17:00", end: "20:59" },
   late_night: { start: "21:00", end: "01:00" },
 };
+
+const PRESET_ORDER: ActiveTimePreset[] = [
+  "morning",
+  "afternoon",
+  "evening",
+  "late_night",
+];
 
 async function getCurrentUserId(): Promise<string> {
   try {
@@ -94,23 +105,27 @@ async function getCurrentUserId(): Promise<string> {
 
 function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | null {
   if (
-    !row.primary_goal ||
-    !row.preferred_tone ||
+    !row.primary_goals?.length ||
+    !row.preferred_tones?.length ||
     !row.reminder_frequency ||
     !row.active_time_start ||
     !row.active_time_end ||
-    !row.weekly_goal 
+    !row.weekly_goals?.length
   ) {
     return null;
   }
 
+  const activeTimePresets: ActiveTimePreset[] =
+    row.active_time_presets?.length ? row.active_time_presets : ["afternoon"];
+
   return {
-    primaryGoal: row.primary_goal,
-    preferredTone: row.preferred_tone,
+    primaryGoals: row.primary_goals,
+    preferredTones: row.preferred_tones,
     reminderFrequency: row.reminder_frequency,
+    activeTimePresets,
     activeTimeStart: row.active_time_start,
     activeTimeEnd: row.active_time_end,
-    weeklyGoal: row.weekly_goal,
+    weeklyGoals: row.weekly_goals,
   };
 }
 
@@ -126,14 +141,29 @@ export function getPresetBehaviorHours(
   return PRESET_RANGES[preset];
 }
 
+export function resolveTimeRangeFromPresets(presets: ActiveTimePreset[]): {
+  start: string;
+  end: string;
+} {
+  if (presets.length === 0) return { start: "09:00", end: "17:00" };
+  const sorted = [...presets].sort(
+    (a, b) => PRESET_ORDER.indexOf(a) - PRESET_ORDER.indexOf(b)
+  );
+  return {
+    start: PRESET_RANGES[sorted[0]].start,
+    end: PRESET_RANGES[sorted[sorted.length - 1]].end,
+  };
+}
+
 export function createDefaultBehaviorProfile(): BehaviorProfileInput {
   return {
-    primaryGoal: DEFAULT_BEHAVIOR_PROFILE.primaryGoal,
-    preferredTone: DEFAULT_BEHAVIOR_PROFILE.preferredTone,
+    primaryGoals: DEFAULT_BEHAVIOR_PROFILE.primaryGoals,
+    preferredTones: DEFAULT_BEHAVIOR_PROFILE.preferredTones,
     reminderFrequency: DEFAULT_BEHAVIOR_PROFILE.reminderFrequency,
+    activeTimePresets: DEFAULT_BEHAVIOR_PROFILE.activeTimePresets,
     activeTimeStart: DEFAULT_BEHAVIOR_PROFILE.activeTimeStart,
     activeTimeEnd: DEFAULT_BEHAVIOR_PROFILE.activeTimeEnd,
-    weeklyGoal: DEFAULT_BEHAVIOR_PROFILE.weeklyGoal,
+    weeklyGoals: DEFAULT_BEHAVIOR_PROFILE.weeklyGoals,
   };
 }
 
@@ -145,7 +175,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     const { data, error } = await supabase
       .from("user_profile")
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -172,14 +202,16 @@ export async function saveCurrentBehaviorProfile(
 ): Promise<BehaviorProfile> {
   const userId = await getCurrentUserId();
   const profile = toProfileInput(profileInput);
+  const { start, end } = resolveTimeRangeFromPresets(profileInput.activeTimePresets);
 
     const payload = {
-    primary_goal: profile.primaryGoal,
-    preferred_tone: profile.preferredTone,
-    reminder_frequency: profile.reminderFrequency,
-    active_time_start: profile.activeTimeStart,
-    active_time_end: profile.activeTimeEnd,
-    weekly_goal: profile.weeklyGoal,
+      primary_goals: profileInput.primaryGoals,
+      preferred_tones: profileInput.preferredTones,
+      reminder_frequency: profileInput.reminderFrequency,
+      active_time_presets: profileInput.activeTimePresets,
+      active_time_start: start,
+      active_time_end: end,
+      weekly_goals: profileInput.weeklyGoals
   };
 
   // Upsert into `user_profile` table. Throw on error so callers know if save failed.
@@ -190,7 +222,7 @@ export async function saveCurrentBehaviorProfile(
       .from("user_profile")
       .upsert(payloadWithAuthId, { onConflict: "id" })
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
       )
       .maybeSingle();
 
