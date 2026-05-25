@@ -18,14 +18,14 @@ const FREQUENCIES: { id: ReminderFrequency; label: string }[] = [
 ];
 
 export default function ReminderPreferencesStep({
-  tone,
+  tones,
   frequency,
-  onToneChange,
+  onTonesChange,
   onFrequencyChange,
 }: {
-  tone: ReminderTone;
+  tones: ReminderTone[];
   frequency: ReminderFrequency;
-  onToneChange: (value: ReminderTone) => void;
+  onTonesChange: (value: ReminderTone[]) => void;
   onFrequencyChange: (value: ReminderFrequency) => void;
 }) {
   return (
@@ -37,8 +37,14 @@ export default function ReminderPreferencesStep({
             <Chip
               key={option.id}
               label={option.label}
-              selected={tone === option.id}
-              onPress={() => onToneChange(option.id)}
+              selected={tones.includes(option.id)}
+              onPress={() => {
+                if (tones.includes(option.id)) {
+                  onTonesChange(tones.filter((id) => id !== option.id));
+                } else {
+                  onTonesChange([...tones, option.id]);
+                }
+              }}
             />
           ))}
         </View>

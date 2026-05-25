@@ -11,19 +11,11 @@ const PRESETS: { id: ActiveTimePreset; label: string }[] = [
 ];
 
 export default function ActiveHoursStep({
-  preset,
-  activeTimeStart,
-  activeTimeEnd,
-  onPresetChange,
-  onStartTimeChange,
-  onEndTimeChange,
+  presets,
+  onPresetsChange,
 }: {
-  preset: ActiveTimePreset;
-  activeTimeStart: string;
-  activeTimeEnd: string;
-  onPresetChange: (value: ActiveTimePreset) => void;
-  onStartTimeChange: (value: string) => void;
-  onEndTimeChange: (value: string) => void;
+  presets: ActiveTimePreset[];
+  onPresetsChange: (value: ActiveTimePreset[]) => void;
 }) {
   return (
     <View style={styles.step}>
@@ -33,8 +25,14 @@ export default function ActiveHoursStep({
           <Chip
             key={option.id}
             label={option.label}
-            selected={preset === option.id}
-            onPress={() => onPresetChange(option.id)}
+            selected={presets.includes(option.id)}
+            onPress={() => {
+              if (presets.includes(option.id)) {
+                onPresetsChange(presets.filter((id) => id !== option.id));
+              } else {
+                onPresetsChange([...presets, option.id]);
+              }
+            }}
           />
         ))}
       </View>
