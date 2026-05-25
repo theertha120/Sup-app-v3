@@ -46,12 +46,12 @@ export interface BehaviorProfileInput {
 }
 
 type BehaviorProfileRow = {
-  primary_goal: BehaviorGoalId | null;
-  preferred_tone: ReminderTone | null;
+  primary_goals: BehaviorGoalId | null;
+  preferred_tones: ReminderTone | null;
   reminder_frequency: ReminderFrequency | null;
   active_time_start: string | null;
   active_time_end: string | null;
-  weekly_goal: WeeklyGoalId | null;
+  weekly_goals: WeeklyGoalId | null;
 };
 
 // Persistence now uses Supabase table `user_profile`.
@@ -94,23 +94,23 @@ async function getCurrentUserId(): Promise<string> {
 
 function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | null {
   if (
-    !row.primary_goal ||
-    !row.preferred_tone ||
+    !row.primary_goals ||
+    !row.preferred_tones ||
     !row.reminder_frequency ||
     !row.active_time_start ||
     !row.active_time_end ||
-    !row.weekly_goal 
+    !row.weekly_goals 
   ) {
     return null;
   }
 
   return {
-    primaryGoal: row.primary_goal,
-    preferredTone: row.preferred_tone,
+    primaryGoal: row.primary_goals,
+    preferredTone: row.preferred_tones,
     reminderFrequency: row.reminder_frequency,
     activeTimeStart: row.active_time_start,
     activeTimeEnd: row.active_time_end,
-    weeklyGoal: row.weekly_goal,
+    weeklyGoal: row.weekly_goals,
   };
 }
 
@@ -145,7 +145,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     const { data, error } = await supabase
       .from("user_profile")
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, weekly_goals"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -174,12 +174,12 @@ export async function saveCurrentBehaviorProfile(
   const profile = toProfileInput(profileInput);
 
     const payload = {
-    primary_goal: profile.primaryGoal,
-    preferred_tone: profile.preferredTone,
+    primary_goals: profile.primaryGoal,
+    preferred_tones: profile.preferredTone,
     reminder_frequency: profile.reminderFrequency,
     active_time_start: profile.activeTimeStart,
     active_time_end: profile.activeTimeEnd,
-    weekly_goal: profile.weeklyGoal,
+    weekly_goals: profile.weeklyGoal,
   };
 
   // Upsert into `user_profile` table. Throw on error so callers know if save failed.
@@ -190,7 +190,7 @@ export async function saveCurrentBehaviorProfile(
       .from("user_profile")
       .upsert(payloadWithAuthId, { onConflict: "id" })
       .select(
-        "primary_goal, preferred_tone, reminder_frequency, active_time_start, active_time_end, weekly_goal"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, weekly_goals"
       )
       .maybeSingle();
 
