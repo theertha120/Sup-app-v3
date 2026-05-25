@@ -1,19 +1,15 @@
 /**
  * useSessionStats.ts
  *
- * Tracks time spent in each posture state across three windows:
- *   session — since the s'pots connected this sitting session
- *   today   — midnight to now (survives tab navigation, resets at midnight)
- *   week    — last 7 days rolling
+ * Tracks time spent in each posture state across:
+ *   session  — since s'pots connected this session
+ *   today    — midnight to now
+ *   week     — last 7 days rolling, with per-day breakdown for bar chart
  *
- * Persists daily totals to AsyncStorage so "today" and "week" survive
- * app restarts within the same day. Session always starts fresh on connect.
- *
- * Usage:
- *   const { sessionStats, todayStats, weekStats } = useSessionStats(posture?.state);
+ * Persists daily totals to AsyncStorage so data survives app restarts.
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 
@@ -21,35 +17,47 @@ import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 
 export type StateTimeMap = Partial<Record<DeskPostureState, number>>; // ms per state
 
-export interface SessionStats {
-  /** Time in each state this session (ms) */
-  session: StateTimeMap;
-  /** Time in each state today (ms) — includes session */
-  today:   StateTimeMap;
-  /** Time in each state over the last 7 days (ms) */
-  week:    StateTimeMap;
-  /** Total tracked time this session (ms) */
-  sessionTotalMs: number;
-  /** Total tracked time today (ms) */
-  todayTotalMs: number;
+/** One day's data for the bar chart */
+export interface DayData {
+  /** Short day label e.g. "Mon", "Tue" */
+  label: string;
+  /** YYYY-MM-DD */
+  dateKey: string;
+  /** Time per posture state (ms) */
+  states: StateTimeMap;
+  /** Total desk time this day (ms) */
+  totalMs: number;
+  /** Whether this is today */
+  isToday: boolean;
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 const STATS_KEY_PREFIX = "sup_posture_stats_";
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function todayKey(): string {
-  return STATS_KEY_PREFIX + new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+function dateToKey(d: Date): string {
+  return STATS_KEY_PREFIX + d.toISOString().slice(0, 10);
 }
 
-function last7Keys(): string[] {
-  const keys: string[] = [];
-  for (let i = 0; i < 7; i++) {
+function todayKey(): string {
+  return dateToKey(new Date());
+}
+
+/** Returns last 7 days oldest→newest with labels */
+function last7Days(): { key: string; label: string; dateKey: string; isToday: boolean }[] {
+  const result = [];
+  for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    keys.push(STATS_KEY_PREFIX + d.toISOString().slice(0, 10));
+    result.push({
+      key:     dateToKey(d),
+      label:   DAY_LABELS[d.getDay()],
+      dateKey: d.toISOString().slice(0, 10),
+      isToday: i === 0,
+    });
   }
-  return keys;
+  return result;
 }
 
 function addToMap(map: StateTimeMap, state: DeskPostureState, ms: number): StateTimeMap {
@@ -73,48 +81,60 @@ function totalMs(map: StateTimeMap): number {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-const TICK_MS = 5_000; // update stats every 5 seconds
+const TICK_MS = 5_000;
 
 export function useSessionStats(currentState: DeskPostureState | undefined) {
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
+  const [weekDays,     setWeekDays]     = useState<DayData[]>([]);
   const [weekStats,    setWeekStats]    = useState<StateTimeMap>({});
 
-  // Persisted today totals loaded from AsyncStorage (excluding current session)
-  const persistedTodayRef = useRef<StateTimeMap>({});
-  const lastTickRef       = useRef<number>(Date.now());
-  const currentStateRef   = useRef<DeskPostureState | undefined>(currentState);
-  const sessionRef        = useRef<StateTimeMap>({});
+  const persistedTodayRef  = useRef<StateTimeMap>({});
+  const persistedWeekRef   = useRef<Record<string, StateTimeMap>>({}); // dateKey → StateTimeMap
+  const lastTickRef        = useRef<number>(Date.now());
+  const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
+  const sessionRef         = useRef<StateTimeMap>({});
 
-  // Keep currentStateRef in sync
-  useEffect(() => {
-    currentStateRef.current = currentState;
-  }, [currentState]);
+  useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
 
-  // ── Load persisted today + week on mount ──────────────────────────────────
+  // ── Load persisted data on mount ──────────────────────────────────────────
 
   useEffect(() => {
     const load = async () => {
       try {
-        // Today's persisted total (from previous sessions today)
-        const todayRaw = await AsyncStorage.getItem(todayKey());
-        const persisted: StateTimeMap = todayRaw ? JSON.parse(todayRaw) : {};
-        persistedTodayRef.current = persisted;
-        setTodayStats(persisted);
+        const days   = last7Days();
+        const raws   = await Promise.all(days.map((d) => AsyncStorage.getItem(d.key)));
+        const dayMap: Record<string, StateTimeMap> = {};
 
-        // Week — merge last 7 days
-        const keys = last7Keys();
-        const raws = await Promise.all(keys.map((k) => AsyncStorage.getItem(k)));
-        const maps = raws.map((r) => (r ? JSON.parse(r) : {})) as StateTimeMap[];
-        setWeekStats(mergeMaps(...maps));
+        days.forEach((d, i) => {
+          dayMap[d.dateKey] = raws[i] ? JSON.parse(raws[i]!) : {};
+        });
+
+        persistedWeekRef.current = dayMap;
+
+        // Today's persisted base
+        const todayDK = new Date().toISOString().slice(0, 10);
+        persistedTodayRef.current = dayMap[todayDK] ?? {};
+        setTodayStats(persistedTodayRef.current);
+
+        // Build week days array
+        const built: DayData[] = days.map((d) => ({
+          label:   d.label,
+          dateKey: d.dateKey,
+          states:  dayMap[d.dateKey] ?? {},
+          totalMs: totalMs(dayMap[d.dateKey] ?? {}),
+          isToday: d.isToday,
+        }));
+        setWeekDays(built);
+        setWeekStats(mergeMaps(...Object.values(dayMap)));
       } catch (e) {
-        console.warn("[useSessionStats] Failed to load stats:", e);
+        console.warn("[useSessionStats] Failed to load:", e);
       }
     };
     load();
   }, []);
 
-  // ── Tick interval — accumulate time ──────────────────────────────────────
+  // ── Tick interval ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -125,56 +145,62 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       const elapsed = now - lastTickRef.current;
       lastTickRef.current = now;
 
-      // Accumulate session
+      // Session
       sessionRef.current = addToMap(sessionRef.current, state, elapsed);
       setSessionStats({ ...sessionRef.current });
 
-      // Accumulate today (persisted base + session)
+      // Today live = persisted base + session
       const todayLive = mergeMaps(persistedTodayRef.current, sessionRef.current);
       setTodayStats(todayLive);
 
-      // Persist today periodically
-      AsyncStorage.setItem(todayKey(), JSON.stringify(todayLive))
-        .catch(() => {});
+      // Persist today
+      const todayDK = new Date().toISOString().slice(0, 10);
+      AsyncStorage.setItem(
+        STATS_KEY_PREFIX + todayDK,
+        JSON.stringify(todayLive)
+      ).catch(() => {});
 
-      // Week = persisted week base + today's live total
-      // (Simplified: recalculate from today only — full week recalc happens on mount)
-      setWeekStats((prev) => {
-        const todayOnly = sessionRef.current; // just session contribution
-        return mergeMaps(prev, todayOnly);
-      });
+      // Update weekDays — just patch today's entry
+      setWeekDays((prev) =>
+        prev.map((d) =>
+          d.isToday
+            ? { ...d, states: todayLive, totalMs: totalMs(todayLive) }
+            : d
+        )
+      );
+
+      // Week total
+      setWeekStats((prev) => mergeMaps(prev, { [state]: elapsed } as StateTimeMap));
     }, TICK_MS);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Reset session on disconnect (state becomes undefined)
+  // Reset session on disconnect
   useEffect(() => {
     if (currentState === undefined) {
-      // Persist what we have before resetting
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
-      AsyncStorage.setItem(todayKey(), JSON.stringify(todayFinal)).catch(() => {});
+      const todayDK    = new Date().toISOString().slice(0, 10);
+      AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
       setSessionStats({});
     }
   }, [currentState === undefined]);
 
-  const sessionTotalMs = totalMs(sessionStats);
-  const todayTotalMs   = totalMs(todayStats);
-
   return {
     sessionStats,
     todayStats,
+    weekDays,
     weekStats,
-    sessionTotalMs,
-    todayTotalMs,
+    sessionTotalMs: totalMs(sessionStats),
+    todayTotalMs:   totalMs(todayStats),
+    weekTotalMs:    totalMs(weekStats),
   };
 }
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
-/** Format ms as "Xh Ym" or "Ym" or "< 1m" */
 export function formatDuration(ms: number): string {
   if (ms < 60_000) return "< 1m";
   const totalMin = Math.floor(ms / 60_000);
@@ -185,8 +211,7 @@ export function formatDuration(ms: number): string {
   return `${h}h ${m}m`;
 }
 
-/** Format ms as a percentage of total */
-export function formatPercent(ms: number, totalMs: number): string {
-  if (totalMs === 0) return "0%";
-  return `${Math.round((ms / totalMs) * 100)}%`;
+export function formatPercent(ms: number, total: number): string {
+  if (total === 0) return "0%";
+  return `${Math.round((ms / total) * 100)}%`;
 }

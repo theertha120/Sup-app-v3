@@ -2,33 +2,34 @@
  * IMUContext.tsx
  *
  * Global singleton context for s'pot BLE state.
- * Wrap the whole app in <IMUProvider> so every screen shares the same
- * connection — s'pots never disconnect just because you navigate away.
  *
- * KEY FIX (this version): EMA smoothing + UI throttle to eliminate jitter.
+ * Cumulative Postural Load (CPL) model — replaces per-state timers:
  *
- *   Raw BLE data arrives at ~10Hz (every 100ms).
- *   Without smoothing, tiny sensor noise causes the figure to twitch
- *   constantly and state labels to flicker between adjacent states.
+ *   Based on Solomonow et al. (Spine 2003) and Kang & Mirka (2024):
+ *   Short neutral breaks do NOT reset spinal creep. Creep developed
+ *   during loading accumulates across multiple bouts with insufficient
+ *   recovery between them. Recovery requires ~3x the loading duration.
  *
- *   Solution — two-stage approach used in production motion apps:
+ *   CPL formula (runs every second):
+ *     Non-neutral: CPL += STATE_WEIGHT[state]  (0.2–1.0 based on severity)
+ *     Neutral:     CPL -= 0.15                 (slow recovery, 3:1 ratio)
+ *     CPL clamped to [0, ∞)
  *
- *   1. Exponential Moving Average (EMA) on raw angles before classification.
- *      EMA formula: smoothed = α × raw + (1-α) × previous
- *      α = 0.15 → heavily smoothed, ~650ms lag to reach 90% of a new position
- *      This removes high-frequency noise while preserving real movements.
+ *   This means a 1-minute neutral break after 5 minutes of slouching
+ *   only reduces CPL by ~9 seconds of equivalent load — the next
+ *   bad posture bout picks up from nearly the same level. This correctly
+ *   models the cumulative tissue damage mechanism.
  *
- *   2. UI throttle — React state (setPosture) only updated every 500ms.
- *      Classification runs every packet for internal logic (timers, SHS),
- *      but the UI only re-renders twice per second. This stops the figure
- *      from animating to every tiny fluctuation.
+ *   Intervention fires when CPL crosses a threshold:
+ *     slouched/severe:  CPL ≥ 1200 (≈ 20 min equivalent at full weight)
+ *     forward_lean:     CPL ≥ 900  (≈ 15 min equivalent)
+ *     lateral:          CPL ≥ 900
  *
- *   Result: smooth, calm figure that still responds visibly within ~1 second
- *   to real posture changes — similar to how Apple Watch smooths heart rate.
- *
- * Other fixes in this version:
- *   - Neutral offset applied from step 1 immediately
- *   - Backward lean correctly classified as upright (not forward lean)
+ * Other features:
+ *   - EMA smoothing (α=0.15) on raw angles before classification
+ *   - UI throttle (500ms) to prevent figure jitter
+ *   - Neutral offset applied immediately after calibration step 1
+ *   - Session start time tracked for desk time display
  */
 
 import React, {
@@ -48,7 +49,6 @@ import {
   PostureSeverity,
   POSTURE_LABELS,
   POSTURE_CUES,
-  INTERVENTION_THRESHOLDS_MS,
   INTERVENTION_MESSAGES,
   SHS_RATES,
   SHS_GRACE_PERIODS_MS,
@@ -62,33 +62,37 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// Change to 20 * 60 * 1000 for production
-const STATIC_NUDGE_THRESHOLD_MS = 1 * 60 * 1000;
+const STATIC_NUDGE_THRESHOLD_MS = 1 * 60 * 1000; // 1 min testing → 20 * 60 * 1000 prod
 const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
+const EMA_ALPHA                 = 0.15;
+const UI_THROTTLE_MS            = 500;
 
-/**
- * EMA smoothing factor α (alpha).
- * Range: 0.0 (no update) to 1.0 (no smoothing, raw passthrough).
- *
- * 0.15 = smooth, ~650ms to reach 90% of a step change.
- *        Good for casual posture monitoring — real slouches take seconds,
- *        not milliseconds, so lag is imperceptible to the user.
- *
- * Increase toward 0.3 if the figure feels too sluggish to respond.
- * Decrease toward 0.08 if still jittery on your specific sensor pair.
- */
-const EMA_ALPHA = 0.15;
+// ── Cumulative Postural Load (CPL) ────────────────────────────────────────────
+//
+// Weight per second in each state (Solomonow et al. 2003 / Kang & Mirka 2024).
+// upright recovers at 0.15/s regardless of state.
+// Non-neutral states accumulate; recovery is ~3× slower than loading.
 
-/**
- * UI update throttle — how often React state is updated with new posture.
- * Classification still runs every packet (100ms) for internal timer accuracy.
- * The figure and label only re-render at this rate.
- *
- * 500ms = 2 updates per second — smooth enough to feel live, calm enough
- * to avoid jitter. Similar to how watchOS throttles heart rate display.
- */
-const UI_THROTTLE_MS = 500;
+const CPL_WEIGHTS: Record<PostureState, number> = {
+  upright:       0,    // neutral — handled by recovery rate
+  transition:    0.2,  // early flexion — low accumulation
+  forward_lean:  0.6,  // lumbar flexion, muscle fatigue
+  slouched:      1.0,  // significant disc compression
+  severe:        1.5,  // passive ligament zone — accumulates fastest
+  tilted_left:   0.7,  // asymmetric disc loading
+  tilted_right:  0.7,
+};
+const CPL_RECOVERY_RATE = 0.15; // pts/sec during neutral
+
+// CPL thresholds for intervention (seconds of equivalent full-weight loading)
+const CPL_THRESHOLDS: Partial<Record<PostureState, number>> = {
+  forward_lean:  900,   // ≈ 15 min at full weight
+  slouched:      1200,  // ≈ 20 min (McGill ligament creep threshold)
+  severe:        300,   // ≈ 5 min — urgent
+  tilted_left:   900,
+  tilted_right:  900,
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,7 +123,8 @@ export interface InterventionAlert {
   title: string;
   body: string;
   cue: string;
-  durationMs: number;
+  /** CPL value when alert fired — for display */
+  cplAtAlert: number;
 }
 
 export interface IMUContextValue {
@@ -142,7 +147,16 @@ export interface IMUContextValue {
   resetCalibration: () => void;
 
   shs: number;
+  /**
+   * Cumulative Postural Load (0–∞).
+   * Accumulates across multiple bad posture bouts.
+   * Short neutral breaks barely dent it (3:1 recovery ratio).
+   * Use for intervention threshold checks and UI display.
+   */
+  cpl: number;
   timeInCurrentStateMs: number;
+  /** How long the s'pots have been connected this session (ms) */
+  sessionDurationMs: number;
   shouldNudge: boolean;
   activeIntervention: InterventionAlert | null;
   confirmMovement: () => void;
@@ -158,8 +172,6 @@ const defaultCalibration: CalibrationState = {
   stepComplete: [false, false, false, false, false],
   isComplete: false,
 };
-
-// ── EMA state ─────────────────────────────────────────────────────────────────
 
 interface EMAState {
   topRoll: number; topPitch: number;
@@ -182,39 +194,35 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [isNeutralCalibrated, setIsNeutralCalibrated] = useState(false);
 
   const [shs,                  setShs]                  = useState(100);
+  const [cpl,                  setCpl]                  = useState(0);
   const [timeInCurrentStateMs, setTimeInCurrentStateMs] = useState(0);
+  const [sessionDurationMs,    setSessionDurationMs]    = useState(0);
   const [shouldNudge,          setShouldNudge]          = useState(false);
   const [activeIntervention,   setActiveIntervention]   = useState<InterventionAlert | null>(null);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
 
-  const topLatestRef    = useRef<ParsedIMU | null>(null);
-  const bottomLatestRef = useRef<ParsedIMU | null>(null);
+  const topLatestRef     = useRef<ParsedIMU | null>(null);
+  const bottomLatestRef  = useRef<ParsedIMU | null>(null);
   const neutralOffsetRef = useRef<NeutralOffset | null>(null);
   const baselineRef      = useRef<ClinicalBaseline | null>(null);
 
-  // EMA smoothed angle state — updated every BLE packet, not React state
   const emaRef = useRef<EMAState>({
-    topRoll: 0, topPitch: 0,
-    bottomRoll: 0, bottomPitch: 0,
-    initialised: false,
+    topRoll: 0, topPitch: 0, bottomRoll: 0, bottomPitch: 0, initialised: false,
   });
+  const lastUIUpdateRef         = useRef<number>(0);
+  const lastClassificationRef   = useRef<ReturnType<typeof classifySpinePosture> | null>(null);
 
-  // UI throttle — track last time we pushed to React state
-  const lastUIUpdateRef = useRef<number>(0);
-
-  // Internal classification result — updated every packet for timer accuracy
-  const lastClassificationRef = useRef<ReturnType<typeof classifySpinePosture> | null>(null);
-
-  const stateStartTimeRef    = useRef<number>(Date.now());
-  const stateGraceStartRef   = useRef<number>(Date.now());
-  const lastPostureStateRef  = useRef<PostureState | null>(null);
-  const interventionFiredRef = useRef(false);
-  const staticNudgeFiredRef  = useRef(false);
-  const staticStartTimeRef   = useRef<number>(Date.now());
-  const shsRef               = useRef(100);
-  const shsIntervalRef       = useRef<ReturnType<typeof setInterval> | null>(null);
-  const displayIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stateStartTimeRef       = useRef<number>(Date.now());
+  const lastPostureStateRef     = useRef<PostureState | null>(null);
+  const interventionFiredRef    = useRef(false);
+  const staticNudgeFiredRef     = useRef(false);
+  const staticStartTimeRef      = useRef<number>(Date.now());
+  const sessionStartTimeRef     = useRef<number | null>(null); // set on first packet after connect
+  const shsRef                  = useRef(100);
+  const cplRef                  = useRef(0);
+  const shsIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const displayIntervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const captureRef = useRef<{
     neutral: NeutralOffset | null;
@@ -251,31 +259,70 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     }).catch((e) => console.warn("[IMUContext] Failed to load neutral offset:", e));
   }, []);
 
-  // ── SHS accumulation ──────────────────────────────────────────────────────
+  // ── SHS + CPL accumulation — ticks every second ───────────────────────────
+  //
+  // CPL model (Solomonow et al. 2003):
+  //   Non-neutral: CPL += weight/sec  (depends on state severity)
+  //   Neutral:     CPL -= 0.15/sec   (slow 3:1 recovery ratio)
+  //
+  // This means brief neutral breaks barely reduce CPL, correctly modelling
+  // how spinal creep accumulates across multiple loading bouts.
 
   useEffect(() => {
     shsIntervalRef.current = setInterval(() => {
       const state = lastPostureStateRef.current;
       if (!state) return;
+
+      // ── SHS ──
       const rate        = SHS_RATES[state] ?? 0;
       const gracePeriod = SHS_GRACE_PERIODS_MS[state] ?? 0;
-      const elapsed     = Date.now() - stateGraceStartRef.current;
-      if (rate > 0 || elapsed >= gracePeriod) {
+      const stateElapsed = Date.now() - stateStartTimeRef.current;
+      if (rate > 0 || stateElapsed >= gracePeriod) {
         const newShs = Math.max(0, Math.min(100, shsRef.current + rate));
         shsRef.current = newShs;
         setShs(Math.round(newShs));
+      }
+
+      // ── CPL ──
+      let newCpl: number;
+      if (state === "upright") {
+        newCpl = Math.max(0, cplRef.current - CPL_RECOVERY_RATE);
+      } else {
+        newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0);
+      }
+      cplRef.current = newCpl;
+      setCpl(Math.round(newCpl));
+
+      // Check CPL intervention threshold for current state
+      const cplThreshold = CPL_THRESHOLDS[state];
+      if (cplThreshold !== undefined && newCpl >= cplThreshold && !interventionFiredRef.current) {
+        interventionFiredRef.current = true;
+        const msg = INTERVENTION_MESSAGES[state];
+        if (msg) {
+          setActiveIntervention({ state, ...msg, cplAtAlert: Math.round(newCpl) });
+          // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
+          // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
+          console.log("[IMUContext] CPL intervention fired for", state, "CPL:", Math.round(newCpl));
+        }
       }
     }, SHS_TICK_MS);
     return () => { if (shsIntervalRef.current) clearInterval(shsIntervalRef.current); };
   }, []);
 
-  // ── Display timer + intervention checker ──────────────────────────────────
+  // ── Display timer — ticks every 10 seconds ────────────────────────────────
 
   useEffect(() => {
     displayIntervalRef.current = setInterval(() => {
+      // Current state duration
       const elapsed = Date.now() - stateStartTimeRef.current;
       setTimeInCurrentStateMs(elapsed);
 
+      // Session duration
+      if (sessionStartTimeRef.current !== null) {
+        setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
+      }
+
+      // Static movement nudge (any posture held too long)
       const staticElapsed = Date.now() - staticStartTimeRef.current;
       if (staticElapsed >= STATIC_NUDGE_THRESHOLD_MS && !staticNudgeFiredRef.current) {
         staticNudgeFiredRef.current = true;
@@ -283,20 +330,6 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // PHONE: Vibration.vibrate([0, 300, 100, 300]);
         // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
         console.log("[IMUContext] static nudge fired");
-      }
-
-      const state = lastPostureStateRef.current;
-      if (!state || interventionFiredRef.current) return;
-      const threshold = INTERVENTION_THRESHOLDS_MS[state];
-      if (threshold !== undefined && elapsed >= threshold) {
-        interventionFiredRef.current = true;
-        const msg = INTERVENTION_MESSAGES[state];
-        if (msg) {
-          setActiveIntervention({ state, ...msg, durationMs: elapsed });
-          // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
-          // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
-          console.log("[IMUContext] intervention fired for", state);
-        }
       }
     }, DISPLAY_TICK_MS);
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
@@ -310,7 +343,6 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const parsed = parseIMUPacket(dataView);
         if (!parsed) return;
 
-        // Store raw latest for calibration sampling and sensor detail display
         if (slot === "top") {
           topLatestRef.current = parsed;
           setTopData((prev) => ({ ...prev, latest: parsed }));
@@ -323,16 +355,16 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const bottom = slot === "bottom" ? parsed : bottomLatestRef.current;
         if (!top || !bottom) return;
 
-        // ── EMA smoothing ──────────────────────────────────────────────────
-        // Apply exponential moving average to raw angles before classification.
-        // This removes high-frequency sensor noise while preserving real movement.
-        // First packet initialises EMA to raw values (no lag on first read).
+        // Start session timer on first packet
+        if (sessionStartTimeRef.current === null) {
+          sessionStartTimeRef.current = Date.now();
+        }
+
+        // EMA smoothing
         const ema = emaRef.current;
         if (!ema.initialised) {
-          ema.topRoll    = top.angle.roll;
-          ema.topPitch   = top.angle.pitch;
-          ema.bottomRoll  = bottom.angle.roll;
-          ema.bottomPitch = bottom.angle.pitch;
+          ema.topRoll = top.angle.roll; ema.topPitch = top.angle.pitch;
+          ema.bottomRoll = bottom.angle.roll; ema.bottomPitch = bottom.angle.pitch;
           ema.initialised = true;
         } else {
           ema.topRoll     = EMA_ALPHA * top.angle.roll     + (1 - EMA_ALPHA) * ema.topRoll;
@@ -341,40 +373,42 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           ema.bottomPitch = EMA_ALPHA * bottom.angle.pitch + (1 - EMA_ALPHA) * ema.bottomPitch;
         }
 
-        // Build smoothed ParsedIMU objects for classification
         const smoothedTop: ParsedIMU    = { ...top,    angle: { ...top.angle,    roll: ema.topRoll,    pitch: ema.topPitch    } };
         const smoothedBottom: ParsedIMU = { ...bottom, angle: { ...bottom.angle, roll: ema.bottomRoll, pitch: ema.bottomPitch } };
 
-        // Classify on smoothed angles
         const offsetToUse = baselineRef.current ?? neutralOffsetRef.current;
         const result      = classifySpinePosture(smoothedTop, smoothedBottom, offsetToUse);
         lastClassificationRef.current = result;
 
-        // ── State change detection (runs every packet at ~10Hz) ────────────
+        // State change detection — runs every packet at ~10Hz
         if (result.state !== lastPostureStateRef.current) {
           lastPostureStateRef.current  = result.state;
           stateStartTimeRef.current    = Date.now();
-          stateGraceStartRef.current   = Date.now();
-          interventionFiredRef.current = false;
           staticStartTimeRef.current   = Date.now();
           staticNudgeFiredRef.current  = false;
           setTimeInCurrentStateMs(0);
           setShouldNudge(false);
           setActiveIntervention(null);
-          // State change always triggers an immediate UI update regardless of throttle
+
+          // Reset intervention fired flag when state changes
+          // BUT only reset if CPL drops below 80% of threshold
+          // This prevents immediate re-trigger on brief state flicker
+          const newThreshold = CPL_THRESHOLDS[result.state];
+          if (!newThreshold || cplRef.current < newThreshold * 0.8) {
+            interventionFiredRef.current = false;
+          }
+
+          // Force UI update on state change (bypass throttle)
           lastUIUpdateRef.current = 0;
         }
 
-        // ── UI throttle (React state update at most every 500ms) ───────────
-        // Classification above runs every packet for accurate timer tracking.
-        // React re-renders (and figure animation) are throttled to avoid jitter.
+        // UI throttle
         const now = Date.now();
         if (now - lastUIUpdateRef.current < UI_THROTTLE_MS) return;
         lastUIUpdateRef.current = now;
 
-        const newState = result.state as DeskPostureState;
         setPosture({
-          state:        newState,
+          state:        result.state as DeskPostureState,
           instantScore: result.instantScore,
           severity:     result.severity,
           label:        POSTURE_LABELS[result.state],
@@ -388,19 +422,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            topLatestRef.current = null;
-            setPosture(null);
+            topLatestRef.current = null; setPosture(null);
             lastPostureStateRef.current = null;
-            // Reset EMA on disconnect so next connect starts fresh
-            emaRef.current.initialised = false;
+            emaRef.current.initialised  = false;
+            sessionStartTimeRef.current = null;
+            setSessionDurationMs(0);
           }
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            bottomLatestRef.current = null;
-            setPosture(null);
+            bottomLatestRef.current = null; setPosture(null);
             lastPostureStateRef.current = null;
-            emaRef.current.initialised = false;
+            emaRef.current.initialised  = false;
+            sessionStartTimeRef.current = null;
+            setSessionDurationMs(0);
           }
         }
       }
@@ -423,15 +458,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     const t3 = setTimeout(() => {
       clearInterval(samplingInterval);
       if (samples.length === 0) {
-        setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null }));
-        return;
+        setCalibration((prev) => ({ ...prev, countdown: null, currentStep: null })); return;
       }
 
       const avg = (key: (s: typeof samples[0]) => number) =>
         samples.reduce((sum, s) => sum + key(s), 0) / samples.length;
 
-      const topPitch    = avg((s) => s.top.angle.pitch);
-      const topRoll     = avg((s) => s.top.angle.roll);
+      const topPitch = avg((s) => s.top.angle.pitch);
+      const topRoll  = avg((s) => s.top.angle.roll);
       const bottomPitch = avg((s) => s.bottom.angle.pitch);
       const bottomRoll  = avg((s) => s.bottom.angle.roll);
 
@@ -440,29 +474,24 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         captureRef.current.neutral   = offset;
         neutralOffsetRef.current     = offset;
         setIsNeutralCalibrated(true);
-        // Reset EMA after calibration so smoothing starts from new neutral
         emaRef.current.initialised   = false;
         AsyncStorage.setItem(NEUTRAL_OFFSET_STORAGE_KEY, JSON.stringify(offset))
           .catch((e) => console.warn("[IMUContext] Failed to save neutral offset:", e));
-
       } else if (step === 2) {
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
         const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
         captureRef.current.maxForward  = Math.max(Math.abs(tRoll - bRoll), 10);
-
       } else if (step === 3) {
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
         const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
         captureRef.current.maxBackward = Math.max(Math.abs(tRoll - bRoll), 5);
-
       } else if (step === 4) {
         const neutral = captureRef.current.neutral;
         const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
         const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
         captureRef.current.maxRight    = Math.max(Math.abs(tPitch - bPitch), 5);
-
       } else if (step === 5) {
         const neutral = captureRef.current.neutral;
         const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
@@ -474,14 +503,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const updated = [...prev.stepComplete];
         updated[step - 1] = true;
         const allDone = updated.every(Boolean);
-
         if (allDone) {
           const { neutral, maxForward, maxBackward, maxRight, maxLeft } = captureRef.current;
           if (neutral && maxForward !== null && maxBackward !== null && maxRight !== null && maxLeft !== null) {
             const baseline: ClinicalBaseline = {
               neutral, maxForwardDeg: maxForward, maxBackwardDeg: maxBackward,
-              maxRightDeg: maxRight, maxLeftDeg: maxLeft,
-              capturedAt: new Date().toISOString(),
+              maxRightDeg: maxRight, maxLeftDeg: maxLeft, capturedAt: new Date().toISOString(),
             };
             baselineRef.current = baseline;
             setClinicalBaseline(baseline);
@@ -489,11 +516,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
               .catch((e) => console.warn("[IMUContext] Failed to save baseline:", e));
           }
         }
-
-        return {
-          ...prev, stepComplete: updated, isComplete: allDone,
-          countdown: 0, currentStep: allDone ? null : step,
-        };
+        return { ...prev, stepComplete: updated, isComplete: allDone, countdown: 0, currentStep: allDone ? null : step };
       });
 
       setTimeout(() =>
@@ -505,11 +528,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   const resetCalibration = useCallback(() => {
     captureRef.current     = { neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null };
-    baselineRef.current    = null;
-    neutralOffsetRef.current = null;
+    baselineRef.current    = null; neutralOffsetRef.current = null;
     emaRef.current.initialised = false;
-    setClinicalBaseline(null);
-    setIsNeutralCalibrated(false);
+    setClinicalBaseline(null); setIsNeutralCalibrated(false);
     setCalibration(defaultCalibration);
     AsyncStorage.removeItem(BASELINE_STORAGE_KEY).catch(() => {});
     AsyncStorage.removeItem(NEUTRAL_OFFSET_STORAGE_KEY).catch(() => {});
@@ -528,7 +549,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       const penalised = Math.max(0, shsRef.current - 5);
       shsRef.current  = penalised;
       setShs(Math.round(penalised));
+      console.log("[IMUContext] intervention ignored — -5 SHS structural debt");
+    } else {
+      // Partial CPL reset on acknowledged movement
+      cplRef.current = Math.max(0, cplRef.current * 0.5);
+      setCpl(Math.round(cplRef.current));
     }
+    // Allow intervention to re-fire if CPL stays high
+    interventionFiredRef.current = false;
     setActiveIntervention(null);
   }, []);
 
@@ -537,8 +565,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const scan = useCallback(async () => {
     const ok = await bleService.requestPermissions();
     if (!ok) return;
-    setDiscoveredDevices([]);
-    setIsScanning(true);
+    setDiscoveredDevices([]); setIsScanning(true);
     bleService.scan((device) => {
       setDiscoveredDevices((prev) => {
         if (prev.some((d) => d.id === device.id)) return prev;
@@ -548,11 +575,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setIsScanning(false), 10000);
   }, []);
 
-  const connect     = useCallback(async (device: Device, slot: SensorSlot) => {
-    bleService.stopScan(); setIsScanning(false);
-    await bleService.connectDevice(device, slot);
-  }, []);
-  const disconnect  = useCallback(async (slot: SensorSlot) => { await bleService.disconnectSlot(slot); }, []);
+  const connect       = useCallback(async (device: Device, slot: SensorSlot) => { bleService.stopScan(); setIsScanning(false); await bleService.connectDevice(device, slot); }, []);
+  const disconnect    = useCallback(async (slot: SensorSlot) => { await bleService.disconnectSlot(slot); }, []);
   const disconnectAll = useCallback(async () => { await bleService.disconnectAll(); setPosture(null); }, []);
 
   const bothConnected = topData.state.connected && bottomData.state.connected;
@@ -563,8 +587,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,
-      shs, timeInCurrentStateMs, shouldNudge, activeIntervention,
-      confirmMovement, dismissIntervention,
+      shs, cpl, timeInCurrentStateMs, sessionDurationMs,
+      shouldNudge, activeIntervention, confirmMovement, dismissIntervention,
     }}>
       {children}
     </IMUContext.Provider>
