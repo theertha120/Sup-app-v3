@@ -54,6 +54,7 @@ type BehaviorProfileRow = {
   reminder_frequency: ReminderFrequency | null;
   active_time_start: string | null;
   active_time_end: string | null;
+  active_time_presets: ActiveTimePreset[] | null;
   weekly_goals: WeeklyGoalId[] | null;
 };
 
@@ -115,16 +116,14 @@ function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | nul
     return null;
   }
 
-  const activeTimePresets = PRESET_ORDER.filter((p) => {
-    const r = PRESET_RANGES[p];
-    return r.start >= row.active_time_start! && r.end <= row.active_time_end!;
-  });
+  const activeTimePresets: ActiveTimePreset[] =
+    row.active_time_presets?.length ? row.active_time_presets : ["afternoon"];
 
   return {
     primaryGoals: row.primary_goals,
     preferredTones: row.preferred_tones,
     reminderFrequency: row.reminder_frequency,
-    activeTimePresets: activeTimePresets.length ? activeTimePresets : ["afternoon"],
+    activeTimePresets,
     activeTimeStart: row.active_time_start,
     activeTimeEnd: row.active_time_end,
     weeklyGoals: row.weekly_goals,
@@ -177,7 +176,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     const { data, error } = await supabase
       .from("user_profile")
       .select(
-        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, weekly_goals"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -204,14 +203,16 @@ export async function saveCurrentBehaviorProfile(
 ): Promise<BehaviorProfile> {
   const userId = await getCurrentUserId();
   const profile = toProfileInput(profileInput);
+  const { start, end } = resolveTimeRangeFromPresets(profileInput.activeTimePresets);
 
     const payload = {
       primary_goals: profileInput.primaryGoals,
       preferred_tones: profileInput.preferredTones,
       reminder_frequency: profileInput.reminderFrequency,
-      active_time_start: profileInput.activeTimeStart,
-      active_time_end: profileInput.activeTimeEnd,
-      weekly_goals: profileInput.weeklyGoals,
+      active_time_presets: profileInput.activeTimePresets,
+      active_time_start: start,
+      active_time_end: end,
+      weekly_goals: profileInput.weeklyGoals
   };
 
   // Upsert into `user_profile` table. Throw on error so callers know if save failed.
@@ -222,7 +223,7 @@ export async function saveCurrentBehaviorProfile(
       .from("user_profile")
       .upsert(payloadWithAuthId, { onConflict: "id" })
       .select(
-        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, weekly_goals"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
       )
       .maybeSingle();
 
