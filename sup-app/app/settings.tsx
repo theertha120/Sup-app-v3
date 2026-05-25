@@ -6,6 +6,7 @@ import {
   Pressable,
   Switch,
   Modal,
+  ActivityIndicator
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -31,6 +32,7 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
+  const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
   
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
@@ -108,12 +110,15 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.settingItem}
           onPress={async () => {
-            setShowCoachingModal(true);
+            setLoadingCoachingProfile(true);
             try {
               const profile = await fetchCurrentBehaviorProfile();
               setInitialBehaviorProfile(profile);
             } catch {
               setInitialBehaviorProfile(null);
+            } finally {
+              setLoadingCoachingProfile(false);
+              setShowCoachingModal(true);
             }
           }}
         >
@@ -121,7 +126,10 @@ export default function SettingsScreen() {
             <Text style={styles.settingLabel}>Coaching preferences</Text>
             <Text style={styles.settingDescription}>Edit reminders, goals and active hours</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          {loadingCoachingProfile
+            ? <ActivityIndicator size="small" color={colours.primary} />
+            : <Text style={styles.chevron}>›</Text>
+          }
         </Pressable>
 
         <Pressable style={styles.settingItem} onPress={() => setShowUnitsModal(true)}>
@@ -309,6 +317,7 @@ export default function SettingsScreen() {
 
       {/* Coaching setup modal (edit existing or create) */}
       <CoachingSetupModal
+        key={showCoachingModal ? "open" : "closed"}
         visible={showCoachingModal}
         initialProfile={initialBehaviorProfile}
         onComplete={() => {
