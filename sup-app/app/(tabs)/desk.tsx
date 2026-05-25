@@ -490,18 +490,30 @@ const mv = StyleSheet.create({
 
 const st = StyleSheet.create({
   container: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 16, marginBottom: 16,
-    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    alignSelf: "stretch",  // ← was missing, makes it full width like other cards
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+      android: { elevation: 2 },
+    }),
   },
-  heading:   { fontSize: 16, fontWeight: "700", color: colours.textPrimary, marginBottom: 14 },
+  heading: { fontSize: 16, fontWeight: "700", color: colours.textPrimary, marginBottom: 14 },
 
-  filterRow: { flexDirection: "row", gap: 6, marginBottom: 14 },
+  filterRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
   filterPill: {
-    flex: 1, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: "#F5F5F5", alignItems: "center",
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,   // ← minimal horizontal padding, let flex do the work
+    borderRadius: 20,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    justifyContent: "center",
   },
   filterPillActive: { backgroundColor: colours.primary },
-  filterText:       { fontSize: 12, fontWeight: "600", color: colours.textSecondary },
+  filterText:       { fontSize: 12, fontWeight: "600", color: colours.textSecondary, textAlign: "center" },
   filterTextActive: { color: "#fff" },
 
   totalTime: { fontSize: 13, color: colours.textSecondary, marginBottom: 16, textAlign: "center" },
@@ -509,14 +521,17 @@ const st = StyleSheet.create({
   emptyState: { alignItems: "center", paddingVertical: 24, gap: 10 },
   emptyText:  { fontSize: 13, color: "#bbb", textAlign: "center" },
 
-  stateList: { gap: 12 },
+  stateList: { gap: 14 },
   stateRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  stateIconBg: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  stateTextCol: { flex: 1, gap: 4 },
+  stateIconBg: {
+    width: 36, height: 36, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  stateTextCol: { flex: 1, gap: 4, minWidth: 0 },  // ← minWidth: 0 allows flex child to shrink
   stateLabel:   { fontSize: 13, color: colours.textPrimary, fontWeight: "500" },
   barBg:    { height: 5, backgroundColor: "#F0F0F0", borderRadius: 3, overflow: "hidden" },
   barFill:  { height: 5, borderRadius: 3 },
-  stateMeta: { alignItems: "flex-end", minWidth: 48 },
+  stateMeta: { alignItems: "flex-end", flexShrink: 0, minWidth: 52 },
   stateTime: { fontSize: 13, fontWeight: "700" },
   statePct:  { fontSize: 11, color: colours.textSecondary },
 });
