@@ -22,14 +22,15 @@ import {
   type WeeklyGoalId,
   createDefaultBehaviorProfile,
   getPresetBehaviorHours,
+  resolveTimeRangeFromPresets,
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
 
 type StepId = 0 | 1 | 2 | 3;
 
-function isValidTime(value: string): boolean {
-  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
-}
+// function isValidTime(value: string): boolean {
+//   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+// }
 
 export default function CoachingSetupModal({
   visible,
@@ -48,40 +49,34 @@ export default function CoachingSetupModal({
   // Prefill from `initialProfile` when editing from settings
   const initial = initialProfile ?? null;
 
-  const inferPreset = (start: string, end: string): ActiveTimePreset => {
-    const candidates: ActiveTimePreset[] = [
-      "morning",
-      "afternoon",
-      "evening",
-      "late_night",
-    ];
-    for (const p of candidates) {
-      const r = getPresetBehaviorHours(p);
-      if (r.start === start && r.end === end) return p;
-    }
-    return "afternoon";
-  };
+  // const inferPreset = (start: string, end: string): ActiveTimePreset => {
+  //   const candidates: ActiveTimePreset[] = [
+  //     "morning",
+  //     "afternoon",
+  //     "evening",
+  //     "late_night",
+  //   ];
+  //   for (const p of candidates) {
+  //     const r = getPresetBehaviorHours(p);
+  //     if (r.start === start && r.end === end) return p;
+  //   }
+  //   return "afternoon";
+  // };
 
-  const [primaryGoal, setPrimaryGoal] = useState<BehaviorGoalId>(
-    initial ? initial.primaryGoal : defaults.primaryGoal
+  const [primaryGoals, setPrimaryGoals] = useState<BehaviorGoalId[]>(
+    initial ? initial.primaryGoals : defaults.primaryGoals
   );
-  const [preset, setPreset] = useState<ActiveTimePreset>(
-    initial ? inferPreset(initial.activeTimeStart, initial.activeTimeEnd) : "afternoon"
+  const [activeTimePresets, setActiveTimePresets] = useState<ActiveTimePreset[]>(
+    initial ? initial.activeTimePresets : defaults.activeTimePresets
   );
-  const [activeTimeStart, setActiveTimeStart] = useState(
-    initial ? initial.activeTimeStart : defaults.activeTimeStart
-  );
-  const [activeTimeEnd, setActiveTimeEnd] = useState(
-    initial ? initial.activeTimeEnd : defaults.activeTimeEnd
-  );
-  const [preferredTone, setPreferredTone] = useState<ReminderTone>(
-    initial ? initial.preferredTone : defaults.preferredTone
+  const [preferredTones, setPreferredTones] = useState<ReminderTone[]>(
+    initial ? initial.preferredTones : defaults.preferredTones
   );
   const [reminderFrequency, setReminderFrequency] = useState<ReminderFrequency>(
     initial ? initial.reminderFrequency : defaults.reminderFrequency
   );
-  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoalId>(
-    initial ? initial.weeklyGoal : defaults.weeklyGoal
+  const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoalId[]>(
+    initial ? initial.weeklyGoals : defaults.weeklyGoals
   );
 
   if (!visible) return null;
@@ -89,24 +84,47 @@ export default function CoachingSetupModal({
   const canGoBack = step > 0;
   const isLastStep = step === 3;
 
-  const applyPreset = (nextPreset: ActiveTimePreset) => {
-    setPreset(nextPreset);
-    const range = getPresetBehaviorHours(nextPreset);
-    setActiveTimeStart(range.start);
-    setActiveTimeEnd(range.end);
-  };
+  // const applyPreset = (nextPreset: ActiveTimePreset) => {
+  //   setPreset(nextPreset);
+  //   const range = getPresetBehaviorHours(nextPreset);
+  //   setActiveTimeStart(range.start);
+  //   setActiveTimeEnd(range.end);
+  // };
 
-  const buildProfileInput = (): BehaviorProfileInput => ({
-    primaryGoal,
-    preferredTone,
-    reminderFrequency,
-    activeTimeStart: getPresetBehaviorHours(preset).start,
-    activeTimeEnd: getPresetBehaviorHours(preset).end,
-    weeklyGoal,
-  });
+  const buildProfileInput = (): BehaviorProfileInput => {
+    const { start, end } = resolveTimeRangeFromPresets(activeTimePresets);
+    return {
+      primaryGoals,
+      preferredTones,
+      reminderFrequency,
+      activeTimePresets,
+      activeTimeStart: start,
+      activeTimeEnd: end,
+      weeklyGoals,
+    };
+  };
 
   const handleNext = async () => {
     setError("");
+
+    // Mandatory selections for each step
+    if (step === 0 && primaryGoals.length === 0) {
+      setError("Please select at least one goal.");
+      return;
+    }
+    if (step === 1 && activeTimePresets.length === 0) {
+      setError("Please select at least one time period.");
+      return;
+    }
+    if (step === 2 && preferredTones.length === 0) {
+      setError("Please select at least one reminder style.");
+      return;
+    }
+    if (step === 3 && weeklyGoals.length === 0) {
+      setError("Please select at least one weekly goal.");
+      return;
+    }
+
 
     if (step < 3) {
       setStep((current) => ((current + 1) as StepId));
@@ -115,10 +133,10 @@ export default function CoachingSetupModal({
 
     const profile = buildProfileInput();
 
-    if (!isValidTime(profile.activeTimeStart) || !isValidTime(profile.activeTimeEnd)) {
-      setError("Use 24-hour time like 09:00 and 17:00.");
-      return;
-    }
+    // if (!isValidTime(profile.activeTimeStart) || !isValidTime(profile.activeTimeEnd)) {
+    //   setError("Use 24-hour time like 09:00 and 17:00.");
+    //   return;
+    // }
 
     setSaving(true);
     try {
@@ -158,30 +176,26 @@ export default function CoachingSetupModal({
 
           <View style={styles.body}>
             {step === 0 ? (
-              <GoalSelectionStep value={primaryGoal} onChange={setPrimaryGoal} />
+              <GoalSelectionStep value={primaryGoals} onChange={setPrimaryGoals} />
             ) : null}
             {step === 1 ? (
               <ActiveHoursStep
-                preset={preset}
-                activeTimeStart={activeTimeStart}
-                activeTimeEnd={activeTimeEnd}
-                onPresetChange={applyPreset}
-                onStartTimeChange={setActiveTimeStart}
-                onEndTimeChange={setActiveTimeEnd}
+                presets={activeTimePresets}
+                onPresetsChange={setActiveTimePresets}
               />
             ) : null}
             {step === 2 ? (
               <ReminderPreferencesStep
-                tone={preferredTone}
+                tones={preferredTones}
                 frequency={reminderFrequency}
-                onToneChange={setPreferredTone}
+                onTonesChange={setPreferredTones}
                 onFrequencyChange={setReminderFrequency}
               />
             ) : null}
             {step === 3 ? (
               <WeeklyGoalStep
-                value={weeklyGoal}
-                onChange={setWeeklyGoal}
+                value={weeklyGoals}
+                onChange={setWeeklyGoals}
               />
             ) : null}
 

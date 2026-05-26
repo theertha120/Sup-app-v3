@@ -264,6 +264,12 @@ export default function DeskScreen() {
   const isTracking     = bothConnected && isNeutralCalibrated;
   const figureColor    = isTracking ? STATE_COLORS[currentState] : STATE_COLORS["upright"];
   const currentDesc    = posture?.description ?? "connect your s'pots via s'pot setup.";
+  const instantScore = posture?.instantScore ?? 100;
+  const currentLabel = posture?.label        ?? "waiting for s'pots…";
+
+  const shsColor     = getScoreColor(shs);
+  const shsLabel     = getScoreLabel(shs);
+  const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
   const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
@@ -278,11 +284,13 @@ export default function DeskScreen() {
         {/* Header */}
         <View style={s.header}>
           <View>
-            <Text style={s.headerTitle}>desk mode</Text>
-            <Text style={s.headerSub}>
-              {!bothConnected ? "connect s'pots via s'pot setup"
-                : !isNeutralCalibrated ? "calibrate to start tracking"
-                : "live posture analysis"}
+            <Text style={styles.headerTitle}>Desk Mode</Text>
+            <Text style={styles.headerSub}>
+              {!bothConnected
+                ? "connect s'pots via s'pot setup"
+                : !isNeutralCalibrated
+                  ? "calibrate to start tracking"
+                  : "live posture analysis"}
             </Text>
           </View>
           {!bothConnected && (
@@ -351,8 +359,8 @@ export default function DeskScreen() {
                 : "connect both s'pots to begin."}
             </Text>
             {isTracking && posture && (
-              <Text style={s.debugText}>
-                Δpitch {posture.pitchDiff.toFixed(1)}°  Δroll {posture.rollDiff.toFixed(1)}°
+              <Text style={styles.debugText}>
+                Δpitch {posture.pitchDiff.toFixed(2)}°  Δroll {posture.rollDiff.toFixed(2)}°{"  "}{timeInStateMin}min
               </Text>
             )}
           </View>
@@ -412,9 +420,9 @@ export default function DeskScreen() {
                 <Text style={s.sensorDetailTitle}>{label}</Text>
                 {data ? (
                   <>
-                    <Text style={s.sensorDetailValue}>pitch {data.angle.pitch.toFixed(1)}°</Text>
-                    <Text style={s.sensorDetailValue}>roll  {data.angle.roll.toFixed(1)}°</Text>
-                    <Text style={s.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(1)}°</Text>
+                    <Text style={styles.sensorDetailValue}>pitch {data.angle.pitch.toFixed(2)}°</Text>
+                    <Text style={styles.sensorDetailValue}>roll  {data.angle.roll.toFixed(2)}°</Text>
+                    <Text style={styles.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(2)}°</Text>
                   </>
                 ) : (
                   <Text style={s.sensorDetailValue}>waiting…</Text>

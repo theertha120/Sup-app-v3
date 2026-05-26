@@ -20,61 +20,114 @@ import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData"
 
 type DateRange = "today" | "last7days";
 
-// Mock stream
-const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
-const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
+// Mock stream: replace with real session data; empty = no data (startup state)
+let mockStream: IMUReading[] = [];
+let calibration: IMUReading[] | null = null;
 
-// ── Posture colours (matches desk.tsx) ───────────────────────────────────────
+try {
+  // Load example data only if present in the repo
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
+  mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
+  calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
+} catch (e) {
+  mockStream = [];
+  calibration = null;
+}
+
+// ── Posture colours ───────────────────────────────────────
 
 const STATE_COLORS: Record<DeskPostureState, string> = {
-  upright:      "#4CAF50",
-  transition:   "#8BC34A",
+  upright: "#4CAF50",
+  transition: "#8BC34A",
   forward_lean: "#CDDC39",
-  slouched:     "#FF9800",
-  severe:       "#F44336",
-  tilted_left:  "#FF9800",
+  slouched: "#FF9800",
+  severe: "#F44336",
+  tilted_left: "#FF9800",
   tilted_right: "#FF9800",
 };
 
 const STATE_INFO: Record<DeskPostureState, { label: string }> = {
-  upright:      { label: "good alignment" },
-  transition:   { label: "slight forward shift" },
+  upright: { label: "good alignment" },
+  transition: { label: "slight forward shift" },
   forward_lean: { label: "leaning forward" },
-  slouched:     { label: "spine rounding" },
-  severe:       { label: "high spinal load" },
-  tilted_left:  { label: "shifting left" },
+  slouched: { label: "spine rounding" },
+  severe: { label: "high spinal load" },
+  tilted_left: { label: "shifting left" },
   tilted_right: { label: "shifting right" },
 };
 
 const STATE_ORDER: DeskPostureState[] = [
-  "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
+  "upright",
+  "transition",
+  "forward_lean",
+  "slouched",
+  "severe",
+  "tilted_left",
+  "tilted_right",
 ];
 
 const BAR_STACK_ORDER: DeskPostureState[] = [
-  "severe", "slouched", "tilted_left", "tilted_right", "forward_lean", "transition", "upright",
+  "severe",
+  "slouched",
+  "tilted_left",
+  "tilted_right",
+  "forward_lean",
+  "transition",
+  "upright",
 ];
 
-// ── Existing animated components (preserved) ─────────────────────────────────
-
-function AnimatedNumber({ value, style }: { value: number; style?: any }) {
-  const [displayValue, setDisplayValue] = useState(value);
+// Animated number component for smooth transitions
+function AnimatedNumber({
+  value,
+  style,
+  decimals = 2,
+}: {
+  value: number;
+  style?: any;
+  decimals?: number;
+}) {
+  const [displayValue, setDisplayValue] = useState<number>(value);
   const animationRef = useRef<any>(null);
   useEffect(() => {
-    if (animationRef.current) clearInterval(animationRef.current);
-    const startValue = displayValue, endValue = value;
-    const duration = 250, startTime = Date.now();
+    if (animationRef.current) {
+      clearInterval(animationRef.current);
+      animationRef.current = null;
+    }
+
+    const startValue = displayValue;
+    const endValue = value;
+    const duration = 250;
+    const startTime = Date.now();
+
     if (startValue === endValue) return;
     animationRef.current = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       const current = startValue + (endValue - startValue) * easeProgress;
-      setDisplayValue(Math.round(current));
-      if (progress >= 1) { setDisplayValue(endValue); clearInterval(animationRef.current); animationRef.current = null; }
+
+      setDisplayValue(current);
+
+      if (progress >= 1) {
+        setDisplayValue(endValue);
+        if (animationRef.current) {
+          clearInterval(animationRef.current);
+          animationRef.current = null;
+        }
+      }
     }, 16);
-    return () => { if (animationRef.current) clearInterval(animationRef.current); };
+
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+        animationRef.current = null;
+      }
+    };
   }, [value]);
-  return <Text style={style}>{displayValue}</Text>;
+
+  return <Text style={style}>{typeof displayValue === "number" ? displayValue.toFixed(decimals) : String(displayValue)}</Text>;
 }
 
 function AnimatedProgressBar({ goodPercent, animationKey }: { goodPercent: number; animationKey?: string | number }) {
@@ -301,8 +354,8 @@ export default function StatsScreen() {
   const hasData           = sessionStats != null && sessionStats.totalMs > 0;
   const hasHistoricalData = filteredData.length > 0;
 
-  // Posture stats from s'pots (real data)
-  const { todayStats, weekDays, weekStats, todayTotalMs, weekTotalMs } = useSessionStats(undefined);
+  const MIN_MS = 30 * 60_000; // 30 minutes in ms
+  const hasEnoughData = sessionStats != null && sessionStats.totalMs >= MIN_MS;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -391,24 +444,57 @@ export default function StatsScreen() {
           </Text>
         </View>
 
-        {/* ── Desk Time chart — real s'pot data ── */}
-        <View style={chartCard.container}>
-          <Text style={chartCard.title}>desk time</Text>
-          <Text style={chartCard.sub}>time tracked in desk mode with your s'pots</Text>
-          <StackedBarChart days={weekDays} />
-        </View>
+      {/* Overall Score */}
+      <View style={styles.scoreCard}>
+        <Text style={styles.scoreLabel}>Posture Stability Score</Text>
+        <Text style={styles.scoreValue}>
+          {hasEnoughData ? sessionStats!.avgScore : hasData ? "--" : "0"}
+        </Text>
+        <Text style={styles.scoreHint}>
+          {!hasData
+            ? "Score appears after your first session"
+            : !hasEnoughData
+            ? "Use your s'pots to get insights"
+            : "From your latest IMU session"}
+        </Text>
+      </View>
 
-        {/* ── Posture breakdown — real s'pot data ── */}
-        <PostureBreakdown
-          todayStats={todayStats}
-          weekStats={weekStats}
-          todayTotalMs={todayTotalMs}
-          weekTotalMs={weekTotalMs}
-        />
+      {/* Metrics */}
+      <View style={styles.metrics}>
+        {/* Derive neck alignment from session data: slightly reduced from overall score */}
+        {hasData ? (
+          <MetricCard 
+            label="Neck alignment" 
+            goodPercent={Math.round(Math.max(0, sessionStats.goodPosturePercent - 5))} 
+            animationKey={dateRange} 
+          />
+        ) : (
+          <MetricSkeleton label="Neck alignment" />
+        )}
+        {/* Derive shoulder balance from session data: slightly increased variance */}
+        {hasData ? (
+          <MetricCard 
+            label="Shoulder balance" 
+            goodPercent={Math.round(Math.min(100, sessionStats.goodPosturePercent + 3))} 
+            animationKey={dateRange} 
+          />
+        ) : (
+          <MetricSkeleton label="Shoulder balance" />
+        )}
+        {hasData ? (
+          <UpperBackSessionCard stats={sessionStats} animationKey={dateRange} />
+        ) : (
+          <MetricSkeleton label="Upper back support" />
+        )}
+      </View>
 
-        {/* Clinical note */}
-        <Text style={styles.disclaimer}>
-          These insights are supportive and do not replace professional medical advice.
+      {/* Weekly Summary */}
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryTitle}>Session summary</Text>
+        <Text style={styles.summaryText}>
+          {hasData
+            ? `Session: ${(sessionStats.totalMs / 1000).toFixed(2)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
+            : "Your weekly summary will appear here once you start wearing your s'pots"}
         </Text>
       </ScrollView>
     </Animated.View>
@@ -439,7 +525,7 @@ function MetricCard({ label, goodPercent, animationKey }: { label: string; goodP
 
 function UpperBackSessionCard({ stats, animationKey }: { stats: PostureSessionStats; animationKey?: string | number }) {
   const goodWidth = stats.totalMs > 0 ? (stats.goodPostureMs / stats.totalMs) * 100 : 0;
-  const totalMinutes = (stats.totalMs / 60_000).toFixed(1);
+  const totalMinutes = (stats.totalMs / 60_000).toFixed(2);
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>Upper back support</Text>

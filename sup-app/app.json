@@ -26,7 +26,8 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.POST_NOTIFICATIONS"
       ],
 
       "package": "com.anonymous.supapp"
@@ -39,6 +40,7 @@
 
     "plugins": [
       "expo-router",
+      "expo-notifications",
 
       [
         "react-native-ble-plx",
@@ -55,8 +57,14 @@
             "supportsTablet": true,
             "bundleIdentifier": "com.leipakshi.supapp",
             "entitlements": {
-              "aps-environment": null
+              "aps-environment": "production"
+            },
+            "infoPlist": {
+              "UIBackgroundModes": ["remote-notification"]
             }
+          },
+          "android": {
+            "compileSdkVersion": 35
           }
         }
       ],
