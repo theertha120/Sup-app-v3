@@ -256,6 +256,7 @@ export default function DeskScreen() {
     bothConnected, timeInCurrentStateMs,
     sessionDurationMs, cpl,
     isNeutralCalibrated, shs,
+    sessionStartTimeMs,
   } = useIMUContext();
 
   const [showCalibModal, setShowCalibModal] = useState(false);
@@ -275,6 +276,12 @@ export default function DeskScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {__DEV__ && (
+        <View style={dbg.badge}>
+          <Text style={dbg.line}>start: {sessionStartTimeMs ? new Date(sessionStartTimeMs).toLocaleTimeString() : "—"}</Text>
+          <Text style={dbg.line}>session: {sessionTotalMs ? Math.round(sessionTotalMs / 1000) : 0}s</Text>
+        </View>
+      )}
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
       <InterventionModal />
       <MovementNudgeModal />
@@ -566,4 +573,18 @@ const s = StyleSheet.create({
   sensorDetailCard:  { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colours.border },
   sensorDetailTitle: { fontSize: 12, fontWeight: "700", color: colours.primary, marginBottom: 6 },
   sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18 },
+});
+
+const dbg = StyleSheet.create({
+  badge: {
+    position: "absolute",
+    top: 10,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    zIndex: 50,
+  },
+  line: { color: "#fff", fontSize: 11, fontWeight: "600" },
 });
