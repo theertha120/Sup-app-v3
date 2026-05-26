@@ -30,6 +30,9 @@ export interface LeaderboardEntry {
 
 // Temporary current user identifier for mock data.
 // In a real backend integration this should come from auth.
+export const CURRENT_USER_ID = "user-4";
+
+
 // Supabase configuration – values should be set via Expo env:
 // EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
 export const SUPABASE_URL =

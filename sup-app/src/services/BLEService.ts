@@ -1,91 +1,66 @@
 /**
  * BLEService.ts
+ * Manages BLE connections to two WT9011DCL sensors simultaneously.
  *
- * Manages BLE connections to the two IMU sensors inside the s'pots.
- *
- * UUIDs confirmed from LightBlue scan of WT9011DCL:
+ * UUIDs from LightBlue scan:
  *   Service:  FFE5
- *   Notify:   FFE4  (IMU data streams FROM s'pot to phone)
- *   Write:    FFE9  (commands sent TO s'pot from phone)
- *
- * Key fixes in this version:
- *   1. Reconnect guard — only one reconnect attempt per slot at a time,
- *      preventing the "Operation was cancelled" loop from stacked attempts.
- *   2. writeCommand uses btoa() not Buffer.from() — Buffer is not available
- *      in the React Native JS runtime on iOS.
- *   3. getConnectedDeviceIds() exposed so the picker can filter out
- *      s'pots that are already assigned to a slot.
+ *   Write:    FFE9  (send commands TO sensor)
+ *   Notify:   FFE4  (live data FROM sensor)
  */
 
 import { BleManager, Device, Characteristic, BleError } from "react-native-ble-plx";
 import { Platform, PermissionsAndroid } from "react-native";
 
-// ── UUIDs ─────────────────────────────────────────────────────────────────────
-const SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9a34fb";
-const NOTIFY_UUID  = "0000ffe4-0000-1000-8000-00805f9a34fb";
-const WRITE_UUID   = "0000ffe9-0000-1000-8000-00805f9a34fb";
+// ── UUIDs ──────────────────────────────────────────────────────────────────
+const SERVICE_UUID  = "0000ffe5-0000-1000-8000-00805f9a34fb";
+const NOTIFY_UUID   = "0000ffe4-0000-1000-8000-00805f9a34fb";
+const WRITE_UUID    = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
-// ── BLE write commands (WT9011DCL protocol) ───────────────────────────────────
-// Unlock must be sent before any config write (valid for 10 seconds)
-const CMD_UNLOCK          = new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]);
-const CMD_SAVE            = new Uint8Array([0xFF, 0xAA, 0x00, 0x00, 0x00]);
+// ── Commands (from protocol doc) ────────────────────────────────────────────
+// Unlock → must send before any config command (valid for 10 seconds)
+const CMD_UNLOCK = new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]);
+// Save current config
+const CMD_SAVE   = new Uint8Array([0xFF, 0xAA, 0x00, 0x00, 0x00]);
+// Accelerometer calibration
 const CMD_ACCEL_CALIBRATE = new Uint8Array([0xFF, 0xAA, 0x01, 0x01, 0x00]);
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────
 export type SensorSlot = "top" | "bottom";
 
 export interface SensorState {
   connected: boolean;
-  deviceId:   string | null;
+  deviceId: string | null;
   deviceName: string | null;
 }
 
-type DataCallback   = (slot: SensorSlot, data: DataView) => void;
+type DataCallback = (slot: SensorSlot, data: DataView) => void;
 type StatusCallback = (slot: SensorSlot, state: SensorState) => void;
 
-// ── Singleton ─────────────────────────────────────────────────────────────────
+// ── Singleton BLE manager ───────────────────────────────────────────────────
 class BLEService {
   private manager: BleManager;
-
-  // Currently connected Device objects, one per slot
   private devices: Record<SensorSlot, Device | null> = { top: null, bottom: null };
-
-  // react-native-ble-plx monitor subscriptions
   private subscriptions: Record<SensorSlot, any> = { top: null, bottom: null };
-
   private isScanning = false;
 
-  // Reconnect guard — prevents parallel reconnect loops for the same slot.
-  // true = a reconnect is already in flight for that slot; ignore new attempts.
-  private reconnecting: Record<SensorSlot, boolean> = { top: false, bottom: false };
-
-  private onData?:   DataCallback;
+  private onData?: DataCallback;
   private onStatus?: StatusCallback;
 
   constructor() {
     this.manager = new BleManager();
-
-    // Reset internal state cleanly if Bluetooth is toggled off/on by the user
-    this.manager.onStateChange((state) => {
-      if (state === "PoweredOff" || state === "Resetting") {
-        console.log("[BLE] Bluetooth state changed:", state, "— clearing slot state");
-        this.devices       = { top: null, bottom: null };
-        this.subscriptions = { top: null, bottom: null };
-        this.reconnecting  = { top: false, bottom: false };
-        this.isScanning    = false;
-      }
-    }, true);
   }
 
-  // ── Callbacks ─────────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   setCallbacks(onData: DataCallback, onStatus: StatusCallback) {
     this.onData   = onData;
     this.onStatus = onStatus;
   }
 
-  // ── Permissions ───────────────────────────────────────────────────────────
-
+  /**
+   * Request Bluetooth permissions (Android only, iOS handled via Info.plist).
+   * Call this once before scanning.
+   */
   async requestPermissions(): Promise<boolean> {
     if (Platform.OS === "android") {
       const granted = await PermissionsAndroid.requestMultiple([
@@ -97,17 +72,18 @@ class BLEService {
         (r) => r === PermissionsAndroid.RESULTS.GRANTED
       );
     }
-    return true; // iOS: permissions declared in app.json / Info.plist
+    return true; // iOS permissions come from app.json entitlements
   }
 
-  // ── Scanning ──────────────────────────────────────────────────────────────
-
   /**
-   * Scan for nearby s'pots (WT9011DCL devices).
-   * Fires onDeviceFound for each new device seen.
-   * Automatically stops after timeoutMs.
+   * Scan for WT9011DCL devices (name starts with "WT").
+   * Calls onDeviceFound for each discovered device.
+   * Stops after timeoutMs.
    */
-  scan(onDeviceFound: (device: Device) => void, timeoutMs = 10000): void {
+  scan(
+    onDeviceFound: (device: Device) => void,
+    timeoutMs = 10000
+  ): void {
     if (this.isScanning) return;
     this.isScanning = true;
 
@@ -120,7 +96,7 @@ class BLEService {
           this.isScanning = false;
           return;
         }
-        if (device?.name?.startsWith("WT")) {
+        if (device && device.name?.startsWith("WT")) {
           onDeviceFound(device);
         }
       }
@@ -137,130 +113,91 @@ class BLEService {
     this.isScanning = false;
   }
 
-  // ── Connection ────────────────────────────────────────────────────────────
-
   /**
-   * Connect a s'pot to a slot and subscribe to its IMU data notifications.
-   * Safe to call even if the slot already has a device — existing connection
-   * is cleanly torn down first.
+   * Connect a discovered device to a slot ("top" or "bottom").
+   * Automatically subscribes to notifications.
    */
   async connectDevice(device: Device, slot: SensorSlot): Promise<void> {
-    try {
-      // Must stop scanning before connecting — BLE stack limitation
-      this.stopScan();
-      await new Promise((r) => setTimeout(r, 300));
-
-      // Tear down any existing connection in this slot
-      await this.disconnectSlot(slot);
+  try {
+    // Stop scanning before connecting — critical, can't do both at once
+    this.stopScan();
+    await new Promise((r) => setTimeout(r, 300)); // short pause for BLE stack
+    // Disconnect existing device in this slot if any
+    await this.disconnectSlot(slot);
 
       const connected = await device.connect();
       await connected.discoverAllServicesAndCharacteristics();
 
       this.devices[slot] = connected;
       this.onStatus?.(slot, {
-        connected:  true,
-        deviceId:   connected.id,
+        connected: true,
+        deviceId: connected.id,
         deviceName: connected.name,
       });
 
-      // Subscribe to IMU data notifications from the s'pot
+      // Subscribe to notifications
       this.subscriptions[slot] = connected.monitorCharacteristicForService(
         SERVICE_UUID,
         NOTIFY_UUID,
         (error: BleError | null, characteristic: Characteristic | null) => {
           if (error) {
-            console.warn(`[BLE] ${slot} s'pot notify error:`, error.message);
+            console.warn(`[BLE] ${slot} notify error:`, error.message);
             this.onStatus?.(slot, {
-              connected: false, deviceId: null, deviceName: null,
+              connected: false,
+              deviceId: null,
+              deviceName: null,
             });
             return;
           }
           if (characteristic?.value) {
-            // Decode base64 — use btoa/atob, NOT Buffer (not in RN JS runtime)
+            // Decode base64 without Buffer (not available in React Native)
             const binaryStr = atob(characteristic.value);
-            const bytes     = new Uint8Array(binaryStr.length);
+            const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) {
               bytes[i] = binaryStr.charCodeAt(i);
             }
-            this.onData?.(slot, new DataView(bytes.buffer));
+            const dataView = new DataView(bytes.buffer);
+            this.onData?.(slot, dataView);
           }
         }
       );
 
-      // ── Disconnection handler with reconnect guard ──────────────────────
-      // Guard prevents multiple parallel reconnect attempts for the same slot,
-      // which caused the "Operation was cancelled" loop in the previous version.
-      this.manager.onDeviceDisconnected(connected.id, async () => {
-        console.log(`[BLE] ${slot} s'pot disconnected`);
+      // Handle unexpected disconnection
+      this.manager.onDeviceDisconnected(connected.id, () => {
+        console.log(`[BLE] ${slot} disconnected`);
         this.devices[slot] = null;
         this.onStatus?.(slot, {
-          connected: false, deviceId: null, deviceName: null,
+          connected: false,
+          deviceId: null,
+          deviceName: null,
         });
-
-        // Only attempt reconnect if not already reconnecting this slot
-        if (this.reconnecting[slot]) {
-          console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
-          return;
-        }
-
-        this.reconnecting[slot] = true;
-        let attempts = 0;
-
-        while (attempts < 5) {
-          attempts++;
-          const delayMs = attempts * 2000; // back-off: 2s, 4s, 6s, 8s, 10s
-          console.log(`[BLE] ${slot} reconnect attempt ${attempts}/5 in ${delayMs}ms`);
-          await new Promise((r) => setTimeout(r, delayMs));
-
-          // If something else reconnected this slot while we were waiting, stop
-          if (this.devices[slot] !== null) {
-            console.log(`[BLE] ${slot} already reconnected externally — aborting loop`);
-            break;
-          }
-
-          try {
-            // Use reconnectDirect to avoid the disconnectSlot() call inside
-            // connectDevice() which cancels the pending connection and causes
-            // the "Operation was cancelled" loop
-            await this.reconnectDirect(device, slot);
-            console.log(`[BLE] ${slot} s'pot reconnected`);
-            break;
-          } catch (e: any) {
-            console.warn(`[BLE] ${slot} reconnect attempt ${attempts} failed:`, e.message);
-            if (attempts >= 5) {
-              console.log(`[BLE] ${slot} giving up after 5 attempts`);
-            }
-          }
-        }
-
-        this.reconnecting[slot] = false;
       });
-
     } catch (e: any) {
-      console.error(`[BLE] Failed to connect ${slot} s'pot:`, e.message);
+      console.error(`[BLE] Failed to connect ${slot}:`, e.message);
       this.onStatus?.(slot, {
-        connected: false, deviceId: null, deviceName: null,
+        connected: false,
+        deviceId: null,
+        deviceName: null,
       });
     }
   }
 
-  // ── Disconnection ─────────────────────────────────────────────────────────
-
   async disconnectSlot(slot: SensorSlot): Promise<void> {
-    // Cancel any in-flight reconnect for this slot before disconnecting
-    this.reconnecting[slot] = false;
-
     this.subscriptions[slot]?.remove();
     this.subscriptions[slot] = null;
 
     const device = this.devices[slot];
     if (device) {
-      try { await device.cancelConnection(); } catch {}
+      try {
+        await device.cancelConnection();
+      } catch {}
       this.devices[slot] = null;
     }
 
     this.onStatus?.(slot, {
-      connected: false, deviceId: null, deviceName: null,
+      connected: false,
+      deviceId: null,
+      deviceName: null,
     });
   }
 
@@ -272,31 +209,7 @@ class BLEService {
     ]);
   }
 
-  // ── Identity helpers ──────────────────────────────────────────────────────
-
-  /**
-   * Returns the device IDs of all currently connected s'pots.
-   * Used by the picker in sensor-setup to filter out already-connected devices
-   * so the user can't accidentally assign the same s'pot to two slots.
-   */
-  getConnectedDeviceIds(): string[] {
-    return (["top", "bottom"] as SensorSlot[])
-      .map((slot) => this.devices[slot]?.id)
-      .filter((id): id is string => id !== undefined && id !== null);
-  }
-
-  getConnectionState(slot: SensorSlot): SensorState {
-    const device = this.devices[slot];
-    return {
-      connected:  device !== null,
-      deviceId:   device?.id   ?? null,
-      deviceName: device?.name ?? null,
-    };
-  }
-
-  // ── Hardware calibration command ──────────────────────────────────────────
-
-  /** Send accelerometer calibration command sequence to a s'pot's IMU */
+  /** Send accelerometer calibration command to a sensor */
   async calibrate(slot: SensorSlot): Promise<void> {
     const device = this.devices[slot];
     if (!device) return;
@@ -307,56 +220,23 @@ class BLEService {
       await new Promise((r) => setTimeout(r, 200));
       await this.writeCommand(device, CMD_SAVE);
     } catch (e: any) {
-      console.warn("[BLE] Hardware calibrate error:", e.message);
+      console.warn("[BLE] Calibrate error:", e.message);
     }
   }
 
-  // ── Private ───────────────────────────────────────────────────────────────
-
-  /**
-   * Write a command byte array to a s'pot's write characteristic.
-   * Uses btoa() — NOT Buffer.from() which is unavailable in the RN JS runtime.
-   */
-  /**
- * Reconnect path used exclusively by the auto-reconnect loop.
- * Unlike connectDevice(), this does NOT call disconnectSlot() first —
- * that would cancel the pending connection and cause an infinite loop.
- */
-  private async reconnectDirect(device: Device, slot: SensorSlot): Promise<void> {
-    const connected = await device.connect();
-    await connected.discoverAllServicesAndCharacteristics();
-
-    this.devices[slot] = connected;
-    this.onStatus?.(slot, {
-      connected:  true,
-      deviceId:   connected.id,
-      deviceName: connected.name,
-    });
-
-    this.subscriptions[slot] = connected.monitorCharacteristicForService(
-      SERVICE_UUID,
-      NOTIFY_UUID,
-      (error: BleError | null, characteristic: Characteristic | null) => {
-        if (error) {
-          console.warn(`[BLE] ${slot} s'pot notify error:`, error.message);
-          this.onStatus?.(slot, {
-            connected: false, deviceId: null, deviceName: null,
-          });
-          return;
-        }
-        if (characteristic?.value) {
-          const binaryStr = atob(characteristic.value);
-          const bytes     = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-          }
-          this.onData?.(slot, new DataView(bytes.buffer));
-        }
-      }
-    );
+  getConnectionState(slot: SensorSlot): SensorState {
+    const device = this.devices[slot];
+    return {
+      connected: device !== null,
+      deviceId: device?.id ?? null,
+      deviceName: device?.name ?? null,
+    };
   }
+
+  // ── Private ────────────────────────────────────────────────────────────────
+
   private async writeCommand(device: Device, cmd: Uint8Array): Promise<void> {
-    const base64 = btoa(String.fromCharCode(...cmd));
+    const base64 = Buffer.from(cmd).toString("base64");
     await device.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       WRITE_UUID,
@@ -365,5 +245,5 @@ class BLEService {
   }
 }
 
-// ── Singleton export ──────────────────────────────────────────────────────────
+// Export singleton
 export const bleService = new BLEService();

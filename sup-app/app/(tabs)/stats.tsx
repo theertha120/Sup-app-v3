@@ -2,44 +2,37 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
-import { useAuth } from "../../src/contexts/AuthContext";
 import {
   analyzeIMUStream,
   type IMUReading,
   type PostureSessionStats,
 } from "../../src/services/posture/postureAnalysisService";
-
+import { MOCK_POSTURE_DATA } from "../../src/data/mockPostureData";
+import { CURRENT_USER_ID } from "../../constants/env";
 
 type DateRange = "today" | "last7days";
 
 // Mock stream: replace with real session data; empty = no data (startup state)
-let mockStream: IMUReading[] = [];
-let calibration: IMUReading[] | null = null;
-try {
-  // Load example data only if present in the repo (deleted in production)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
-} catch (e) {
-  mockStream = [];
-  calibration = null;
-}
+const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
+const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
+
+// For prototype: using Feb 27, 2026 as "today"
+const MOCK_TODAY = new Date("2026-02-27");
 
 // Animated number component for smooth transitions
-function AnimatedNumber({ value, style, decimals = 2 }: { value: number; style?: any; decimals?: number }) {
-  const [displayValue, setDisplayValue] = useState<number>(value);
+function AnimatedNumber({ value, style }: { value: number; style?: any }) {
+  const [displayValue, setDisplayValue] = useState(value);
   const animationRef = useRef<any>(null);
 
   useEffect(() => {
+    // Clear any existing animation
     if (animationRef.current) {
       clearInterval(animationRef.current);
-      animationRef.current = null;
     }
 
     const startValue = displayValue;
     const endValue = value;
-    const duration = 250;
+    const duration = 250; // 250ms animation
     const startTime = Date.now();
 
     if (startValue === endValue) return;
@@ -47,10 +40,12 @@ function AnimatedNumber({ value, style, decimals = 2 }: { value: number; style?:
     animationRef.current = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out animation
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       const current = startValue + (endValue - startValue) * easeProgress;
-
-      setDisplayValue(current);
+      
+      setDisplayValue(Math.round(current));
 
       if (progress >= 1) {
         setDisplayValue(endValue);
@@ -59,17 +54,16 @@ function AnimatedNumber({ value, style, decimals = 2 }: { value: number; style?:
           animationRef.current = null;
         }
       }
-    }, 16);
+    }, 16); // ~60fps
 
     return () => {
       if (animationRef.current) {
         clearInterval(animationRef.current);
-        animationRef.current = null;
       }
     };
   }, [value]);
 
-  return <Text style={style}>{typeof displayValue === "number" ? displayValue.toFixed(decimals) : String(displayValue)}</Text>;
+  return <Text style={style}>{displayValue}</Text>;
 }
 
 // Animated progress bar component
@@ -123,11 +117,7 @@ export default function StatsScreen() {
   );
 
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
-  const { userId } = useAuth();
 
-  // Calculate metrics from IMU stream analysis
-  // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
-  // TODO: Replace calibration_good_posture.json with user-calibrated baseline (captured during onboarding)
   const sessionStats = useMemo(() => {
     const stream = mockStream?.length ? mockStream : [];
     if (stream.length === 0) return null;
@@ -135,28 +125,21 @@ export default function StatsScreen() {
   }, []);
 
   // Filter posture data based on selected date range
-  // TODO: Query posture_daily table from Supabase for date range (best/worst days, weekly aggregates)
   const filteredData = useMemo(() => {
-    if (!sessionStats) return [];
-    
-    const today = new Date().toISOString().slice(0, 10);
+    const today = MOCK_TODAY; // Use mock date for prototype
+    const todayStr = today.toISOString().slice(0, 10);
     
     if (dateRange === "today") {
-      // Create today's data object from current session
-        return [{
-        userId: userId ?? "",
-        date: today,
-        avgScore: sessionStats.avgScore,
-        goodPostureMinutes: sessionStats.goodPostureMs / 60000,
-        badPostureMinutes: sessionStats.badPostureMs / 60000,
-        totalMinutes: sessionStats.totalMs / 60000,
-      }];
+      return MOCK_POSTURE_DATA.filter((d) => d.userId === CURRENT_USER_ID && d.date === todayStr);
     } else {
-      // "last7days" - TODO: fetch from Supabase when available
-      // For now, return empty (will show "No data available")
-      return [];
+      // Last 7 days
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      return MOCK_POSTURE_DATA.filter(
+        (d) => d.userId === CURRENT_USER_ID && new Date(d.date) >= sevenDaysAgo
+      );
     }
-  }, [dateRange, sessionStats]);
+  }, [dateRange]);
 
   // Calculate best and worst days
   const { bestDay, worstDay } = useMemo(() => {
@@ -182,9 +165,6 @@ export default function StatsScreen() {
 
   const hasData = sessionStats != null && sessionStats.totalMs > 0;
   const hasHistoricalData = filteredData.length > 0;
-
-  const MIN_MS = 30 * 60_000; // 30 minutes in ms
-  const hasEnoughData = sessionStats != null && sessionStats.totalMs >= MIN_MS;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -269,40 +249,26 @@ export default function StatsScreen() {
       {/* Overall Score */}
       <View style={styles.scoreCard}>
         <Text style={styles.scoreLabel}>Posture Stability Score</Text>
-        <Text style={styles.scoreValue}>
-          {hasEnoughData ? sessionStats!.avgScore : hasData ? "--" : "0"}
-        </Text>
+        <Text style={styles.scoreValue}>{hasData ? sessionStats.avgScore : "0"}</Text>
         <Text style={styles.scoreHint}>
-          {!hasData
-            ? "Score appears after your first session"
-            : !hasEnoughData
-            ? "Use your s'pots to get insights"
-            : "From your latest IMU session"}
+          {hasData
+            ? "From your latest IMU session"
+            : "Score appears after your first session"}
         </Text>
       </View>
 
       {/* Metrics */}
       <View style={styles.metrics}>
-        {/* Derive neck alignment from session data: slightly reduced from overall score */}
-        {hasData ? (
-          <MetricCard 
-            label="Neck alignment" 
-            goodPercent={Math.round(Math.max(0, sessionStats.goodPosturePercent - 5))} 
-            animationKey={dateRange} 
-          />
-        ) : (
-          <MetricSkeleton label="Neck alignment" />
-        )}
-        {/* Derive shoulder balance from session data: slightly increased variance */}
-        {hasData ? (
-          <MetricCard 
-            label="Shoulder balance" 
-            goodPercent={Math.round(Math.min(100, sessionStats.goodPosturePercent + 3))} 
-            animationKey={dateRange} 
-          />
-        ) : (
-          <MetricSkeleton label="Shoulder balance" />
-        )}
+        <MetricCard 
+          label="Neck alignment" 
+          goodPercent={dateRange === "today" ? 72 : 78} 
+          animationKey={dateRange} 
+        />
+        <MetricCard 
+          label="Shoulder balance" 
+          goodPercent={dateRange === "today" ? 85 : 70} 
+          animationKey={dateRange} 
+        />
         {hasData ? (
           <UpperBackSessionCard stats={sessionStats} animationKey={dateRange} />
         ) : (
@@ -312,11 +278,11 @@ export default function StatsScreen() {
 
       {/* Weekly Summary */}
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Session summary</Text>
+        <Text style={styles.summaryTitle}>This week</Text>
         <Text style={styles.summaryText}>
           {hasData
-            ? `Session: ${(sessionStats.totalMs / 1000).toFixed(2)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
-            : "Your weekly summary will appear here once you start wearing your s'pots"}
+            ? `Session: ${(sessionStats.totalMs / 1000).toFixed(1)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
+            : "Your weekly summary will appear here once you start wearing your S'pots"}
         </Text>
       </View>
 
@@ -368,7 +334,7 @@ function UpperBackSessionCard({
   animationKey?: string | number;
 }) {
   const goodWidth = stats.totalMs > 0 ? (stats.goodPostureMs / stats.totalMs) * 100 : 0;
-  const totalMinutes = (stats.totalMs / 60_000).toFixed(2);
+  const totalMinutes = (stats.totalMs / 60_000).toFixed(1);
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>Upper back support</Text>

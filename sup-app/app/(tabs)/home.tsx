@@ -5,7 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { type User } from "../../constants/env";
+import { CURRENT_USER_ID, type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
@@ -41,7 +41,7 @@ function getEncouragingMessage(score: number): string {
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
-  const { isAuthenticated, userId } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -93,8 +93,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
-      if (!userId) return;
-      if (updatedProfile.id !== userId) return;
+      if (updatedProfile.id !== CURRENT_USER_ID) return;
       setCurrentUser(userProfileToUser(updatedProfile));
     });
 
@@ -138,8 +137,6 @@ export default function HomeScreen() {
   };
 
   // Calculate posture stability score from IMU stream (same logic as stats page)
-  // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
-  // TODO: Replace calibration_good_posture.json with user-calibrated baseline (captured during onboarding)
   const postureStats = useMemo(() => {
     try {
       const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
@@ -154,9 +151,7 @@ export default function HomeScreen() {
     return null;
   }, []);
 
-  const MIN_MS = 30 * 60_000; // 30 minutes
-  const hasData = postureStats !== null && postureStats.totalMs > 0;
-  const hasEnoughData = postureStats !== null && postureStats.totalMs >= MIN_MS;
+  const hasScore = postureStats !== null;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -215,18 +210,11 @@ export default function HomeScreen() {
       {/* Status Card */}
       <View style={styles.statusCard}>
         <Text style={styles.statusTitle}>Your posture status</Text>
-        {hasEnoughData ? (
+        {hasScore ? (
           <>
-            <Text style={styles.statusValue}>{getPostureStatus(postureStats!.avgScore)}</Text>
+            <Text style={styles.statusValue}>{getPostureStatus(postureStats.avgScore)}</Text>
             <Text style={styles.statusHint}>
-              {postureStats!.goodPosturePercent.toFixed(0)}% good posture · {(postureStats!.totalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(postureStats!.avgScore)}
-            </Text>
-          </>
-        ) : hasData ? (
-          <>
-            <Text style={styles.statusValue}>Not enough data</Text>
-            <Text style={styles.statusHint}>
-              Use your s'pots to get insights
+              {postureStats.goodPosturePercent.toFixed(0)}% good posture · {(postureStats.totalMs / 60000).toFixed(1)} min tracked · {getEncouragingMessage(postureStats.avgScore)}
             </Text>
           </>
         ) : (

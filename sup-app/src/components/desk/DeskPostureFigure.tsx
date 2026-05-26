@@ -134,8 +134,6 @@ const POSES: Record<DeskPostureState, Joints> = {
   forward_lean: FORWARD_LEAN,
   tilted_right: TILTED_RIGHT,
   tilted_left:  TILTED_LEFT,
-  severe:       SLOUCHED, // same shape as slouched, classified separately
-  transition: UPRIGHT,       // subtle, keep near upright
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
