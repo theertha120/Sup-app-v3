@@ -1,12 +1,15 @@
 /**
  * desk.tsx — Desk Mode screen
  *
- * Uses the global IMUContext for live s'pot data.
- * Score badge = SHS (Spine Health Score) — session-accumulated.
- * Figure colour = instantScore — immediate posture quality.
- * Intervention alerts shown when posture held beyond clinical threshold.
- * Movement nudge shown when static for 20+ min.
- * Calibration prompt shown when neutral offset not yet captured.
+ * Shows live posture + current session data only.
+ * Charts and historical breakdown moved to stats.tsx.
+ *
+ * Session data shown:
+ *   - Live posture figure + state label
+ *   - Session duration (time s'pots have been connected)
+ *   - Time in current state
+ *   - Session posture breakdown (upright %, forward %, etc.)
+ *   - CPL indicator (cumulative postural load)
  */
 
 import React, { useState } from "react";
@@ -18,14 +21,45 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
-import { getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
+import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
+import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { router } from "expo-router";
 
-// ── Posture tips ──────────────────────────────────────────────────────────────
+// ── Posture colour system ─────────────────────────────────────────────────────
 
-const POSTURE_TIPS: Record<string, string> = {
+const STATE_COLORS: Record<DeskPostureState, string> = {
+  upright:      "#4CAF50",
+  transition:   "#8BC34A",
+  forward_lean: "#CDDC39",
+  slouched:     "#FF9800",
+  severe:       "#F44336",
+  tilted_left:  "#FF9800",
+  tilted_right: "#FF9800",
+};
+
+const STATE_BG_COLORS: Record<DeskPostureState, string> = {
+  upright:      "#E8F5E9",
+  transition:   "#F1F8E9",
+  forward_lean: "#F9FBE7",
+  slouched:     "#FFF3E0",
+  severe:       "#FFEBEE",
+  tilted_left:  "#FFF3E0",
+  tilted_right: "#FFF3E0",
+};
+
+const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
+  upright:      { label: "good alignment",       icon: "checkmark-circle" },
+  transition:   { label: "slight forward shift",  icon: "arrow-forward-circle" },
+  forward_lean: { label: "leaning forward",       icon: "trending-up" },
+  slouched:     { label: "spine rounding",        icon: "warning" },
+  severe:       { label: "high spinal load",      icon: "alert-circle" },
+  tilted_left:  { label: "shifting left",         icon: "arrow-back-circle" },
+  tilted_right: { label: "shifting right",        icon: "arrow-forward-circle" },
+};
+
+const POSTURE_TIPS: Record<DeskPostureState, string> = {
   upright:      "keep your feet flat, shoulders relaxed, and eyes level with the screen.",
   transition:   "you're starting to drift. try a gentle chest lift to reset.",
   forward_lean: "try moving your screen closer rather than leaning in.",
@@ -35,12 +69,127 @@ const POSTURE_TIPS: Record<string, string> = {
   severe:       "adjust your position now — even a small shift reduces disc pressure significantly.",
 };
 
+const STATE_ORDER: DeskPostureState[] = [
+  "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
+];
+
+// ── Session stats row ─────────────────────────────────────────────────────────
+
+function SessionStatsRow({
+  sessionDurationMs,
+  timeInCurrentStateMs,
+  currentState,
+  cpl,
+}: {
+  sessionDurationMs: number;
+  timeInCurrentStateMs: number;
+  currentState: DeskPostureState;
+  cpl: number;
+}) {
+  // CPL bar — max display at 1500 (above that is red zone regardless)
+  const cplPct    = Math.min(cpl / 1500, 1);
+  const cplColor  = cpl < 600 ? "#4CAF50" : cpl < 1000 ? "#FF9800" : "#F44336";
+  const cplLabel  = cpl < 600 ? "low load" : cpl < 1000 ? "building up" : "high load";
+
+  return (
+    <View style={ss.container}>
+      {/* Session duration + state time */}
+      <View style={ss.timeRow}>
+        <View style={ss.timeBlock}>
+          <Text style={ss.timeValue}>{formatDuration(sessionDurationMs)}</Text>
+          <Text style={ss.timeLabel}>session time</Text>
+        </View>
+        <View style={ss.timeDivider} />
+        <View style={ss.timeBlock}>
+          <Text style={[ss.timeValue, { color: STATE_COLORS[currentState] }]}>
+            {formatDuration(timeInCurrentStateMs)}
+          </Text>
+          <Text style={ss.timeLabel}>in current state</Text>
+        </View>
+      </View>
+
+      {/* CPL bar */}
+      <View style={ss.cplSection}>
+        <View style={ss.cplHeader}>
+          <Text style={ss.cplLabel}>cumulative spinal load</Text>
+          <Text style={[ss.cplValue, { color: cplColor }]}>{cplLabel}</Text>
+        </View>
+        <View style={ss.cplBarBg}>
+          <View style={[ss.cplBarFill, { width: `${Math.round(cplPct * 100)}%` as any, backgroundColor: cplColor }]} />
+        </View>
+        <Text style={ss.cplHint}>
+          accumulates across posture bouts — short breaks barely reset it
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ── Session posture breakdown ─────────────────────────────────────────────────
+
+function SessionBreakdown({
+  sessionStats, sessionTotalMs, isTracking,
+}: {
+  sessionStats: StateTimeMap;
+  sessionTotalMs: number;
+  isTracking: boolean;
+}) {
+  if (!isTracking || sessionTotalMs === 0) return null;
+
+  const uprightMs = sessionStats.upright ?? 0;
+  const goodPct   = sessionTotalMs > 0 ? Math.round((uprightMs / sessionTotalMs) * 100) : 0;
+
+  return (
+    <View style={sb.container}>
+      <View style={sb.header}>
+        <Text style={sb.title}>session breakdown</Text>
+        <Text style={[sb.goodPct, { color: goodPct >= 70 ? "#4CAF50" : goodPct >= 50 ? "#FF9800" : "#F44336" }]}>
+          {goodPct}% aligned
+        </Text>
+      </View>
+
+      {/* Stacked horizontal bar */}
+      <View style={sb.stackedBar}>
+        {STATE_ORDER.map((stateKey) => {
+          const ms  = sessionStats[stateKey] ?? 0;
+          const pct = sessionTotalMs > 0 ? (ms / sessionTotalMs) * 100 : 0;
+          if (pct < 1) return null;
+          return (
+            <View
+              key={stateKey}
+              style={{ width: `${pct}%` as any, backgroundColor: STATE_COLORS[stateKey], height: "100%" }}
+            />
+          );
+        })}
+      </View>
+
+      {/* State rows — only non-zero */}
+      <View style={sb.rows}>
+        {STATE_ORDER.map((stateKey) => {
+          const ms  = sessionStats[stateKey] ?? 0;
+          if (ms === 0) return null;
+          const pct   = sessionTotalMs > 0 ? Math.round((ms / sessionTotalMs) * 100) : 0;
+          const color = STATE_COLORS[stateKey];
+          const info  = STATE_INFO[stateKey];
+          return (
+            <View key={stateKey} style={sb.row}>
+              <View style={[sb.dot, { backgroundColor: color }]} />
+              <Text style={sb.stateLabel}>{info.label}</Text>
+              <Text style={[sb.statePct, { color }]}>{pct}%</Text>
+              <Text style={sb.stateTime}>{formatDuration(ms)}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // ── Intervention Modal ────────────────────────────────────────────────────────
 
 function InterventionModal() {
   const { activeIntervention, dismissIntervention } = useIMUContext();
   if (!activeIntervention) return null;
-
   return (
     <Modal visible transparent animationType="slide">
       <View style={iv.overlay}>
@@ -76,7 +225,6 @@ function InterventionModal() {
 function MovementNudgeModal() {
   const { shouldNudge, confirmMovement } = useIMUContext();
   if (!shouldNudge) return null;
-
   return (
     <Modal visible transparent animationType="fade">
       <View style={mv.overlay}>
@@ -84,12 +232,9 @@ function MovementNudgeModal() {
           <Text style={mv.emoji}>🚶</Text>
           <Text style={mv.title}>time to move</Text>
           <Text style={mv.body}>
-            you've been in the same position for a while. even a small shift
-            significantly preserves lumbar and pelvic mobility.
+            you've been in the same position for a while. even a small shift significantly preserves lumbar and pelvic mobility.
           </Text>
-          <Text style={mv.cue}>
-            stand up, roll your shoulders, or just shift your weight.
-          </Text>
+          <Text style={mv.cue}>stand up, roll your shoulders, or just shift your weight.</Text>
           <Pressable style={mv.btn} onPress={confirmMovement}>
             <Text style={mv.btnText}>yes, i moved ✓</Text>
           </Pressable>
@@ -106,42 +251,38 @@ function MovementNudgeModal() {
 
 export default function DeskScreen() {
   const {
-    topSensor,
-    bottomSensor,
-    posture,
-    shs,
-    calibration,
-    clinicalBaseline,
-    bothConnected,
-    timeInCurrentStateMs,
+    topSensor, bottomSensor,
+    posture, calibration, clinicalBaseline,
+    bothConnected, timeInCurrentStateMs,
+    sessionDurationMs, cpl,
     isNeutralCalibrated,
   } = useIMUContext();
 
   const [showCalibModal, setShowCalibModal] = useState(false);
 
-  const currentState = posture?.state        ?? "upright";
+  const currentState   = (posture?.state ?? "upright") as DeskPostureState;
+  const isTracking     = bothConnected && isNeutralCalibrated;
+  const figureColor    = isTracking ? STATE_COLORS[currentState] : STATE_COLORS["upright"];
+  const currentDesc    = posture?.description ?? "connect your s'pots via s'pot setup.";
   const instantScore = posture?.instantScore ?? 100;
   const currentLabel = posture?.label        ?? "waiting for s'pots…";
-  const currentDesc  = posture?.description  ?? "connect your s'pots via s'pot setup.";
 
   const shsColor     = getScoreColor(shs);
   const shsLabel     = getScoreLabel(shs);
   const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
-  // Whether posture tracking is live — needs both connected AND neutral calibrated
-  const isTracking = bothConnected && isNeutralCalibrated;
+  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
   return (
-    <SafeAreaView style={styles.safe}>
-
+    <SafeAreaView style={s.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
       <InterventionModal />
       <MovementNudgeModal />
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
-        <View style={styles.header}>
+        <View style={s.header}>
           <View>
             <Text style={styles.headerTitle}>Desk Mode</Text>
             <Text style={styles.headerSub}>
@@ -153,22 +294,22 @@ export default function DeskScreen() {
             </Text>
           </View>
           {!bothConnected && (
-            <Pressable style={styles.setupLink} onPress={() => router.push("/sensor-setup")}>
+            <Pressable style={s.setupLink} onPress={() => router.push("/sensor-setup")}>
               <Ionicons name="hardware-chip-outline" size={16} color={colours.primary} />
-              <Text style={styles.setupLinkText}>setup</Text>
+              <Text style={s.setupLinkText}>setup</Text>
             </Pressable>
           )}
         </View>
 
-        {/* s'pot connection pills */}
-        <View style={styles.pillRow}>
+        {/* Connection pills */}
+        <View style={s.pillRow}>
           {(["top", "bottom"] as const).map((slot) => {
             const sensor    = slot === "top" ? topSensor : bottomSensor;
             const connected = sensor.state.connected;
             return (
-              <View key={slot} style={[styles.pill, { backgroundColor: connected ? "#E8F5E9" : "#F5F5F5" }]}>
-                <View style={[styles.pillDot, { backgroundColor: connected ? "#4CAF50" : "#ccc" }]} />
-                <Text style={[styles.pillText, { color: connected ? "#2E7D32" : "#999" }]}>
+              <View key={slot} style={[s.pill, { backgroundColor: connected ? "#E8F5E9" : "#F5F5F5" }]}>
+                <View style={[s.pillDot, { backgroundColor: connected ? "#4CAF50" : "#ccc" }]} />
+                <Text style={[s.pillText, { color: connected ? "#2E7D32" : "#999" }]}>
                   {slot} s'pot {connected ? "connected" : "disconnected"}
                 </Text>
               </View>
@@ -176,54 +317,47 @@ export default function DeskScreen() {
           })}
         </View>
 
-        {/* Calibration needed banner — shown when connected but no neutral yet */}
+        {/* Calibration banner */}
         {bothConnected && !isNeutralCalibrated && (
-          <Pressable
-            style={styles.calibrateBanner}
-            onPress={() => setShowCalibModal(true)}
-          >
+          <Pressable style={s.calibrateBanner} onPress={() => setShowCalibModal(true)}>
             <Ionicons name="warning-outline" size={18} color="#E65100" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.calibrateBannerTitle}>calibration needed</Text>
-              <Text style={styles.calibrateBannerSub}>
-                complete step 1 (neutral upright) to start posture tracking
-              </Text>
+              <Text style={s.calibrateBannerTitle}>calibration needed</Text>
+              <Text style={s.calibrateBannerSub}>complete step 1 to start posture tracking</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#E65100" />
           </Pressable>
         )}
 
-        {/* SHS Score badge */}
-        <View style={[styles.scoreBadge, { borderColor: shsColor }]}>
-          <Text style={[styles.scoreNumber, { color: shsColor }]}>
-            {isTracking ? shs : "--"}
-          </Text>
-          <Text style={[styles.scoreLabel, { color: shsColor }]}>
-            {isTracking ? shsLabel : bothConnected ? "calibrate" : "connect"}
-          </Text>
-        </View>
-        {isTracking && (
-          <Text style={styles.scoreSubLabel}>spine health score</Text>
-        )}
-
         {/* Figure card */}
-        <View style={styles.figureCard}>
-          <View style={styles.figureWrapper}>
+        <View style={[s.figureCard, { borderColor: figureColor + "33" }]}>
+          {isTracking && (
+            <View style={[s.stateLabelStrip, { backgroundColor: STATE_BG_COLORS[currentState] }]}>
+              <Ionicons name={STATE_INFO[currentState].icon as any} size={14} color={figureColor} />
+              <Text style={[s.stateLabelText, { color: figureColor }]}>
+                {STATE_INFO[currentState].label}
+              </Text>
+            </View>
+          )}
+          <View style={s.figureWrapper}>
             <DeskPostureFigure
               state={currentState}
-              score={isTracking ? instantScore : 100}
+              score={
+                currentState === "upright"      ? 95 :
+                currentState === "transition"   ? 75 :
+                currentState === "forward_lean" ? 62 :
+                currentState === "tilted_left"  ? 55 :
+                currentState === "tilted_right" ? 55 :
+                currentState === "slouched"     ? 42 : 20
+              }
             />
           </View>
-          <View style={styles.stateInfo}>
-            <Text style={[styles.stateLabel, { color: getScoreColor(instantScore) }]}>
-              {isTracking ? currentLabel : bothConnected ? "calibrate to begin" : "s'pots not connected"}
+          <View style={s.stateInfo}>
+            <Text style={s.stateDescription}>
+              {isTracking ? currentDesc
+                : bothConnected ? "tap 'calibrate posture' below and complete step 1."
+                : "connect both s'pots to begin."}
             </Text>
-            <Text style={styles.stateDescription}>
-              {isTracking ? currentDesc : bothConnected
-                ? "tap 'calibrate posture' below and complete step 1 to start tracking."
-                : "connect both s'pots via s'pot setup to begin."}
-            </Text>
-            {/* Debug line — pitchDiff and rollDiff only, bottomAbsolutePitch removed */}
             {isTracking && posture && (
               <Text style={styles.debugText}>
                 Δpitch {posture.pitchDiff.toFixed(2)}°  Δroll {posture.rollDiff.toFixed(2)}°{"  "}{timeInStateMin}min
@@ -232,55 +366,58 @@ export default function DeskScreen() {
           </View>
         </View>
 
-        {/* Calibrate button */}
-        {bothConnected && (
-          <View style={styles.calibrateRow}>
-            <Pressable
-              style={[styles.calibrateBtn, { borderColor: colours.primary }]}
-              onPress={() => setShowCalibModal(true)}
-            >
-              <Ionicons name="sync-outline" size={18} color={colours.primary} />
-              <Text style={styles.calibrateBtnText}>
-                {calibration.isComplete
-                  ? "re-calibrate posture"
-                  : isNeutralCalibrated
-                    ? "continue calibration"
-                    : "calibrate posture"}
-              </Text>
-              {calibration.isComplete && (
-                <View style={styles.calibratedBadge}>
-                  <Text style={styles.calibratedBadgeText}>✓</Text>
-                </View>
-              )}
-              {isNeutralCalibrated && !calibration.isComplete && (
-                <View style={styles.calibratedBadge}>
-                  <Text style={styles.calibratedBadgeText}>1</Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
+        {/* Session stats — only when tracking */}
+        {isTracking && (
+          <SessionStatsRow
+            sessionDurationMs={sessionDurationMs}
+            timeInCurrentStateMs={timeInCurrentStateMs}
+            currentState={currentState}
+            cpl={cpl}
+          />
         )}
 
-        {/* Tip card */}
-        <View style={styles.tipCard}>
-          <View style={styles.tipHeader}>
-            <Ionicons name="bulb-outline" size={18} color={colours.primary} />
-            <Text style={styles.tipTitle}>tip</Text>
+        {/* Calibrate button */}
+        {bothConnected && (
+          <Pressable style={s.calibrateBtn} onPress={() => setShowCalibModal(true)}>
+            <Ionicons name="sync-outline" size={16} color={colours.primary} />
+            <Text style={s.calibrateBtnText}>
+              {calibration.isComplete ? "re-calibrate posture"
+                : isNeutralCalibrated ? "continue calibration"
+                : "calibrate posture"}
+            </Text>
+            {calibration.isComplete && (
+              <View style={s.calibratedBadge}>
+                <Text style={s.calibratedBadgeText}>✓</Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+
+        {/* Tip */}
+        <View style={s.tipCard}>
+          <View style={s.tipHeader}>
+            <Ionicons name="bulb-outline" size={16} color={colours.primary} />
+            <Text style={s.tipTitle}>tip</Text>
           </View>
-          <Text style={styles.tipText}>
-            {POSTURE_TIPS[currentState] ?? POSTURE_TIPS["upright"]}
-          </Text>
+          <Text style={s.tipText}>{POSTURE_TIPS[currentState]}</Text>
         </View>
 
-        {/* Raw sensor angle detail — useful for debugging */}
+        {/* Session posture breakdown */}
+        <SessionBreakdown
+          sessionStats={sessionStats}
+          sessionTotalMs={sessionTotalMs}
+          isTracking={isTracking}
+        />
+
+        {/* Raw sensor debug */}
         {bothConnected && (
-          <View style={styles.sensorDetailRow}>
+          <View style={s.sensorDetailRow}>
             {[
-              { label: "top s'pot", data: topSensor.latest },
+              { label: "top s'pot",    data: topSensor.latest },
               { label: "bottom s'pot", data: bottomSensor.latest },
             ].map(({ label, data }) => (
-              <View key={label} style={styles.sensorDetailCard}>
-                <Text style={styles.sensorDetailTitle}>{label}</Text>
+              <View key={label} style={s.sensorDetailCard}>
+                <Text style={s.sensorDetailTitle}>{label}</Text>
                 {data ? (
                   <>
                     <Text style={styles.sensorDetailValue}>pitch {data.angle.pitch.toFixed(2)}°</Text>
@@ -288,18 +425,60 @@ export default function DeskScreen() {
                     <Text style={styles.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(2)}°</Text>
                   </>
                 ) : (
-                  <Text style={styles.sensorDetailValue}>waiting…</Text>
+                  <Text style={s.sensorDetailValue}>waiting…</Text>
                 )}
               </View>
             ))}
           </View>
         )}
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+// ── Session stats styles ──────────────────────────────────────────────────────
+
+const ss = StyleSheet.create({
+  container: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 16,
+    alignSelf: "stretch", marginBottom: 16,
+    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
+  },
+  timeRow:     { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  timeBlock:   { flex: 1, alignItems: "center" },
+  timeValue:   { fontSize: 22, fontWeight: "800", color: colours.textPrimary },
+  timeLabel:   { fontSize: 11, color: colours.textSecondary, marginTop: 2 },
+  timeDivider: { width: 1, height: 36, backgroundColor: "#E0E0E0" },
+  cplSection:  { gap: 6 },
+  cplHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cplLabel:    { fontSize: 12, color: colours.textSecondary },
+  cplValue:    { fontSize: 12, fontWeight: "700" },
+  cplBarBg:    { height: 8, backgroundColor: "#F0F0F0", borderRadius: 4, overflow: "hidden" },
+  cplBarFill:  { height: 8, borderRadius: 4 },
+  cplHint:     { fontSize: 11, color: "#bbb" },
+});
+
+// ── Session breakdown styles ──────────────────────────────────────────────────
+
+const sb = StyleSheet.create({
+  container: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 16,
+    alignSelf: "stretch", marginBottom: 16,
+    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
+  },
+  header:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title:     { fontSize: 15, fontWeight: "700", color: colours.textPrimary },
+  goodPct:   { fontSize: 15, fontWeight: "800" },
+  stackedBar:{ height: 10, borderRadius: 5, overflow: "hidden", flexDirection: "row", marginBottom: 14, backgroundColor: "#F0F0F0" },
+  rows:      { gap: 10 },
+  row:       { flexDirection: "row", alignItems: "center", gap: 8 },
+  dot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  stateLabel:{ flex: 1, fontSize: 13, color: colours.textPrimary },
+  statePct:  { fontSize: 13, fontWeight: "700", minWidth: 36, textAlign: "right" },
+  stateTime: { fontSize: 12, color: colours.textSecondary, minWidth: 40, textAlign: "right" },
+});
 
 // ── Intervention modal styles ─────────────────────────────────────────────────
 
@@ -320,7 +499,7 @@ const iv = StyleSheet.create({
   movedText: { fontSize: 14, fontWeight: "700", color: "#fff" },
 });
 
-// ── Movement nudge modal styles ───────────────────────────────────────────────
+// ── Movement nudge styles ─────────────────────────────────────────────────────
 
 const mv = StyleSheet.create({
   overlay:  { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center", padding: 24 },
@@ -337,7 +516,7 @@ const mv = StyleSheet.create({
 
 // ── Screen styles ─────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: colours.background },
   container: { paddingHorizontal: 20, paddingTop: 8, alignItems: "center" },
 
@@ -352,50 +531,39 @@ const styles = StyleSheet.create({
   pillDot: { width: 7, height: 7, borderRadius: 4 },
   pillText:{ fontSize: 12, fontWeight: "600" },
 
-  calibrateBanner: {
-    alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#FFF3E0", borderRadius: 14, padding: 14, marginBottom: 14,
-  },
+  calibrateBanner:      { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF3E0", borderRadius: 14, padding: 14, marginBottom: 14 },
   calibrateBannerTitle: { fontSize: 13, fontWeight: "700", color: "#E65100" },
   calibrateBannerSub:   { fontSize: 12, color: "#BF360C", marginTop: 2, lineHeight: 17 },
 
-  scoreBadge: {
-    width: 110, height: 110, borderRadius: 55, borderWidth: 3,
-    alignItems: "center", justifyContent: "center", marginBottom: 4, backgroundColor: colours.card,
-    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 }, android: { elevation: 3 } }),
-  },
-  scoreNumber:   { fontSize: 36, fontWeight: "800" },
-  scoreLabel:    { fontSize: 11, fontWeight: "600", textTransform: "lowercase", letterSpacing: 0.5 },
-  scoreSubLabel: { fontSize: 11, color: colours.textSecondary, marginBottom: 16 },
-
   figureCard: {
-    backgroundColor: colours.card, borderRadius: 20, alignItems: "center",
-    paddingVertical: 20, paddingHorizontal: 16, alignSelf: "stretch", marginBottom: 20,
+    backgroundColor: "#fff", borderRadius: 20, alignSelf: "stretch",
+    marginBottom: 16, overflow: "hidden", borderWidth: 1.5,
     ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
   },
-  figureWrapper:    { height: 280, justifyContent: "center", alignItems: "center" },
-  stateInfo:        { marginTop: 12, alignItems: "center" },
-  stateLabel:       { fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  stateDescription: { fontSize: 14, color: colours.textSecondary, textAlign: "center", lineHeight: 20 },
-  debugText:        { fontSize: 10, color: "#bbb", marginTop: 6, fontFamily: "monospace" },
+  stateLabelStrip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
+  stateLabelText:  { fontSize: 14, fontWeight: "700", flex: 1 },
+  figureWrapper:   { alignItems: "center", paddingVertical: 8 },
+  stateInfo:       { paddingHorizontal: 16, paddingBottom: 16, alignItems: "center" },
+  stateDescription:{ fontSize: 14, color: colours.textSecondary, textAlign: "center", lineHeight: 20 },
+  debugText:       { fontSize: 10, color: "#ccc", marginTop: 6, fontFamily: "monospace" },
 
-  calibrateRow: { alignSelf: "stretch", marginBottom: 16 },
   calibrateBtn: {
-    flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1.5,
-    borderRadius: 30, paddingVertical: 12, paddingHorizontal: 22,
-    backgroundColor: colours.card, justifyContent: "center",
+    alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1.5, borderColor: colours.primary, borderRadius: 30,
+    paddingVertical: 12, paddingHorizontal: 22, backgroundColor: "#fff",
+    justifyContent: "center", marginBottom: 14,
   },
   calibrateBtnText:    { fontSize: 14, fontWeight: "600", color: colours.primary },
   calibratedBadge:     { backgroundColor: "#4CAF50", borderRadius: 10, width: 20, height: 20, alignItems: "center", justifyContent: "center" },
   calibratedBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
 
-  tipCard:   { backgroundColor: colours.primarySoft, borderRadius: 14, padding: 16, alignSelf: "stretch", marginBottom: 24 },
+  tipCard:   { backgroundColor: colours.primarySoft, borderRadius: 14, padding: 14, alignSelf: "stretch", marginBottom: 16 },
   tipHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  tipTitle:  { fontSize: 14, fontWeight: "700", color: colours.primary },
-  tipText:   { fontSize: 14, color: colours.textPrimary, lineHeight: 21 },
+  tipTitle:  { fontSize: 13, fontWeight: "700", color: colours.primary },
+  tipText:   { fontSize: 13, color: colours.textPrimary, lineHeight: 19 },
 
   sensorDetailRow:   { alignSelf: "stretch", flexDirection: "row", gap: 10, marginBottom: 16 },
-  sensorDetailCard:  { flex: 1, backgroundColor: colours.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colours.border },
+  sensorDetailCard:  { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colours.border },
   sensorDetailTitle: { fontSize: 12, fontWeight: "700", color: colours.primary, marginBottom: 6 },
   sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18 },
 });

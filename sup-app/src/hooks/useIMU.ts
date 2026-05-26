@@ -73,6 +73,8 @@ const POSTURE_DESCRIPTIONS: Record<DeskPostureState, string> = {
   slouched:     "Back curved and rounded. Sit up straight.",
   tilted_left:  "Weight shifted to left side. Even out.",
   tilted_right: "Weight shifted to right side. Even out.",
+  transition:   "Starting to drift forward. A gentle chest lift will reset you.",  // ← add
+  severe:       "High spinal load. Adjust your position now.",                     // ← add
 };
 
 const POSTURE_LABELS: Record<DeskPostureState, string> = {
@@ -81,8 +83,9 @@ const POSTURE_LABELS: Record<DeskPostureState, string> = {
   slouched:     "Slouching",
   tilted_left:  "Leaning Left",
   tilted_right: "Leaning Right",
+  transition:   "Slight Forward Shift",  // ← add
+  severe:       "High Spinal Load",      // ← add
 };
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useIMU(): UseIMUResult {
