@@ -420,29 +420,7 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* Overall Score */}
-        <View style={styles.scoreCard}>
-          <Text style={styles.scoreLabel}>Posture Stability Score</Text>
-          <Text style={styles.scoreValue}>{hasData ? sessionStats.avgScore : "0"}</Text>
-          <Text style={styles.scoreHint}>{hasData ? "From your latest IMU session" : "Score appears after your first session"}</Text>
-        </View>
-
-        {/* Metrics */}
-        <View style={styles.metrics}>
-          <MetricCard label="Neck alignment" goodPercent={hasData ? Math.round(Math.max(0, sessionStats.goodPosturePercent - 5)) : 0} animationKey={dateRange} />
-          <MetricCard label="Shoulder balance" goodPercent={hasData ? Math.round(Math.min(100, sessionStats.goodPosturePercent + 3)) : 0} animationKey={dateRange} />
-          {hasData ? <UpperBackSessionCard stats={sessionStats} animationKey={dateRange} /> : <MetricSkeleton label="Upper back support" />}
-        </View>
-
-        {/* Weekly Summary */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>This week</Text>
-          <Text style={styles.summaryText}>
-            {hasData
-              ? `Session: ${(sessionStats.totalMs / 1000).toFixed(1)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
-              : "Your weekly summary will appear here once you start wearing your s'pots"}
-          </Text>
-        </View>
+        
 
       {/* Overall Score */}
       <View style={styles.scoreCard}>
@@ -496,6 +474,7 @@ export default function StatsScreen() {
             ? `Session: ${(sessionStats.totalMs / 1000).toFixed(2)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
             : "Your weekly summary will appear here once you start wearing your s'pots"}
         </Text>
+      </View>
       </ScrollView>
     </Animated.View>
   );

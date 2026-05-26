@@ -21,7 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
-import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData";
+import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
@@ -255,7 +255,7 @@ export default function DeskScreen() {
     posture, calibration, clinicalBaseline,
     bothConnected, timeInCurrentStateMs,
     sessionDurationMs, cpl,
-    isNeutralCalibrated,
+    isNeutralCalibrated, shs,
   } = useIMUContext();
 
   const [showCalibModal, setShowCalibModal] = useState(false);
@@ -284,8 +284,8 @@ export default function DeskScreen() {
         {/* Header */}
         <View style={s.header}>
           <View>
-            <Text style={styles.headerTitle}>Desk Mode</Text>
-            <Text style={styles.headerSub}>
+            <Text style={s.headerTitle}>Desk Mode</Text>
+            <Text style={s.headerSub}>
               {!bothConnected
                 ? "connect s'pots via s'pot setup"
                 : !isNeutralCalibrated
@@ -359,7 +359,7 @@ export default function DeskScreen() {
                 : "connect both s'pots to begin."}
             </Text>
             {isTracking && posture && (
-              <Text style={styles.debugText}>
+              <Text style={s.debugText}>
                 Δpitch {posture.pitchDiff.toFixed(2)}°  Δroll {posture.rollDiff.toFixed(2)}°{"  "}{timeInStateMin}min
               </Text>
             )}
@@ -420,9 +420,9 @@ export default function DeskScreen() {
                 <Text style={s.sensorDetailTitle}>{label}</Text>
                 {data ? (
                   <>
-                    <Text style={styles.sensorDetailValue}>pitch {data.angle.pitch.toFixed(2)}°</Text>
-                    <Text style={styles.sensorDetailValue}>roll  {data.angle.roll.toFixed(2)}°</Text>
-                    <Text style={styles.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(2)}°</Text>
+                    <Text style={s.sensorDetailValue}>pitch {data.angle.pitch.toFixed(2)}°</Text>
+                    <Text style={s.sensorDetailValue}>roll  {data.angle.roll.toFixed(2)}°</Text>
+                    <Text style={s.sensorDetailValue}>yaw   {data.angle.yaw.toFixed(2)}°</Text>
                   </>
                 ) : (
                   <Text style={s.sensorDetailValue}>waiting…</Text>

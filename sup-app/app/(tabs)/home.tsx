@@ -233,7 +233,7 @@ export default function HomeScreen() {
           <>
             <Text style={styles.statusValue}>Not yet measured</Text>
             <Text style={styles.statusHint}>
-              Wear your S&apos;pots to begin tracking
+              Wear your s'pots to begin tracking
             </Text>
           </>
         )}
@@ -291,7 +291,6 @@ export default function HomeScreen() {
       <CoachingSetupModal
         visible={showCoachingSetupModal}
         onComplete={handleCoachingSetupComplete}
-        onSkip={handleCoachingSetupSkip}
       />
     </ScrollView>
     </Animated.View>
