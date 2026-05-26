@@ -154,7 +154,7 @@ export default function HomeScreen() {
     return null;
   }, []);
 
-  const MIN_MS = 30 * 60_000; // 30 minutes
+  const MIN_MS = 5 * 60_000; // 5 minutes
   const hasData = postureStats !== null && postureStats.totalMs > 0;
   const hasEnoughData = postureStats !== null && postureStats.totalMs >= MIN_MS;
 

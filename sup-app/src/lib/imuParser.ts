@@ -139,7 +139,10 @@ const LATERAL_MAX         =   8; // deg
 export function parseIMUPacket(data: DataView): ParsedIMU | null {
   if (data.byteLength < 20) return null;
   if (data.getUint8(0) !== 0x55) return null;
-  if (data.getUint8(1) !== 0x61) return null;
+  const flag = data.getUint8(1);
+  if (flag !== 0x61) {
+    console.warn(`[imuParser] unexpected packet flag 0x${flag.toString(16)} — attempting parse anyway`);
+  }
 
   function int16(low: number, high: number): number {
     const val = (high << 8) | low;

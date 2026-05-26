@@ -354,7 +354,7 @@ export default function StatsScreen() {
   const hasData           = sessionStats != null && sessionStats.totalMs > 0;
   const hasHistoricalData = filteredData.length > 0;
 
-  const MIN_MS = 30 * 60_000; // 30 minutes in ms
+  const MIN_MS = 5 * 60_000; // 5 minutes in ms
   const hasEnoughData = sessionStats != null && sessionStats.totalMs >= MIN_MS;
 
   return (

@@ -147,6 +147,11 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
 
       // Session
       sessionRef.current = addToMap(sessionRef.current, state, elapsed);
+      const sessionTotalBefore = totalMs(sessionRef.current) - elapsed;
+      const sessionTotalAfter = totalMs(sessionRef.current);
+      if (sessionTotalBefore === 0 && sessionTotalAfter > 0) {
+        console.log("[useSessionStats] session stats accumulation started — first tick", { state, elapsed, sessionTotalAfter });
+      }
       setSessionStats({ ...sessionRef.current });
 
       // Today live = persisted base + session

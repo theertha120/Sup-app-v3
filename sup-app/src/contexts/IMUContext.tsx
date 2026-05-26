@@ -157,6 +157,8 @@ export interface IMUContextValue {
   timeInCurrentStateMs: number;
   /** How long the s'pots have been connected this session (ms) */
   sessionDurationMs: number;
+  /** Session start timestamp (ms since epoch) — null if not started */
+  sessionStartTimeMs: number | null;
   shouldNudge: boolean;
   activeIntervention: InterventionAlert | null;
   confirmMovement: () => void;
@@ -197,6 +199,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [cpl,                  setCpl]                  = useState(0);
   const [timeInCurrentStateMs, setTimeInCurrentStateMs] = useState(0);
   const [sessionDurationMs,    setSessionDurationMs]    = useState(0);
+  const [sessionStartTimeMs,   setSessionStartTimeMs]   = useState<number | null>(null);
   const [shouldNudge,          setShouldNudge]          = useState(false);
   const [activeIntervention,   setActiveIntervention]   = useState<InterventionAlert | null>(null);
 
@@ -358,6 +361,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // Start session timer on first packet
         if (sessionStartTimeRef.current === null) {
           sessionStartTimeRef.current = Date.now();
+          setSessionStartTimeMs(sessionStartTimeRef.current);
+          console.log("[IMUContext] session started at", new Date(sessionStartTimeRef.current).toISOString());
         }
 
         // EMA smoothing
