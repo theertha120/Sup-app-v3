@@ -4,11 +4,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
-import {
-  analyzeIMUStream,
-  type IMUReading,
-  type PostureSessionStats,
-} from "../../src/services/posture/postureAnalysisService";
+import { useIMUContext } from "../../src/contexts/IMUContext";
+import { useSessionStats } from "../../src/hooks/useSessionStats";
+import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
 import {
   useSessionStats,
   formatDuration,
@@ -20,21 +18,7 @@ import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData"
 
 type DateRange = "today" | "last7days";
 
-// Mock stream: replace with real session data; empty = no data (startup state)
-let mockStream: IMUReading[] = [];
-let calibration: IMUReading[] | null = null;
-
-try {
-  // Load example data only if present in the repo
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
-
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
-} catch (e) {
-  mockStream = [];
-  calibration = null;
-}
+// Using live IMU session data via `useSessionStats` instead of mock stream
 
 // ── Posture colours ───────────────────────────────────────
 
@@ -324,35 +308,38 @@ export default function StatsScreen() {
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
   const { userId } = useAuth();
 
+  const { posture, bothConnected, isNeutralCalibrated } = useIMUContext();
+  const currentState = (posture?.state ?? "upright") as DeskPostureState;
+  const isTracking = bothConnected && isNeutralCalibrated;
+
+  const {
+    sessionStats: liveSessionStats,
+    sessionTotalMs,
+    todayStats,
+    weekDays,
+    weekStats,
+    todayTotalMs,
+    weekTotalMs,
+  } = useSessionStats(isTracking ? currentState : undefined);
+
   const sessionStats = useMemo(() => {
-    const stream = mockStream?.length ? mockStream : [];
-    if (stream.length === 0) return null;
-    return analyzeIMUStream(stream, calibration ?? undefined);
-  }, []);
+    const totalMs = sessionTotalMs;
+    const goodMs = liveSessionStats.upright ?? 0;
+    const badMs = Math.max(0, totalMs - goodMs);
+    const goodPct = totalMs > 0 ? (goodMs / totalMs) * 100 : 0;
+    const avgScore = Math.round(goodPct);
+    return {
+      avgScore,
+      totalMs,
+      goodPosturePercent: goodPct,
+      goodPostureMs: goodMs,
+      badPostureMs: badMs,
+      isVariableSession: false,
+    } as PostureSessionStats;
+  }, [liveSessionStats, sessionTotalMs]);
 
-  const filteredData = useMemo(() => {
-    if (!sessionStats) return [];
-    const today = new Date().toISOString().slice(0, 10);
-    if (dateRange === "today") {
-      return [{ userId: userId ?? "", date: today, avgScore: sessionStats.avgScore, goodPostureMinutes: sessionStats.goodPostureMs / 60000, badPostureMinutes: sessionStats.badPostureMs / 60000, totalMinutes: sessionStats.totalMs / 60000 }];
-    }
-    return [];
-  }, [dateRange, sessionStats]);
-
-  const { bestDay, worstDay } = useMemo(() => {
-    if (filteredData.length === 0) return { bestDay: null, worstDay: null };
-    const sorted = [...filteredData].sort((a, b) => b.avgScore - a.avgScore);
-    return { bestDay: sorted[0], worstDay: sorted[sorted.length - 1] };
-  }, [filteredData]);
-
-  const todayStatsDisplay = useMemo(() => {
-    if (dateRange !== "today" || filteredData.length === 0) return null;
-    const data = filteredData[0];
-    return { totalMinutes: data.totalMinutes, goodPostureMinutes: data.goodPostureMinutes, avgScore: data.avgScore };
-  }, [dateRange, filteredData]);
-
-  const hasData           = sessionStats != null && sessionStats.totalMs > 0;
-  const hasHistoricalData = filteredData.length > 0;
+  const hasData = sessionStats != null && sessionStats.totalMs > 0;
+  const hasHistoricalData = false; // historical/mock data removed
 
   const MIN_MS = 5 * 60_000; // 5 minutes in ms
   const hasEnoughData = sessionStats != null && sessionStats.totalMs >= MIN_MS;
