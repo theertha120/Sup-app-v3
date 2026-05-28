@@ -5,7 +5,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useIMUContext } from "../../src/contexts/IMUContext";
-import { useSessionStats } from "../../src/hooks/useSessionStats";
 import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
 import {
   useSessionStats,
@@ -338,6 +337,27 @@ export default function StatsScreen() {
     } as PostureSessionStats;
   }, [liveSessionStats, sessionTotalMs]);
 
+  const todayStatsDisplay = useMemo(() => {
+    if (dateRange !== "today") return null;
+    if (!todayStats || todayTotalMs <= 0) return null;
+    return {
+      totalMinutes: todayTotalMs / 60000,
+      goodPostureMinutes: (todayStats.upright ?? 0) / 60000,
+      avgScore: todayTotalMs > 0 ? Math.round(((todayStats.upright ?? 0) / todayTotalMs) * 100) : 0,
+    } as { totalMinutes: number; goodPostureMinutes: number; avgScore: number };
+  }, [dateRange, todayStats, todayTotalMs]);
+
+  const { bestDay, worstDay } = useMemo(() => {
+    const days = (weekDays ?? []).filter((d) => d.totalMs > 0);
+    if (days.length === 0) return { bestDay: null, worstDay: null };
+    const sorted = [...days].sort((a, b) => {
+      const aPct = a.totalMs > 0 ? (a.states.upright ?? 0) / a.totalMs : 0;
+      const bPct = b.totalMs > 0 ? (b.states.upright ?? 0) / b.totalMs : 0;
+      return bPct - aPct;
+    });
+    return { bestDay: sorted[0], worstDay: sorted[sorted.length - 1] };
+  }, [weekDays]);
+
   const hasData = sessionStats != null && sessionStats.totalMs > 0;
   const hasHistoricalData = false; // historical/mock data removed
 
@@ -387,16 +407,30 @@ export default function StatsScreen() {
                 <View style={styles.summaryMiniCard}>
                   <Text style={styles.summaryMiniEmoji}>🌟</Text>
                   <Text style={styles.summaryMiniLabel}>Best Day</Text>
-                  <AnimatedNumber value={bestDay.avgScore} style={styles.summaryMiniScore} />
-                  <Text style={styles.summaryMiniDate}>{new Date(bestDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+                  <AnimatedNumber
+                    value={
+                      bestDay.totalMs > 0
+                        ? Math.round(((bestDay.states.upright ?? 0) / bestDay.totalMs) * 100)
+                        : 0
+                    }
+                    style={styles.summaryMiniScore}
+                  />
+                  <Text style={styles.summaryMiniDate}>{new Date(bestDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
                 </View>
               )}
-              {worstDay && bestDay?.date !== worstDay?.date && (
+              {worstDay && bestDay?.dateKey !== worstDay?.dateKey && (
                 <View style={styles.summaryMiniCard}>
                   <Text style={styles.summaryMiniEmoji}>💪</Text>
                   <Text style={styles.summaryMiniLabel}>Needs Work</Text>
-                  <AnimatedNumber value={worstDay.avgScore} style={styles.summaryMiniScore} />
-                  <Text style={styles.summaryMiniDate}>{new Date(worstDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+                  <AnimatedNumber
+                    value={
+                      worstDay.totalMs > 0
+                        ? Math.round(((worstDay.states.upright ?? 0) / worstDay.totalMs) * 100)
+                        : 0
+                    }
+                    style={styles.summaryMiniScore}
+                  />
+                  <Text style={styles.summaryMiniDate}>{new Date(worstDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
                 </View>
               )}
             </View>
