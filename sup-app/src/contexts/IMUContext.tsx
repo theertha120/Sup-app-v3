@@ -53,7 +53,7 @@ import {
   SHS_RATES,
   SHS_GRACE_PERIODS_MS,
 } from "../lib/imuParser";
-import { DeskPostureState } from "../desk/mockDeskPostureData";
+import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
@@ -132,6 +132,12 @@ export interface IMUContextValue {
   bottomSensor: IMUSensorData;
   posture: PostureResult | null;
   bothConnected: boolean;
+  /** Percent 0-100 derived from live top-sensor sagittal offset vs neutral (null if unavailable) */
+  neckAlignmentPercent: number | null;
+  /** Percent 0-100 derived from inter-s'pot lateral diff (null if unavailable) */
+  shoulderBalancePercent: number | null;
+  /** Time-weighted upper-back support percent (0-100) computed from per-packet instant scores */
+  upperBackPercent: number | null;
 
   discoveredDevices: Device[];
   isScanning: boolean;
@@ -202,6 +208,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [sessionStartTimeMs,   setSessionStartTimeMs]   = useState<number | null>(null);
   const [shouldNudge,          setShouldNudge]          = useState(false);
   const [activeIntervention,   setActiveIntervention]   = useState<InterventionAlert | null>(null);
+  const [neckAlignmentPercent, setNeckAlignmentPercent] = useState<number | null>(null);
+  const [shoulderBalancePercent, setShoulderBalancePercent] = useState<number | null>(null);
+  const [upperBackPercent, setUpperBackPercent] = useState<number | null>(null);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
 
@@ -226,6 +235,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const cplRef                  = useRef(0);
   const shsIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayIntervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Upper-back accumulators for time-weighted averaging
+  const upperSumScoreMsRef      = useRef<number>(0);
+  const upperSumMsRef           = useRef<number>(0);
+  const lastPacketTimestampRef  = useRef<number | null>(null);
 
   const captureRef = useRef<{
     neutral: NeutralOffset | null;
@@ -363,6 +376,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           sessionStartTimeRef.current = Date.now();
           setSessionStartTimeMs(sessionStartTimeRef.current);
           console.log("[IMUContext] session started at", new Date(sessionStartTimeRef.current).toISOString());
+          // reset upper-back accumulators for new session
+          upperSumScoreMsRef.current = 0;
+          upperSumMsRef.current = 0;
+          lastPacketTimestampRef.current = Date.now();
         }
 
         // EMA smoothing
@@ -384,6 +401,39 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const offsetToUse = baselineRef.current ?? neutralOffsetRef.current;
         const result      = classifySpinePosture(smoothedTop, smoothedBottom, offsetToUse);
         lastClassificationRef.current = result;
+        // --- Upper-back time-weighted accumulation (per-packet) ---
+        try {
+          const pktNow = Date.now();
+          const last = lastPacketTimestampRef.current ?? pktNow;
+          const dt = Math.max(0, pktNow - last);
+          lastPacketTimestampRef.current = pktNow;
+
+          const instant = result.instantScore ?? 0; // 0-100
+          upperSumScoreMsRef.current += instant * dt;
+          upperSumMsRef.current += dt;
+          if (upperSumMsRef.current > 0) {
+            const pct = upperSumScoreMsRef.current / upperSumMsRef.current;
+            setUpperBackPercent(Math.round(Math.max(0, Math.min(100, pct))));
+          }
+        } catch (e) {
+          // defensive
+        }
+        // Compute neck alignment and shoulder balance percents from live, offset-corrected angles
+        try {
+          const neutral = offsetToUse ? ("neutral" in offsetToUse ? offsetToUse.neutral : offsetToUse) : null;
+          const topNeutralRoll = neutral ? neutral.topRoll : 0;
+          const topRollDelta = smoothedTop.angle.roll - topNeutralRoll;
+          const NECK_TOLERANCE_DEG = 12; // 12° maps to ~0% alignment
+          const neckPct = Math.max(0, Math.min(100, 100 - (Math.abs(topRollDelta) / NECK_TOLERANCE_DEG) * 100));
+          setNeckAlignmentPercent(Math.round(neckPct));
+
+          const rollDiffDeg = result.rollDiff ?? 0;
+          const LATERAL_MAX_DEG = 8; // matches imuParser lateral threshold
+          const shoulderPct = Math.max(0, Math.min(100, 100 - (Math.abs(rollDiffDeg) / LATERAL_MAX_DEG) * 100));
+          setShoulderBalancePercent(Math.round(shoulderPct));
+        } catch (e) {
+          // defensive: do not crash the BLE handler
+        }
 
         // State change detection — runs every packet at ~10Hz
         if (result.state !== lastPostureStateRef.current) {
@@ -432,6 +482,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             emaRef.current.initialised  = false;
             sessionStartTimeRef.current = null;
             setSessionDurationMs(0);
+            // Reset upper-back accumulators on disconnect
+            upperSumScoreMsRef.current = 0;
+            upperSumMsRef.current = 0;
+            lastPacketTimestampRef.current = null;
+            setUpperBackPercent(null);
           }
         } else {
           setBottomData((prev) => ({ ...prev, state }));
@@ -441,6 +496,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             emaRef.current.initialised  = false;
             sessionStartTimeRef.current = null;
             setSessionDurationMs(0);
+            // Reset upper-back accumulators on disconnect
+            upperSumScoreMsRef.current = 0;
+            upperSumMsRef.current = 0;
+            lastPacketTimestampRef.current = null;
+            setUpperBackPercent(null);
           }
         }
       }
@@ -592,7 +652,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,
-      shs, cpl, timeInCurrentStateMs, sessionDurationMs,
+      shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
+      neckAlignmentPercent, shoulderBalancePercent, upperBackPercent,
       shouldNudge, activeIntervention, confirmMovement, dismissIntervention,
     }}>
       {children}

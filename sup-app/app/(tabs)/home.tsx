@@ -142,11 +142,18 @@ export default function HomeScreen() {
   const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
   const MIN_MS = 5 * 60_000; // 5 minutes
-  const hasData = sessionTotalMs > 0;
-  const hasEnoughData = sessionTotalMs >= MIN_MS;
+  // Live calculations (continue every 5s inside useSessionStats)
+  const liveAvgScore = sessionTotalMs > 0 ? Math.round(((sessionStats.upright ?? 0) / sessionTotalMs) * 100) : 0;
+  const liveGoodPosturePercent = sessionTotalMs > 0 ? ((sessionStats.upright ?? 0) / sessionTotalMs) * 100 : 0;
 
-  const avgScore = sessionTotalMs > 0 ? Math.round(((sessionStats.upright ?? 0) / sessionTotalMs) * 100) : 0;
-  const goodPosturePercent = sessionTotalMs > 0 ? ((sessionStats.upright ?? 0) / sessionTotalMs) * 100 : 0;
+  // UI layer: update visible values only every 5 minutes to avoid flicker
+  const HOME_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
+  const [displaySessionTotalMs, setDisplaySessionTotalMs] = useState<number>(sessionTotalMs);
+  const [displayAvgScore, setDisplayAvgScore] = useState<number>(liveAvgScore);
+  const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(liveGoodPosturePercent);
+
+  const hasData = displaySessionTotalMs > 0;
+  const hasEnoughData = displaySessionTotalMs >= MIN_MS;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -207,9 +214,9 @@ export default function HomeScreen() {
         <Text style={styles.statusTitle}>Your posture status</Text>
         {hasEnoughData ? (
           <>
-            <Text style={styles.statusValue}>{getPostureStatus(avgScore)}</Text>
+            <Text style={styles.statusValue}>{getPostureStatus(displayAvgScore)}</Text>
             <Text style={styles.statusHint}>
-              {Math.round(goodPosturePercent)}% good posture · {(sessionTotalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(avgScore)}
+              {Math.round(displayGoodPosturePercent)}% good posture · {(displaySessionTotalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(displayAvgScore)}
             </Text>
           </>
         ) : hasData ? (
