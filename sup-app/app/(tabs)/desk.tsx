@@ -261,7 +261,7 @@ export default function DeskScreen() {
   } = useIMUContext();
 
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 5 minutes ---
-  const DESK_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
+  const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
   const livePostureRef = useRef(posture);
   const [displayPosture, setDisplayPosture] = useState(posture);
 
@@ -310,12 +310,6 @@ export default function DeskScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      {__DEV__ && (
-        <View style={dbg.badge}>
-          <Text style={dbg.line}>start: {sessionStartTimeMs ? new Date(sessionStartTimeMs).toLocaleTimeString() : "—"}</Text>
-          <Text style={dbg.line}>session: {sessionTotalMs ? Math.round(sessionTotalMs / 1000) : 0}s</Text>
-        </View>
-      )}
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
       <InterventionModal />
       <MovementNudgeModal />
