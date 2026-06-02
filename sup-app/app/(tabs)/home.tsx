@@ -17,10 +17,8 @@ import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 
-import {
-  analyzeIMUStream,
-  type IMUReading,
-} from "../../src/services/posture/postureAnalysisService";
+import { useIMUContext } from "../../src/contexts/IMUContext";
+import { useSessionStats } from "../../src/hooks/useSessionStats";
 
 // Helper to derive status from stability score
 function getPostureStatus(score: number): string {
@@ -137,26 +135,25 @@ export default function HomeScreen() {
     router.push("/settings");
   };
 
-  // Calculate posture stability score from IMU stream (same logic as stats page)
-  // TODO: Replace mock_imu_stream.json with real BLE sensor data from S'pots device
-  // TODO: Replace calibration_good_posture.json with user-calibrated baseline (captured during onboarding)
-  const postureStats = useMemo(() => {
-    try {
-      const mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
-      const calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
-      
-      if (mockStream?.length > 0) {
-        return analyzeIMUStream(mockStream, calibration ?? undefined);
-      }
-    } catch {
-      // No IMU data available
-    }
-    return null;
-  }, []);
+  const { posture, bothConnected, isNeutralCalibrated } = useIMUContext();
+  const currentState = (posture?.state ?? "upright") as any;
+  const isTracking = bothConnected && isNeutralCalibrated;
+
+  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
   const MIN_MS = 5 * 60_000; // 5 minutes
-  const hasData = postureStats !== null && postureStats.totalMs > 0;
-  const hasEnoughData = postureStats !== null && postureStats.totalMs >= MIN_MS;
+  // Live calculations (continue every 5s inside useSessionStats)
+  const liveAvgScore = sessionTotalMs > 0 ? Math.round(((sessionStats.upright ?? 0) / sessionTotalMs) * 100) : 0;
+  const liveGoodPosturePercent = sessionTotalMs > 0 ? ((sessionStats.upright ?? 0) / sessionTotalMs) * 100 : 0;
+
+  // UI layer: update visible values only every 5 minutes to avoid flicker
+  const HOME_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
+  const [displaySessionTotalMs, setDisplaySessionTotalMs] = useState<number>(sessionTotalMs);
+  const [displayAvgScore, setDisplayAvgScore] = useState<number>(liveAvgScore);
+  const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(liveGoodPosturePercent);
+
+  const hasData = displaySessionTotalMs > 0;
+  const hasEnoughData = displaySessionTotalMs >= MIN_MS;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -217,9 +214,9 @@ export default function HomeScreen() {
         <Text style={styles.statusTitle}>Your posture status</Text>
         {hasEnoughData ? (
           <>
-            <Text style={styles.statusValue}>{getPostureStatus(postureStats!.avgScore)}</Text>
+            <Text style={styles.statusValue}>{getPostureStatus(displayAvgScore)}</Text>
             <Text style={styles.statusHint}>
-              {postureStats!.goodPosturePercent.toFixed(0)}% good posture · {(postureStats!.totalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(postureStats!.avgScore)}
+              {Math.round(displayGoodPosturePercent)}% good posture · {(displaySessionTotalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(displayAvgScore)}
             </Text>
           </>
         ) : hasData ? (

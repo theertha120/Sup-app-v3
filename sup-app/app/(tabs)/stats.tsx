@@ -4,11 +4,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
-import {
-  analyzeIMUStream,
-  type IMUReading,
-  type PostureSessionStats,
-} from "../../src/services/posture/postureAnalysisService";
+import { useIMUContext } from "../../src/contexts/IMUContext";
+import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
 import {
   useSessionStats,
   formatDuration,
@@ -20,21 +17,7 @@ import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData"
 
 type DateRange = "today" | "last7days";
 
-// Mock stream: replace with real session data; empty = no data (startup state)
-let mockStream: IMUReading[] = [];
-let calibration: IMUReading[] | null = null;
-
-try {
-  // Load example data only if present in the repo
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  mockStream = require("../../src/data/mock_imu_stream.json") as IMUReading[];
-
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
-  calibration = require("../../src/data/calibration_good_posture.json") as IMUReading[] | null;
-} catch (e) {
-  mockStream = [];
-  calibration = null;
-}
+// Using live IMU session data via `useSessionStats` instead of mock stream
 
 // ── Posture colours ───────────────────────────────────────
 
@@ -324,38 +307,131 @@ export default function StatsScreen() {
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
   const { userId } = useAuth();
 
+  const { posture, bothConnected, isNeutralCalibrated, neckAlignmentPercent, shoulderBalancePercent, upperBackPercent } = useIMUContext();
+  const currentState = (posture?.state ?? "upright") as DeskPostureState;
+  const isTracking = bothConnected && isNeutralCalibrated;
+
+  const {
+    sessionStats: liveSessionStats,
+    sessionTotalMs,
+    todayStats,
+    weekDays,
+    weekStats,
+    todayTotalMs,
+    weekTotalMs,
+  } = useSessionStats(isTracking ? currentState : undefined);
+
   const sessionStats = useMemo(() => {
-    const stream = mockStream?.length ? mockStream : [];
-    if (stream.length === 0) return null;
-    return analyzeIMUStream(stream, calibration ?? undefined);
+    const totalMs = sessionTotalMs;
+    const goodMs = liveSessionStats.upright ?? 0;
+    const badMs = Math.max(0, totalMs - goodMs);
+    const goodPct = totalMs > 0 ? (goodMs / totalMs) * 100 : 0;
+    const avgScore = Math.round(goodPct);
+    return {
+      avgScore,
+      totalMs,
+      goodPosturePercent: goodPct,
+      goodPostureMs: goodMs,
+      badPostureMs: badMs,
+      isVariableSession: false,
+    } as PostureSessionStats;
+  }, [liveSessionStats, sessionTotalMs]);
+
+  // --- UI throttle: snapshot displayed stats only every 5 minutes ---
+  const STATS_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
+  const liveStatsRef = useRef({
+    avgScore: sessionStats.avgScore,
+    totalMs: sessionStats.totalMs,
+    goodPosturePercent: sessionStats.goodPosturePercent,
+    neckAlignmentPercent: neckAlignmentPercent,
+    shoulderBalancePercent: shoulderBalancePercent,
+    upperBackPercent: upperBackPercent,
+  });
+
+  useEffect(() => {
+    liveStatsRef.current = {
+      avgScore: sessionStats.avgScore,
+      totalMs: sessionStats.totalMs,
+      goodPosturePercent: sessionStats.goodPosturePercent,
+      neckAlignmentPercent: neckAlignmentPercent,
+      shoulderBalancePercent: shoulderBalancePercent,
+      upperBackPercent: upperBackPercent,
+    };
+  }, [sessionStats, neckAlignmentPercent, shoulderBalancePercent, upperBackPercent]);
+
+  const [displayAvgScore, setDisplayAvgScore] = useState<number>(sessionStats.avgScore);
+  const [displayTotalMs, setDisplayTotalMs] = useState<number>(sessionStats.totalMs);
+  const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(sessionStats.goodPosturePercent);
+  const [displayNeckPercent, setDisplayNeckPercent] = useState<number | null>(neckAlignmentPercent ?? null);
+  const [displayShoulderPercent, setDisplayShoulderPercent] = useState<number | null>(shoulderBalancePercent ?? null);
+  const [displayUpperBackPercent, setDisplayUpperBackPercent] = useState<number | null>(upperBackPercent ?? null);
+
+  // Immediate refresh when screen focused
+  useFocusEffect(
+    useCallback(() => {
+      setDisplayAvgScore(liveStatsRef.current.avgScore);
+      setDisplayTotalMs(liveStatsRef.current.totalMs);
+      setDisplayGoodPosturePercent(liveStatsRef.current.goodPosturePercent);
+      setDisplayNeckPercent(liveStatsRef.current.neckAlignmentPercent ?? null);
+      setDisplayShoulderPercent(liveStatsRef.current.shoulderBalancePercent ?? null);
+      setDisplayUpperBackPercent(liveStatsRef.current.upperBackPercent ?? null);
+    }, [])
+  );
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setDisplayAvgScore(liveStatsRef.current.avgScore);
+      setDisplayTotalMs(liveStatsRef.current.totalMs);
+      setDisplayGoodPosturePercent(liveStatsRef.current.goodPosturePercent);
+      setDisplayNeckPercent(liveStatsRef.current.neckAlignmentPercent ?? null);
+      setDisplayShoulderPercent(liveStatsRef.current.shoulderBalancePercent ?? null);
+      setDisplayUpperBackPercent(liveStatsRef.current.upperBackPercent ?? null);
+    }, STATS_UI_UPDATE_MS);
+    return () => clearInterval(id);
   }, []);
 
-  const filteredData = useMemo(() => {
-    if (!sessionStats) return [];
-    const today = new Date().toISOString().slice(0, 10);
-    if (dateRange === "today") {
-      return [{ userId: userId ?? "", date: today, avgScore: sessionStats.avgScore, goodPostureMinutes: sessionStats.goodPostureMs / 60000, badPostureMinutes: sessionStats.badPostureMs / 60000, totalMinutes: sessionStats.totalMs / 60000 }];
-    }
-    return [];
-  }, [dateRange, sessionStats]);
+  const todayStatsDisplay = useMemo(() => {
+    if (dateRange !== "today") return null;
+    if (!todayStats || todayTotalMs <= 0) return null;
+    return {
+      totalMinutes: todayTotalMs / 60000,
+      goodPostureMinutes: (todayStats.upright ?? 0) / 60000,
+      avgScore: todayTotalMs > 0 ? Math.round(((todayStats.upright ?? 0) / todayTotalMs) * 100) : 0,
+    } as { totalMinutes: number; goodPostureMinutes: number; avgScore: number };
+  }, [dateRange, todayStats, todayTotalMs]);
 
   const { bestDay, worstDay } = useMemo(() => {
-    if (filteredData.length === 0) return { bestDay: null, worstDay: null };
-    const sorted = [...filteredData].sort((a, b) => b.avgScore - a.avgScore);
+    const days = (weekDays ?? []).filter((d) => d.totalMs > 0);
+    if (days.length === 0) return { bestDay: null, worstDay: null };
+    const sorted = [...days].sort((a, b) => {
+      const aPct = a.totalMs > 0 ? (a.states.upright ?? 0) / a.totalMs : 0;
+      const bPct = b.totalMs > 0 ? (b.states.upright ?? 0) / b.totalMs : 0;
+      return bPct - aPct;
+    });
     return { bestDay: sorted[0], worstDay: sorted[sorted.length - 1] };
-  }, [filteredData]);
+  }, [weekDays]);
 
-  const todayStatsDisplay = useMemo(() => {
-    if (dateRange !== "today" || filteredData.length === 0) return null;
-    const data = filteredData[0];
-    return { totalMinutes: data.totalMinutes, goodPostureMinutes: data.goodPostureMinutes, avgScore: data.avgScore };
-  }, [dateRange, filteredData]);
-
-  const hasData           = sessionStats != null && sessionStats.totalMs > 0;
-  const hasHistoricalData = filteredData.length > 0;
+  const hasData = sessionStats != null && displayTotalMs > 0;
+  const hasHistoricalData = false; // historical/mock data removed
 
   const MIN_MS = 5 * 60_000; // 5 minutes in ms
-  const hasEnoughData = sessionStats != null && sessionStats.totalMs >= MIN_MS;
+  const hasEnoughData = sessionStats != null && displayTotalMs >= MIN_MS;
+
+  // Snapshot session stats for display (throttled)
+  const displaySessionStats: PostureSessionStats = useMemo(() => {
+    const totalMs = displayTotalMs;
+    const goodPct = displayGoodPosturePercent;
+    const goodMs = Math.round((goodPct / 100) * totalMs);
+    const badMs = Math.max(0, totalMs - goodMs);
+    return {
+      avgScore: Math.round(goodPct),
+      totalMs,
+      goodPosturePercent: goodPct,
+      goodPostureMs: goodMs,
+      badPostureMs: badMs,
+      isVariableSession: sessionStats.isVariableSession,
+    } as PostureSessionStats;
+  }, [displayTotalMs, displayGoodPosturePercent, sessionStats.isVariableSession]);
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -400,16 +476,30 @@ export default function StatsScreen() {
                 <View style={styles.summaryMiniCard}>
                   <Text style={styles.summaryMiniEmoji}>🌟</Text>
                   <Text style={styles.summaryMiniLabel}>Best Day</Text>
-                  <AnimatedNumber value={bestDay.avgScore} style={styles.summaryMiniScore} />
-                  <Text style={styles.summaryMiniDate}>{new Date(bestDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+                  <AnimatedNumber
+                    value={
+                      bestDay.totalMs > 0
+                        ? Math.round(((bestDay.states.upright ?? 0) / bestDay.totalMs) * 100)
+                        : 0
+                    }
+                    style={styles.summaryMiniScore}
+                  />
+                  <Text style={styles.summaryMiniDate}>{new Date(bestDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
                 </View>
               )}
-              {worstDay && bestDay?.date !== worstDay?.date && (
+              {worstDay && bestDay?.dateKey !== worstDay?.dateKey && (
                 <View style={styles.summaryMiniCard}>
                   <Text style={styles.summaryMiniEmoji}>💪</Text>
                   <Text style={styles.summaryMiniLabel}>Needs Work</Text>
-                  <AnimatedNumber value={worstDay.avgScore} style={styles.summaryMiniScore} />
-                  <Text style={styles.summaryMiniDate}>{new Date(worstDay.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+                  <AnimatedNumber
+                    value={
+                      worstDay.totalMs > 0
+                        ? Math.round(((worstDay.states.upright ?? 0) / worstDay.totalMs) * 100)
+                        : 0
+                    }
+                    style={styles.summaryMiniScore}
+                  />
+                  <Text style={styles.summaryMiniDate}>{new Date(worstDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
                 </View>
               )}
             </View>
@@ -424,9 +514,9 @@ export default function StatsScreen() {
 
       {/* Overall Score */}
       <View style={styles.scoreCard}>
-        <Text style={styles.scoreLabel}>Posture Stability Score</Text>
+        <Text style={styles.scoreLabel}>Spine Health Score</Text>
         <Text style={styles.scoreValue}>
-          {hasEnoughData ? sessionStats!.avgScore : hasData ? "--" : "0"}
+          {hasEnoughData ? displaySessionStats.avgScore : hasData ? "--" : "0"}
         </Text>
         <Text style={styles.scoreHint}>
           {!hasData
@@ -441,26 +531,34 @@ export default function StatsScreen() {
       <View style={styles.metrics}>
         {/* Derive neck alignment from session data: slightly reduced from overall score */}
         {hasData ? (
-          <MetricCard 
-            label="Neck alignment" 
-            goodPercent={Math.round(Math.max(0, sessionStats.goodPosturePercent - 5))} 
-            animationKey={dateRange} 
+          <MetricCard
+            label="Neck alignment"
+            goodPercent={
+              displayNeckPercent != null
+                ? Math.round(displayNeckPercent)
+                : Math.round(Math.max(0, displaySessionStats.goodPosturePercent - 5))
+            }
+            animationKey={dateRange}
           />
         ) : (
           <MetricSkeleton label="Neck alignment" />
         )}
         {/* Derive shoulder balance from session data: slightly increased variance */}
         {hasData ? (
-          <MetricCard 
-            label="Shoulder balance" 
-            goodPercent={Math.round(Math.min(100, sessionStats.goodPosturePercent + 3))} 
-            animationKey={dateRange} 
+          <MetricCard
+            label="Shoulder balance"
+            goodPercent={
+              displayShoulderPercent != null
+                ? Math.round(displayShoulderPercent)
+                : Math.round(Math.min(100, displaySessionStats.goodPosturePercent + 3))
+            }
+            animationKey={dateRange}
           />
         ) : (
           <MetricSkeleton label="Shoulder balance" />
         )}
         {hasData ? (
-          <UpperBackSessionCard stats={sessionStats} animationKey={dateRange} />
+          <UpperBackSessionCard stats={displaySessionStats} animationKey={dateRange} liveUpperBackPercent={displayUpperBackPercent} />
         ) : (
           <MetricSkeleton label="Upper back support" />
         )}
@@ -471,7 +569,7 @@ export default function StatsScreen() {
         <Text style={styles.summaryTitle}>Session summary</Text>
         <Text style={styles.summaryText}>
           {hasData
-            ? `Session: ${(sessionStats.totalMs / 1000).toFixed(2)}s total · ${sessionStats.goodPosturePercent.toFixed(0)}% good posture${sessionStats.isVariableSession ? " · Variable posture" : ""}`
+            ? `Session: ${(displaySessionStats.totalMs / 1000).toFixed(2)}s total · ${displaySessionStats.goodPosturePercent.toFixed(0)}% good posture${displaySessionStats.isVariableSession ? " · Variable posture" : ""}`
             : "Your weekly summary will appear here once you start wearing your s'pots"}
         </Text>
       </View>
@@ -502,14 +600,15 @@ function MetricCard({ label, goodPercent, animationKey }: { label: string; goodP
   );
 }
 
-function UpperBackSessionCard({ stats, animationKey }: { stats: PostureSessionStats; animationKey?: string | number }) {
-  const goodWidth = stats.totalMs > 0 ? (stats.goodPostureMs / stats.totalMs) * 100 : 0;
+function UpperBackSessionCard({ stats, animationKey, liveUpperBackPercent }: { stats: PostureSessionStats; animationKey?: string | number; liveUpperBackPercent?: number | null }) {
+  const sessionPercent = stats.totalMs > 0 ? stats.goodPosturePercent : 0;
+  const displayPercent = liveUpperBackPercent != null ? liveUpperBackPercent : sessionPercent;
   const totalMinutes = (stats.totalMs / 60_000).toFixed(2);
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>Upper back support</Text>
-      <AnimatedProgressBar goodPercent={goodWidth} animationKey={animationKey} />
-      <Text style={styles.metricHint}>Good: {stats.goodPosturePercent.toFixed(0)}% · Bad: {stats.badPosturePercent.toFixed(0)}% · {totalMinutes} min{stats.isVariableSession ? " · Variable session" : ""}</Text>
+      <AnimatedProgressBar goodPercent={displayPercent} animationKey={animationKey} />
+      <Text style={styles.metricHint}>Good: {displayPercent.toFixed(0)}% · {sessionPercent.toFixed(0)}% (session) · {totalMinutes} min{stats.isVariableSession ? " · Variable session" : ""}</Text>
     </View>
   );
 }

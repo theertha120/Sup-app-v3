@@ -12,7 +12,7 @@
  *   - CPL indicator (cumulative postural load)
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
   Pressable, Platform, Modal,
@@ -25,6 +25,7 @@ import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/compon
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 
 // ── Posture colour system ─────────────────────────────────────────────────────
@@ -259,14 +260,47 @@ export default function DeskScreen() {
     sessionStartTimeMs,
   } = useIMUContext();
 
+  // --- Desk UI figure throttle: snapshot posture for figure/label only every 5 minutes ---
+  const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
+  const livePostureRef = useRef(posture);
+  const [displayPosture, setDisplayPosture] = useState(posture);
+
+  useEffect(() => { livePostureRef.current = posture; }, [posture]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // immediate snap on focus
+      setDisplayPosture(livePostureRef.current);
+    }, [])
+  );
+
+  useEffect(() => {
+    // periodic snapshot for figure to reduce flicker
+    const id = setInterval(() => {
+      setDisplayPosture(livePostureRef.current);
+    }, DESK_UI_UPDATE_MS);
+    return () => clearInterval(id);
+  }, []);
+
   const [showCalibModal, setShowCalibModal] = useState(false);
 
-  const currentState   = (posture?.state ?? "upright") as DeskPostureState;
+  // use the throttled posture for the figure/label to avoid flicker
+  const currentState   = (displayPosture?.state ?? posture?.state ?? "upright") as DeskPostureState;
   const isTracking     = bothConnected && isNeutralCalibrated;
   const figureColor    = isTracking ? STATE_COLORS[currentState] : STATE_COLORS["upright"];
-  const currentDesc    = posture?.description ?? "connect your s'pots via s'pot setup.";
-  const instantScore = posture?.instantScore ?? 100;
-  const currentLabel = posture?.label        ?? "waiting for s'pots…";
+  const currentDesc    = (displayPosture?.description ?? posture?.description) ?? "connect your s'pots via s'pot setup.";
+  const currentLabel = (displayPosture?.label ?? posture?.label) ?? "waiting for s'pots…";
+
+  // Ensure the visible numeric 'score' shown on the avatar follows the
+  // throttled `displayPosture` (so it updates with the avatar every 5 minutes).
+  const displayScore = (
+    (displayPosture?.state ?? posture?.state) === "upright"      ? 95 :
+    (displayPosture?.state ?? posture?.state) === "transition"   ? 75 :
+    (displayPosture?.state ?? posture?.state) === "forward_lean" ? 62 :
+    (displayPosture?.state ?? posture?.state) === "tilted_left"  ? 55 :
+    (displayPosture?.state ?? posture?.state) === "tilted_right" ? 55 :
+    (displayPosture?.state ?? posture?.state) === "slouched"     ? 42 : 20
+  );
 
   const shsColor     = getScoreColor(shs);
   const shsLabel     = getScoreLabel(shs);
@@ -276,12 +310,6 @@ export default function DeskScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      {__DEV__ && (
-        <View style={dbg.badge}>
-          <Text style={dbg.line}>start: {sessionStartTimeMs ? new Date(sessionStartTimeMs).toLocaleTimeString() : "—"}</Text>
-          <Text style={dbg.line}>session: {sessionTotalMs ? Math.round(sessionTotalMs / 1000) : 0}s</Text>
-        </View>
-      )}
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
       <InterventionModal />
       <MovementNudgeModal />
@@ -349,14 +377,7 @@ export default function DeskScreen() {
           <View style={s.figureWrapper}>
             <DeskPostureFigure
               state={currentState}
-              score={
-                currentState === "upright"      ? 95 :
-                currentState === "transition"   ? 75 :
-                currentState === "forward_lean" ? 62 :
-                currentState === "tilted_left"  ? 55 :
-                currentState === "tilted_right" ? 55 :
-                currentState === "slouched"     ? 42 : 20
-              }
+              score={displayScore}
             />
           </View>
           <View style={s.stateInfo}>
