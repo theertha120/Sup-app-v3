@@ -10,7 +10,7 @@
 
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.leipakshi.supapp"
+      "bundleIdentifier": "com.supapp.app"
     },
 
     "android": {
@@ -30,7 +30,7 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
 
-      "package": "com.anonymous.supapp"
+      "package": "com.supapp.app"
     },
 
     "web": {
@@ -55,7 +55,7 @@
         {
           "ios": {
             "supportsTablet": true,
-            "bundleIdentifier": "com.leipakshi.supapp",
+            "bundleIdentifier": "com.supapp.app",
             "entitlements": {
               "aps-environment": "production"
             },
