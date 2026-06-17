@@ -25,7 +25,8 @@ export function useReminderNotifications() {
         cleanupRef.current.push(unsubscribeListener);
 
         // Start periodic reminder checks (every 5 minutes)
-        const unsubscribeInterval = startReminderCheckInterval(300);
+        const unsubscribeInterval = startReminderCheckInterval(30); // FOR TESTING ONLY
+        // const unsubscribeInterval = startReminderCheckInterval(300); // ORIGINAL INTERVAL
         cleanupRef.current.push(unsubscribeInterval);
 
         console.log("Reminder notifications initialized");
