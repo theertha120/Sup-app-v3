@@ -45,17 +45,14 @@ interface ReminderLogEntry {
   interaction_at: string | null;
 }
 
-export type ActiveTimePreset = "morning" | "afternoon" | "evening" | "late_night";
-
 interface UserProfile {
   id: string;
-  primary_goals: BehaviorGoalId[];
-  preferred_tones: ReminderTone[];
+  primary_goal: BehaviorGoalId;
+  preferred_tone: ReminderTone;
   reminder_frequency: ReminderFrequency;
   active_time_start: string;
   active_time_end: string;
-  active_time_presets: ActiveTimePreset[];
-  weekly_goals: WeeklyGoalId[];
+  weekly_goal: WeeklyGoalId;
   last_app_interaction_at: string | null;
   last_reminder_sent_at: string | null;
   timezone_offset_minutes: number;
@@ -68,15 +65,12 @@ const FREQUENCY_CONFIG: Record<
 > = {
   light: { cooldown_minutes: 180, max_per_day: 3 },
   medium: { cooldown_minutes: 90, max_per_day: 6 },
-  active: { cooldown_minutes: 1, max_per_day: 10 }, // FOR TESTING ONLY
-  // active: { cooldown_minutes: 45, max_per_day: 10 }, // ORIGINAL ACTIVE SETTINGS
+  active: { cooldown_minutes: 45, max_per_day: 10 },
 };
 
-const GLOBAL_MIN_COOLDOWN_MINUTES = 1; // TO DO CHANGE BACK 15 MIN & MIN TO MAX
+const GLOBAL_MIN_COOLDOWN_MINUTES = 15;
 
 // RULE GROUP 3: PRIMARY GOAL -> REMINDER DISTRIBUTION
-// probability distribution of reminder types for each primary goal.
-// Distributions are averaged if multiple goals are selected.
 const GOAL_REMINDER_DISTRIBUTION: Record<
   BehaviorGoalId,
   Partial<Record<ReminderType, number>>
@@ -110,8 +104,6 @@ const GOAL_REMINDER_DISTRIBUTION: Record<
 };
 
 // RULE GROUP 4: WEEKLY GOAL MODIFIERS
-// To boost probabilities of certain reminder types by adding a flat modifier to the base probabilities 
-// Modifiers are later summed if multiple weekly goals are selected.
 const WEEKLY_GOAL_MODIFIERS: Record<
   WeeklyGoalId,
   Partial<Record<ReminderType, number>>
@@ -141,61 +133,33 @@ async function getCurrentUserId(): Promise<string> {
 }
 
 // RULE GROUP 1: ACTIVE HOURS 
-const ACTIVE_TIME_PRESET_RANGES: Record<
-  ActiveTimePreset,
-  { start: string; end: string }
-> = {
-  morning:    { start: "07:00", end: "11:59" },
-  afternoon:  { start: "12:00", end: "16:59" },
-  evening:    { start: "17:00", end: "20:59" },
-  late_night: { start: "21:00", end: "01:00" },
-};
- 
-function isWithinActivePresets(
-  activeTimePresets: ActiveTimePreset[],
+function isWithinActiveHours(
+  activeTimeStart: string,
+  activeTimeEnd: string,
   timezoneOffsetMinutes: number = 0
 ): boolean {
-  if (!activeTimePresets || activeTimePresets.length === 0) {
-    console.log("No active time presets configured");
-    return false;
-  }
- 
-  // Derive current local time as "HH:MM" string
+  // Get current UTC time
   const now = new Date();
+  
+  // Apply timezone offset to get local time
   const localTime = new Date(now.getTime() + timezoneOffsetMinutes * 60000);
+  
+  // Extract HH:MM in local timezone
   const hours = String(localTime.getUTCHours()).padStart(2, "0");
   const minutes = String(localTime.getUTCMinutes()).padStart(2, "0");
   const currentTime = `${hours}:${minutes}`;
-  console.log("Current local time:", currentTime); // check if this gives HH:MM format
- 
-  // Check each selected preset in turn
-  for (const preset of activeTimePresets) {
-    if (preset === "morning") {
-      // 07:00 – 11:59  (same day, no midnight crossing)
-      if (currentTime >= "07:00" && currentTime <= "11:59") {
-        return true;
-      }
-    } else if (preset === "afternoon") {
-      // 12:00 – 16:59
-      if (currentTime >= "12:00" && currentTime <= "16:59") {
-        return true;
-      }
-    } else if (preset === "evening") {
-      // 17:00 – 20:59
-      if (currentTime >= "17:00" && currentTime <= "20:59") {
-        return true;
-      }
-    } else if (preset === "late_night") {
-      // 21:00 – 01:00  (crosses midnight — use OR)
-      if (currentTime >= "21:00" || currentTime <= "01:00") {
-        return true;
-      }
-    }
+
+  // Extract just HH:MM from stored times (ignore timezone part)
+  const startTime = activeTimeStart.substring(0, 5); // "20:59"
+  const endTime = activeTimeEnd.substring(0, 5);     // "08:00"
+
+  // Handle edge case: times that cross midnight (e.g., 21:00 → 01:00)
+  if (startTime <= endTime) {
+    return currentTime >= startTime && currentTime <= endTime;
+  } else {
+    return currentTime >= startTime || currentTime <= endTime;
   }
- 
-  return false;
 }
- 
 
 // RULE GROUP 2: CHECK COOLDOWN
 async function checkCooldown(
@@ -300,43 +264,29 @@ async function canSendEncouragement(userId: string): Promise<boolean> {
 }
 
 //  DETERMINE REMINDER TYPE PROBABILITIES 
-// For multiple primary goals, each goal's distribution is averaged so all
-// selected goals contribute equally to the final probability mix.
-// For multiple weekly goals, all modifiers are summed and applied on top.
 function calculateReminderTypeProbabilities(
-  primaryGoals: BehaviorGoalId[],
-  weeklyGoals: WeeklyGoalId[],
+  primaryGoal: BehaviorGoalId,
+  weeklyGoal: WeeklyGoalId,
   forceReEngagement: boolean
 ): Record<ReminderType, number> {
   if (forceReEngagement) {
     return { re_engagement: 1.0 } as any;
   }
 
-  // Merge distributions from all selected primary goals by averaging
-  // creating a custom distribution for the user based on their unique goal combination.
-  const merged: Partial<Record<ReminderType, number>> = {};
-  const goalCount = primaryGoals.length;
- 
-  for (const goal of primaryGoals) {
-    const dist = GOAL_REMINDER_DISTRIBUTION[goal] || {};
-    for (const [type, prob] of Object.entries(dist)) {
-      const key = type as ReminderType;
-      merged[key] = (merged[key] || 0) + (prob as number) / goalCount;
+  // Start with goal-based distribution
+  let probabilities: Partial<Record<ReminderType, number>> =
+    GOAL_REMINDER_DISTRIBUTION[primaryGoal] || {};
+
+  // Apply weekly goal modifiers
+  const modifiers = WEEKLY_GOAL_MODIFIERS[weeklyGoal];
+  if (modifiers) {
+    for (const [type, modifier] of Object.entries(modifiers)) {
+      const currentProb = probabilities[type as ReminderType] || 0;
+      probabilities[type as ReminderType] = currentProb + modifier;
     }
   }
 
-  // Apply all weekly goal modifiers (summed across all selected weekly goals)
-  for (const weeklyGoal of weeklyGoals) {
-    const modifiers = WEEKLY_GOAL_MODIFIERS[weeklyGoal];
-    if (modifiers) {
-      for (const [type, modifier] of Object.entries(modifiers)) {
-        const key = type as ReminderType;
-        merged[key] = (merged[key] || 0) + (modifier as number);
-      }
-    }
-  }
- 
-  return merged as Record<ReminderType, number>;
+  return probabilities as Record<ReminderType, number>;
 }
 
 //  SELECT REMINDER TYPE 
@@ -380,13 +330,9 @@ async function selectReminderType(
 //  RULE GROUP 11: FETCH WITH SORT ORDER PREFERENCE 
 async function fetchReminderContent(
   reminderType: ReminderType,
-  preferredTones: ReminderTone[],
+  tone: ReminderTone,
   fallbackAttempt: number = 0
 ): Promise<RemindersContent | null> {
-
-  const tone = preferredTones[Math.floor(Math.random() * preferredTones.length)];
-  console.log(`Fetching content for type: ${reminderType}, tones: ${tone}, attempt: ${fallbackAttempt}`);
-
   const attempts = [
     // ATTEMPT 0: Exact match
     { reminder_type: reminderType, tone, active: true },
@@ -421,7 +367,7 @@ async function fetchReminderContent(
 
   if (error || !data || data.length === 0) {
     // Try next fallback
-    return fetchReminderContent(reminderType, preferredTones, fallbackAttempt + 1);
+    return fetchReminderContent(reminderType, tone, fallbackAttempt + 1);
   }
 
   // RULE GROUP 11: 70% prefer lower sort_order, 30% fully random
@@ -484,7 +430,6 @@ async function logReminder(
 //  MAIN ENGINE 
 export async function getReminderForUser(): Promise<RemindersContent | null> {
   const userId = await getCurrentUserId();
-  console.log("Generating reminder for user:", userId);
 
   try {
     // Fetch user profile
@@ -500,27 +445,24 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     }
 
     const profile = profileData as UserProfile;
-    console.log("profile.active_time_start:", profile.active_time_start);
-    console.log("profile.primary_goals:", profile.primary_goals);
 
     // RULE GROUP 1: CHECK ACTIVE HOURS
     if (
-      !isWithinActivePresets(
-        profile.active_time_presets,
+      !isWithinActiveHours(
+        profile.active_time_start,
+        profile.active_time_end,
         profile.timezone_offset_minutes
       )
     ) {
       console.log("Outside active hours");
       return null;
     }
-    console.log("Within active hours");
 
     // RULE GROUP 2: CHECK COOLDOWN
     const passedCooldown = await checkCooldown(
       userId,
       profile.reminder_frequency
     );
-    console.log("Cooldown check result:", passedCooldown);
     if (!passedCooldown) {
       console.log("Still in cooldown period");
       return null;
@@ -531,7 +473,6 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
       userId,
       profile.reminder_frequency
     );
-    console.log("Daily limit check result:", passedDailyLimit);
     if (!passedDailyLimit) {
       console.log("Daily reminder limit reached");
       return null;
@@ -541,29 +482,22 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     const forceReEngagement = await shouldForceReEngagement(
       profile.last_app_interaction_at
     );
-    console.log("Force re-engagement:", forceReEngagement);
 
-    console.log("profile.primary_goals:", profile.primary_goals);
-    console.log("profile.weekly_goals:", profile.weekly_goals);
     // RULE GROUP 3 & 4: CALCULATE PROBABILITIES
     const probabilities = calculateReminderTypeProbabilities(
-      profile.primary_goals,
-      profile.weekly_goals,
+      profile.primary_goal,
+      profile.weekly_goal,
       forceReEngagement
     );
-    console.log("Calculated reminder type probabilities:", probabilities);
 
-    // SELECT REMINDER TYPE by using weighted random roll to pick one type
+    // SELECT REMINDER TYPE
     const reminderType = await selectReminderType(probabilities, userId);
-    console.log("Selected reminder type:", reminderType);
 
-    // console.log(profile.preferred_tones);
     // RULE GROUP 7 & 8: FETCH REMINDER CONTENT
     let reminderContent = await fetchReminderContent(
       reminderType,
-      profile.preferred_tones
+      profile.preferred_tone
     );
-    console.log("Fetched reminder content:", reminderContent);
 
     if (!reminderContent) {
       console.log("No matching reminder content found");
@@ -578,7 +512,7 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     ) {
       reminderContent = await fetchReminderContent(
         reminderType,
-        profile.preferred_tones
+        profile.preferred_tone
       );
       attempts++;
 

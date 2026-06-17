@@ -6,8 +6,7 @@ import {
   Pressable,
   Switch,
   Modal,
-  ActivityIndicator,
-  Alert, // for testing notifications
+  ActivityIndicator
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -25,7 +24,6 @@ import {
   type BehaviorProfile,
 } from "../src/services/user/behaviorProfileService";
 
-import { sendLocalNotification } from "@/src/services/reminder/pushNotificationService"; // for testing notifications
 
 
 export default function SettingsScreen() {
@@ -35,7 +33,6 @@ export default function SettingsScreen() {
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
-  const [testingNotification, setTestingNotification] = useState(false); // for testing notifications
   
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
@@ -72,27 +69,6 @@ export default function SettingsScreen() {
     return settings.units === "metric" ? "Metric (cm, kg)" : "Imperial (in, lb)";
   };
 
-  // For testing notifications
-  const handleTestNotification = async () => {
-    setTestingNotification(true);
-    try {
-      await sendLocalNotification(
-        "Test Reminder",
-        "This is a test — tap one of the actions below to try it out!",
-      );
-      showToast("Test notification sent!", "success");
-    } catch (error) {
-      Alert.alert(
-        "Notification Failed",
-        "Could not send test notification. Make sure permissions are granted in your device settings.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setTestingNotification(false);
-    }
-  };
-
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
@@ -103,6 +79,8 @@ export default function SettingsScreen() {
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.placeholder} />
       </View>
+
+      {/* Notifications removed — handled by reminder engine and local notifications only */}
 
       {/* Preferences Section */}
       <View style={styles.section}>
@@ -165,37 +143,13 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Test Notification</Text>
-            <Text style={styles.settingDescription}>
-              Send a reminder notification with all 4 action buttons
-            </Text>
-          </View>
-          <Pressable
-            style={[
-              styles.testButton,
-              testingNotification && styles.testButtonDisabled,
-            ]}
-            onPress={handleTestNotification}
-            disabled={testingNotification}
-          >
-            {testingNotification ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.testButtonText}>Send</Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
+      {/* Device section removed — device management moved to Sensor Setup screen */}
 
       {/* Data & Privacy Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
-        
+        {/* Export Data removed — data export not supported in this build */}
+
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
@@ -544,23 +498,4 @@ const styles = StyleSheet.create({
     color: "#666",
     fontWeight: "600",
   },
-  // for test notification button
-  testButton: {
-    backgroundColor: colours.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 64,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testButtonDisabled: {
-    opacity: 0.6,
-  },
-  testButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
 });
