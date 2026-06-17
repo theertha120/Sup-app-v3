@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode } from "react";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
 import { CURRENT_USER_ID } from "@/constants/env";
+import { unregisterReminderBackgroundTask } from "@/src/services/reminder/reminderBackgroundTask";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await unregisterReminderBackgroundTask();
     setIsAuthenticated(false);
   };
 

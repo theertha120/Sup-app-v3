@@ -249,7 +249,8 @@ async function checkDailyLimit(
   }
 
   const count = data?.length || 0;
-  return count < config.max_per_day;
+  // return count < config.max_per_day;
+  return true; // FOR TESTING ONLY - REMOVE DAILY LIMIT CHECK
 }
 
 //  RULE GROUP 5: RE-ENGAGEMENT CHECK 
@@ -500,8 +501,8 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     }
 
     const profile = profileData as UserProfile;
-    console.log("profile.active_time_start:", profile.active_time_start);
-    console.log("profile.primary_goals:", profile.primary_goals);
+    // console.log("profile.active_time_start:", profile.active_time_start);
+    // console.log("profile.primary_goals:", profile.primary_goals);
 
     // RULE GROUP 1: CHECK ACTIVE HOURS
     if (

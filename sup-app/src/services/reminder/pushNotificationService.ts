@@ -445,12 +445,12 @@ export function setupNotificationListeners(): () => void {
  * START REMINDER CHECK INTERVAL
  * Check for reminders periodically (e.g., every 5 minutes)
  */
-export function startReminderCheckInterval(
-  intervalSeconds: number = 300
-): () => void {
-  const interval = setInterval(() => {
-    triggerReminder();
-  }, intervalSeconds * 1000);
+// export function startReminderCheckInterval(
+//   intervalSeconds: number = 300
+// ): () => void {
+//   const interval = setInterval(() => {
+//     triggerReminder();
+//   }, intervalSeconds * 1000);
 
-  return () => clearInterval(interval);
-}
+//   return () => clearInterval(interval);
+// }

@@ -8,12 +8,14 @@ import {
   Modal,
   ActivityIndicator,
   Alert, // for testing notifications
+  Button, // for testing notifications
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useToast } from "../src/contexts/ToastContext";
+import { readBgLog, clearBgLog } from "@/src/services/reminder/backgroundLogger";
 import {
   getSettingsSnapshot,
   updateSettings,
@@ -27,7 +29,6 @@ import {
 
 import { sendLocalNotification } from "@/src/services/reminder/pushNotificationService"; // for testing notifications
 
-
 export default function SettingsScreen() {
   const { logout } = useAuth();
   const { showToast } = useToast();
@@ -36,7 +37,8 @@ export default function SettingsScreen() {
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
   const [testingNotification, setTestingNotification] = useState(false); // for testing notifications
-  
+  const [log, setLog] = useState("(tap refresh)");
+
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
@@ -190,6 +192,39 @@ export default function SettingsScreen() {
             )}
           </Pressable>
         </View>
+
+        {/* Background Task Log Viewer */}
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>Background Task Log</Text>
+            <Text style={styles.settingDescription}>
+              Shows whether the OS woke the task while app was closed
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable
+              style={styles.testButton}
+              onPress={async () => setLog(await readBgLog())}
+            >
+              <Text style={styles.testButtonText}>Read</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.testButton, { backgroundColor: "#999" }]}
+              onPress={async () => { await clearBgLog(); setLog("(cleared)"); }}
+            >
+              <Text style={styles.testButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Log output — only shown once Read is tapped */}
+        {log !== "(tap refresh)" && (
+          <View style={styles.logBox}>
+            <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
+              <Text style={styles.logText} selectable>{log}</Text>
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Data & Privacy Section */}
@@ -561,6 +596,18 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "600",
+  },
+  logBox: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  logText: {
+    fontFamily: "monospace",
+    fontSize: 10,
+    color: "#A8FF78",
+    lineHeight: 16,
   },
 
 });

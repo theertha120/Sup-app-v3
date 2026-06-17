@@ -7,20 +7,16 @@
     "scheme": "supapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.leipakshi.supapp"
     },
-
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
       },
-
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -29,27 +25,24 @@
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.POST_NOTIFICATIONS"
       ],
-
       "package": "com.anonymous.supapp"
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       "expo-notifications",
-
       [
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": false,
-          "modes": ["central"]
+          "modes": [
+            "central"
+          ]
         }
       ],
-
       [
         "expo-build-properties",
         {
@@ -60,7 +53,9 @@
               "aps-environment": "production"
             },
             "infoPlist": {
-              "UIBackgroundModes": ["remote-notification"]
+              "UIBackgroundModes": [
+                "remote-notification"
+              ]
             }
           },
           "android": {
@@ -68,10 +63,9 @@
           }
         }
       ],
-
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-background-task"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

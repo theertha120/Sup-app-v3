@@ -4,6 +4,7 @@ import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
+import "../src/services/reminder/reminderBackgroundTask";
 
 export default function RootLayout() {
   // Initialize reminder notifications
