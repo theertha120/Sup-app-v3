@@ -1,34 +1,22 @@
+import { supabase } from "@/src/lib/supabase";
 import type { User } from "@/constants/env";
 
-export type FriendRequestStatus = "pending" | "accepted" | "rejected";
+export type FriendRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
 
 export interface FriendRequest {
   id: string;
-  fromUserId: string;
-  toUserId: string;
-  status: FriendRequestStatus;
-  createdAt: string;
+  fromUserId: string | null;
+  toUserId: string | null;
+  status: FriendRequestStatus | null;
+  createdAt: string | null;
+  respondedAt?: string | null;
 }
 
 const usernameByUserId = new Map<string, string>();
 const userIdByUsername = new Map<string, string>();
-const requestsById = new Map<string, FriendRequest>();
-const friendshipKeys = new Set<string>();
-
-let reqCounter = 1;
 
 function normalizeUsername(value: string): string {
   return value.trim().toLowerCase();
-}
-
-function makeFriendKey(a: string, b: string): string {
-  return a < b ? `${a}::${b}` : `${b}::${a}`;
-}
-
-function nextRequestId(): string {
-  const id = `fr-${reqCounter}`;
-  reqCounter += 1;
-  return id;
 }
 
 export function ensureFriendDirectory(users: User[]): void {
@@ -47,127 +35,215 @@ export function getUsernameForUser(userId: string): string | undefined {
   return usernameByUserId.get(userId);
 }
 
-export function getFriendsForUser(userId: string): string[] {
-  const friends: string[] = [];
+// Get friends for a user (accepted relationships)
+export async function getFriendsForUser(userId: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .select("from_user_id, to_user_id, status")
+      .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+      .in("status", ["accepted"]);
 
-  friendshipKeys.forEach((key) => {
-    const [a, b] = key.split("::");
-    if (a === userId) friends.push(b);
-    if (b === userId) friends.push(a);
-  });
+    if (error) throw error;
+    if (!data) return [];
 
-  return friends;
+    const friends: string[] = [];
+    data.forEach((row: any) => {
+      const from = row.from_user_id;
+      const to = row.to_user_id;
+      if (from === userId && to) friends.push(to);
+      if (to === userId && from) friends.push(from);
+    });
+
+    return friends;
+  } catch (err) {
+    console.warn("[friend] getFriendsForUser failed", err);
+    return [];
+  }
 }
 
-export function getIncomingPendingRequests(userId: string): FriendRequest[] {
-  return Array.from(requestsById.values())
-    .filter((request) => request.toUserId === userId && request.status === "pending")
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function getIncomingPendingRequests(userId: string): Promise<FriendRequest[]> {
+  try {
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .select("id, from_user_id, to_user_id, status, created_at, responded_at")
+      .eq("to_user_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      fromUserId: row.from_user_id ?? null,
+      toUserId: row.to_user_id ?? null,
+      status: row.status ?? null,
+      createdAt: row.created_at ?? null,
+      respondedAt: row.responded_at ?? null,
+    } as FriendRequest));
+  } catch (err) {
+    console.warn("[friend] getIncomingPendingRequests failed", err);
+    return [];
+  }
 }
 
-export function getOutgoingPendingRequests(userId: string): FriendRequest[] {
-  return Array.from(requestsById.values())
-    .filter((request) => request.fromUserId === userId && request.status === "pending")
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function getOutgoingPendingRequests(userId: string): Promise<FriendRequest[]> {
+  try {
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .select("id, from_user_id, to_user_id, status, created_at, responded_at")
+      .eq("from_user_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      fromUserId: row.from_user_id ?? null,
+      toUserId: row.to_user_id ?? null,
+      status: row.status ?? null,
+      createdAt: row.created_at ?? null,
+      respondedAt: row.responded_at ?? null,
+    } as FriendRequest));
+  } catch (err) {
+    console.warn("[friend] getOutgoingPendingRequests failed", err);
+    return [];
+  }
 }
 
-export function sendFriendRequestByUsername(
+async function resolveUserIdByUsername(username: string): Promise<string | null> {
+  const normalized = normalizeUsername(username);
+  const cached = userIdByUsername.get(normalized);
+  if (cached) return cached;
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .ilike("name", username)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+    const id = (data as any).id as string;
+    userIdByUsername.set(normalized, id);
+    usernameByUserId.set(id, (data as any).name as string);
+    return id;
+  } catch (err) {
+    console.warn("[friend] resolveUserIdByUsername failed", err);
+    return null;
+  }
+}
+
+export async function sendFriendRequestByUsername(
   fromUserId: string,
   usernameInput: string,
-  users: User[]
-): { ok: true; request: FriendRequest } | { ok: false; message: string } {
-  ensureFriendDirectory(users);
+  users?: User[]
+): Promise<{ ok: true; request: FriendRequest } | { ok: false; message: string }> {
+  if (users) ensureFriendDirectory(users);
 
   const username = normalizeUsername(usernameInput);
-  if (!username) {
-    return { ok: false, message: "Enter a username." };
+  if (!username) return { ok: false, message: "Enter a username." };
+
+  const toUserId = await resolveUserIdByUsername(username);
+  if (!toUserId) return { ok: false, message: "Username not found." };
+  if (toUserId === fromUserId) return { ok: false, message: "You can’t send a request to yourself." };
+
+  try {
+    // Check for existing pending or accepted between the two users
+    const { data: existing, error: exErr } = await supabase
+      .from("friend_requests")
+      .select("id, status, from_user_id, to_user_id")
+      .or(
+        `and(from_user_id.eq.${fromUserId},to_user_id.eq.${toUserId}),and(from_user_id.eq.${toUserId},to_user_id.eq.${fromUserId}))`
+      )
+      .limit(1);
+
+    if (exErr) throw exErr;
+    if (existing && existing.length > 0) {
+      const row = existing[0] as any;
+      if (row.status === "accepted") return { ok: false, message: "You are already friends." };
+      if (row.status === "pending") return { ok: false, message: "A pending request already exists." };
+    }
+
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .insert({ from_user_id: fromUserId, to_user_id: toUserId, status: "pending" })
+      .select("id, from_user_id, to_user_id, status, created_at, responded_at")
+      .single();
+
+    if (error) throw error;
+
+    const row = data as any;
+    const mapped = {
+      id: row.id,
+      fromUserId: row.from_user_id ?? null,
+      toUserId: row.to_user_id ?? null,
+      status: row.status ?? null,
+      createdAt: row.created_at ?? null,
+      respondedAt: row.responded_at ?? null,
+    } as FriendRequest;
+    return { ok: true, request: mapped };
+  } catch (err: any) {
+    console.warn("[friend] sendFriendRequest failed", err);
+    return { ok: false, message: err?.message ?? "Failed to send request" };
   }
-
-  const toUserId = userIdByUsername.get(username);
-  if (!toUserId) {
-    return { ok: false, message: "Username not found." };
-  }
-
-  if (toUserId === fromUserId) {
-    return { ok: false, message: "You can’t send a request to yourself." };
-  }
-
-  if (friendshipKeys.has(makeFriendKey(fromUserId, toUserId))) {
-    return { ok: false, message: "You are already friends." };
-  }
-
-  const existingPending = Array.from(requestsById.values()).find(
-    (request) =>
-      request.status === "pending" &&
-      ((request.fromUserId === fromUserId && request.toUserId === toUserId) ||
-        (request.fromUserId === toUserId && request.toUserId === fromUserId))
-  );
-
-  if (existingPending) {
-    return { ok: false, message: "A pending request already exists." };
-  }
-
-  const request: FriendRequest = {
-    id: nextRequestId(),
-    fromUserId,
-    toUserId,
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  };
-
-  requestsById.set(request.id, request);
-
-  return { ok: true, request };
 }
 
-export function acceptFriendRequest(
+export async function acceptFriendRequest(
   requestId: string,
   actingUserId: string
-): { ok: true } | { ok: false; message: string } {
-  const request = requestsById.get(requestId);
-  if (!request) {
-    return { ok: false, message: "Request not found." };
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const { data: req, error: fetchErr } = await supabase
+      .from("friend_requests")
+      .select("id, to_user_id, status")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!req) return { ok: false, message: "Request not found." };
+    if (req.to_user_id !== actingUserId) return { ok: false, message: "You can only accept requests sent to you." };
+    if (req.status !== "pending") return { ok: false, message: "This request is no longer pending." };
+
+    const { error } = await supabase
+      .from("friend_requests")
+      .update({ status: "accepted", responded_at: new Date().toISOString() })
+      .eq("id", requestId);
+
+    if (error) throw error;
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[friend] acceptFriendRequest failed", err);
+    return { ok: false, message: err?.message ?? "Failed to accept request" };
   }
-
-  if (request.toUserId !== actingUserId) {
-    return { ok: false, message: "You can only accept requests sent to you." };
-  }
-
-  if (request.status !== "pending") {
-    return { ok: false, message: "This request is no longer pending." };
-  }
-
-  requestsById.set(requestId, {
-    ...request,
-    status: "accepted",
-  });
-
-  friendshipKeys.add(makeFriendKey(request.fromUserId, request.toUserId));
-
-  return { ok: true };
 }
 
-export function rejectFriendRequest(
+export async function rejectFriendRequest(
   requestId: string,
   actingUserId: string
-): { ok: true } | { ok: false; message: string } {
-  const request = requestsById.get(requestId);
-  if (!request) {
-    return { ok: false, message: "Request not found." };
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const { data: req, error: fetchErr } = await supabase
+      .from("friend_requests")
+      .select("id, to_user_id, status")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!req) return { ok: false, message: "Request not found." };
+    if (req.to_user_id !== actingUserId) return { ok: false, message: "You can only reject requests sent to you." };
+    if (req.status !== "pending") return { ok: false, message: "This request is no longer pending." };
+
+    const { error } = await supabase
+      .from("friend_requests")
+      .update({ status: "rejected", responded_at: new Date().toISOString() })
+      .eq("id", requestId);
+
+    if (error) throw error;
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[friend] rejectFriendRequest failed", err);
+    return { ok: false, message: err?.message ?? "Failed to reject request" };
   }
-
-  if (request.toUserId !== actingUserId) {
-    return { ok: false, message: "You can only reject requests sent to you." };
-  }
-
-  if (request.status !== "pending") {
-    return { ok: false, message: "This request is no longer pending." };
-  }
-
-  requestsById.set(requestId, {
-    ...request,
-    status: "rejected",
-  });
-
-  return { ok: true };
 }

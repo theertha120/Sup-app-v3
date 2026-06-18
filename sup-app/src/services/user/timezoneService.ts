@@ -8,16 +8,20 @@ export async function autoDetectAndSaveTimezone(userId: string): Promise<void> {
   try {
     const timezoneOffsetMinutes = getDeviceTimezoneOffset();
 
-    await supabase
+    const { error } = await supabase
       .from("user_profile")
       .update({
         timezone_offset_minutes: timezoneOffsetMinutes,
       })
       .eq("id", userId);
 
-    console.log(
-      `Timezone auto-detected and saved: ${timezoneOffsetMinutes} minutes offset`
-    );
+    if (error) {
+      console.warn("[timezone] failed to save timezone:", error);
+    } else {
+      console.log(
+        `Timezone auto-detected and saved: ${timezoneOffsetMinutes} minutes offset`
+      );
+    }
   } catch (error) {
     console.error("Error auto-detecting timezone:", error);
   }
