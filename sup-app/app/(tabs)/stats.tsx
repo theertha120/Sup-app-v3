@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Platform } fro
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
+import { useAuth } from "../../src/contexts/AuthContext";
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
 import {
@@ -73,26 +74,24 @@ function AnimatedNumber({
   const [displayValue, setDisplayValue] = useState<number>(value);
   const animationRef = useRef<any>(null);
   useEffect(() => {
-    // Clear any existing animation
     if (animationRef.current) {
       clearInterval(animationRef.current);
+      animationRef.current = null;
     }
 
     const startValue = displayValue;
     const endValue = value;
-    const duration = 250; // 250ms animation
+    const duration = 250;
     const startTime = Date.now();
 
     if (startValue === endValue) return;
     animationRef.current = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease out animation
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       const current = startValue + (endValue - startValue) * easeProgress;
-      
-      setDisplayValue(Math.round(current));
+
+      setDisplayValue(current);
 
       if (progress >= 1) {
         setDisplayValue(endValue);
@@ -101,16 +100,17 @@ function AnimatedNumber({
           animationRef.current = null;
         }
       }
-    }, 16); // ~60fps
+    }, 16);
 
     return () => {
       if (animationRef.current) {
         clearInterval(animationRef.current);
+        animationRef.current = null;
       }
     };
   }, [value]);
 
-  return <Text style={style}>{displayValue}</Text>;
+  return <Text style={style}>{typeof displayValue === "number" ? displayValue.toFixed(decimals) : String(displayValue)}</Text>;
 }
 
 function AnimatedProgressBar({ goodPercent, animationKey }: { goodPercent: number; animationKey?: string | number }) {
@@ -305,6 +305,7 @@ export default function StatsScreen() {
   );
 
   const [dateRange, setDateRange] = useState<DateRange>("last7days");
+  const { userId } = useAuth();
 
   const { posture, bothConnected, isNeutralCalibrated, neckAlignmentPercent, shoulderBalancePercent, upperBackPercent } = useIMUContext();
   const currentState = (posture?.state ?? "upright") as DeskPostureState;
@@ -518,9 +519,11 @@ export default function StatsScreen() {
           {hasEnoughData ? displaySessionStats.avgScore : hasData ? "--" : "0"}
         </Text>
         <Text style={styles.scoreHint}>
-          {hasData
-            ? "From your latest IMU session"
-            : "Score appears after your first session"}
+          {!hasData
+            ? "Score appears after your first session"
+            : !hasEnoughData
+            ? "Use your s'pots to get insights"
+            : "From your latest IMU session"}
         </Text>
       </View>
 
@@ -563,7 +566,7 @@ export default function StatsScreen() {
 
       {/* Weekly Summary */}
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>This week</Text>
+        <Text style={styles.summaryTitle}>Session summary</Text>
         <Text style={styles.summaryText}>
           {hasData
             ? `Session: ${(displaySessionStats.totalMs / 1000).toFixed(2)}s total · ${displaySessionStats.goodPosturePercent.toFixed(0)}% good posture${displaySessionStats.isVariableSession ? " · Variable posture" : ""}`

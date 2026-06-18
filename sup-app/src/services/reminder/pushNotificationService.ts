@@ -1,7 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { supabase } from "@/src/lib/supabase";
-import { CURRENT_USER_ID } from "@/constants/env";
 import { getReminderForUser } from "./reminderEngineService";
 
 /**
@@ -74,11 +73,11 @@ async function getCurrentUserId(): Promise<string> {
       error,
     } = await supabase.auth.getUser();
     if (error || !user) {
-      return CURRENT_USER_ID;
+      return "guest";
     }
     return user.id;
   } catch {
-    return CURRENT_USER_ID;
+    return "guest";
   }
 }
 
@@ -204,11 +203,7 @@ export async function sendLocalNotification(
           autoDismiss: true,
         }),
       },
-      trigger: {
-        type: "timeInterval",
-        seconds: 1, // Send immediately
-        repeats: false,
-      },
+      trigger: { seconds: 1 } as any,
     });
 
     const userId = await getCurrentUserId();
@@ -237,11 +232,7 @@ async function maybeSendAnnoyingThresholdNotification(annoyingCount: number): Pr
           autoDismiss: true,
         }),
       },
-      trigger: {
-        type: "timeInterval",
-        seconds: 2, // Slight delay so it doesn't fire simultaneously with any dismiss
-        repeats: false,
-      },
+      trigger: { seconds: 2 } as any,
     });
     console.log("Annoying threshold notification scheduled");
   } catch (error) {

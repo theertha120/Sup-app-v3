@@ -116,12 +116,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const def = createDefaultBehaviorProfile();
         await supabase.from("user_profile").upsert({
           id: user.id,
-          primary_goals: def.primaryGoal,
-          preferred_tones: def.preferredTone,
+          primary_goals: def.primaryGoals,
+          preferred_tones: def.preferredTones,
           reminder_frequency: def.reminderFrequency,
           active_time_start: def.activeTimeStart,
           active_time_end: def.activeTimeEnd,
-          weekly_goals: def.weeklyGoal,
+          weekly_goals: def.weeklyGoals,
         });
       } catch (e) {
         console.warn("[auth] failed to create profile rows after signUp", e);

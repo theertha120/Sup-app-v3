@@ -145,7 +145,7 @@ export function useIMU(): UseIMUResult {
           const result = classifySpinePosture(adjustedTop, adjustedBottom);
           setPosture({
             state: result.state,
-            score: result.score,
+            score: result.instantScore,
             label: POSTURE_LABELS[result.state],
             description: POSTURE_DESCRIPTIONS[result.state],
             pitchDiff: result.pitchDiff,

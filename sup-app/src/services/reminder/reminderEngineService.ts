@@ -1,5 +1,4 @@
 import { supabase } from "@/src/lib/supabase";
-import { CURRENT_USER_ID } from "@/constants/env";
 import type {
   BehaviorGoalId,
   ReminderTone,
@@ -132,11 +131,11 @@ async function getCurrentUserId(): Promise<string> {
       error,
     } = await supabase.auth.getUser();
     if (error || !user) {
-      return CURRENT_USER_ID;
+      return "guest";
     }
     return user.id;
   } catch {
-    return CURRENT_USER_ID;
+    return "guest";
   }
 }
 
@@ -489,7 +488,7 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
   try {
     // Fetch user profile
     const { data: profileData, error: profileError } = await supabase
-      .from("user_profile")
+      .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
