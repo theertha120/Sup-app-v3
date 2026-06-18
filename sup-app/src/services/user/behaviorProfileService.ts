@@ -94,12 +94,12 @@ async function getCurrentUserId(): Promise<string> {
     } = await supabase.auth.getUser();
 
     if (error || !user) {
-      throw new Error("No authenticated user");
+      return "guest";
     }
 
     return user.id;
   } catch {
-    throw new Error("No authenticated user");
+    return "guest";
   }
 }
 
@@ -170,6 +170,10 @@ export function createDefaultBehaviorProfile(): BehaviorProfileInput {
 export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | null> {
   const userId = await getCurrentUserId();
 
+  if (userId === "guest") {
+    return null;
+  }
+
   try {
     // Use `id` (text) for lookups so we don't conflict with numeric PK `id`.
     const { data, error } = await supabase
@@ -181,7 +185,11 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
       .maybeSingle();
 
     if (error) {
-      throw error;
+      if (error.code === "PGRST116") {
+        return null;
+      }
+      console.warn("[behavior-profile] Remote fetch failed", error);
+      return null;
     }
 
     if (data) {
@@ -193,7 +201,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     return null;
   } catch (error) {
     console.warn("[behavior-profile] Remote fetch failed", error);
-    throw error;
+    return null;
   }
 }
 

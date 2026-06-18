@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
-        setCurrentUser(userProfileToUser(profile));
+        setCurrentUser(profile ? userProfileToUser(profile) : null);
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
@@ -84,8 +84,8 @@ export default function HomeScreen() {
         setShowCoachingSetupModal(profile == null);
       })
       .catch((err) => {
-        console.error("[HomeScreen] Failed to check behavior profile", err);
-        setShowCoachingSetupModal(true);
+        console.warn("[HomeScreen] Skipping behavior profile check", err);
+        setShowCoachingSetupModal(false);
       });
   }, [isAuthenticated]);
 

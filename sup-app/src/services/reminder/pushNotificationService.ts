@@ -203,7 +203,11 @@ export async function sendLocalNotification(
           autoDismiss: true,
         }),
       },
-      trigger: { seconds: 1 } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 1, // Send immediately
+        repeats: false,
+      },
     });
 
     const userId = await getCurrentUserId();
@@ -232,7 +236,11 @@ async function maybeSendAnnoyingThresholdNotification(annoyingCount: number): Pr
           autoDismiss: true,
         }),
       },
-      trigger: { seconds: 2 } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2, // Slight delay so it doesn't fire simultaneously with any dismiss
+        repeats: false,
+      },
     });
     console.log("Annoying threshold notification scheduled");
   } catch (error) {

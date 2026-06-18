@@ -238,9 +238,14 @@ async function getCurrentUserId(): Promise<string> {
  * - the profiles row cannot be loaded
  */
 export async function fetchCurrentUserBasicProfile(): Promise<
-  Pick<UserProfile, "id" | "name" | "avatar" | "createdAt">
+  Pick<UserProfile, "id" | "name" | "avatar" | "createdAt"> | null
 > {
-  const userId = await getCurrentUserId();
+  let userId: string;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    return null;
+  }
 
   try {
     const { data, error } = await supabase
@@ -250,11 +255,11 @@ export async function fetchCurrentUserBasicProfile(): Promise<
       .single();
 
     if (error) {
-      console.warn(
-        "[profile] Failed to fetch basic profile, falling back to mock data",
-        error
-      );
-      // fall through to mock below
+      if (error.code === "PGRST116") {
+        return null;
+      }
+      console.warn("[profile] Failed to fetch basic profile", error);
+      return null;
     } else if (data) {
       const row = data as ProfileRow;
       const profile = mapRowToUserProfile({
@@ -273,26 +278,11 @@ export async function fetchCurrentUserBasicProfile(): Promise<
       };
     }
   } catch (err) {
-    console.warn(
-      "[profile] Supabase basic profile fetch threw, falling back to mock data",
-      err
-    );
+    console.warn("[profile] Supabase basic profile fetch threw", err);
+    return null;
   }
 
-  const mock = getMockUserById(userId);
-  if (!mock) {
-    throw new Error(
-      "[profile] Basic profile not found in Supabase or mock data"
-    );
-  }
-
-  const fallback = userToUserProfile(mock);
-  return {
-    id: fallback.id,
-    name: fallback.name,
-    avatar: fallback.avatar,
-    createdAt: fallback.createdAt,
-  };
+  return null;
 }
 
 /**
@@ -312,8 +302,13 @@ export async function fetchCurrentUserBasicProfile(): Promise<
  * - no authenticated user is present
  * - the profiles row cannot be loaded
  */
-export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
-  const userId = await getCurrentUserId();
+export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | null> {
+  let userId: string;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    return null;
+  }
 
   try {
     const { data, error } = await supabase
@@ -325,11 +320,11 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
       .single();
 
     if (error) {
-      console.warn(
-        "[profile] Failed to fetch profile with stats, falling back to mock data",
-        error
-      );
-      // fall through to mock below
+      if (error.code === "PGRST116") {
+        return null;
+      }
+      console.warn("[profile] Failed to fetch profile with stats", error);
+      return null;
     } else if (data) {
       const profile = mapRowToUserProfile(data as ProfileRow);
       // If there's a locally stored supsona for this user, prefer it for avatar
@@ -340,24 +335,11 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
       return profile;
     }
   } catch (err) {
-    console.warn(
-      "[profile] Supabase profile-with-stats fetch threw, falling back to mock data",
-      err
-    );
+    console.warn("[profile] Supabase profile-with-stats fetch threw", err);
+    return null;
   }
 
-  const mock = getMockUserById(userId);
-  if (!mock) {
-    throw new Error(
-      "[profile] Profile with stats not found in Supabase or mock data"
-    );
-  }
-  const profile = userToUserProfile(mock);
-  try {
-    const local = await getLocalSupsona(userId);
-    if (local != null) profile.avatar = local;
-  } catch {}
-  return profile;
+  return null;
 }
 
 /**
@@ -378,8 +360,13 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile> {
  */
 export async function updateCurrentUserProfile(
   updates: ProfileUpdateInput
-): Promise<UserProfile> {
-  const userId = await getCurrentUserId();
+): Promise<UserProfile | null> {
+  let userId: string;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    return null;
+  }
 
   const payload: Record<string, unknown> = {};
 
