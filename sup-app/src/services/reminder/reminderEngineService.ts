@@ -488,7 +488,7 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
   try {
     // Fetch user profile
     const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
+      .from("user_profile")
       .select("*")
       .eq("id", userId)
       .single();
