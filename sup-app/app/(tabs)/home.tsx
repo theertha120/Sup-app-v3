@@ -5,7 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { type User } from "../../constants/env";
+import { CURRENT_USER_ID, type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
@@ -39,7 +39,7 @@ function getEncouragingMessage(score: number): string {
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
-  const { isAuthenticated, userId } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -91,8 +91,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
-      if (!userId) return;
-      if (updatedProfile.id !== userId) return;
+      if (updatedProfile.id !== CURRENT_USER_ID) return;
       setCurrentUser(userProfileToUser(updatedProfile));
     });
 
@@ -212,7 +211,7 @@ export default function HomeScreen() {
       {/* Status Card */}
       <View style={styles.statusCard}>
         <Text style={styles.statusTitle}>Your posture status</Text>
-        {hasEnoughData ? (
+        {hasScore ? (
           <>
             <Text style={styles.statusValue}>{getPostureStatus(displayAvgScore)}</Text>
             <Text style={styles.statusHint}>

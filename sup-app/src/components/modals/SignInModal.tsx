@@ -12,13 +12,9 @@ import { colours } from "@/theme/colours";
 import { useAuth } from "@/src/contexts/AuthContext";
 
 export default function SignInModal() {
-  const { isAuthenticated, login, register } = useAuth();
+  const { isAuthenticated, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Clear fields when modal becomes visible (after logout)
   useEffect(() => {
@@ -28,52 +24,15 @@ export default function SignInModal() {
     }
   }, [isAuthenticated]);
 
-  function validateEmail(value: string): boolean {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(value.toLowerCase());
-  }
-
-  function validatePassword(value: string): boolean {
-    return value.length >= 8;
-  }
-
-  const handleSignIn = async () => {
-    setEmailError(null);
-    setPasswordError(null);
-
-    if (!validateEmail(email)) {
-      setEmailError("Please enter a valid email address");
+  const handleSignIn = () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter both email and password");
       return;
     }
 
-    if (!validatePassword(password)) {
-      setPasswordError("Password must be at least 8 characters");
-      return;
-    }
-
-    const res = await login(email, password);
-    if (!res.success) {
-      Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please try again.");
-    }
-  };
-
-  const handleRegister = async () => {
-    setEmailError(null);
-    setPasswordError(null);
-
-    if (!validateEmail(email)) {
-      setEmailError("Please enter a valid email address");
-      return;
-    }
-
-    if (!validatePassword(password)) {
-      setPasswordError("Password must be at least 8 characters");
-      return;
-    }
-
-    const res = await register(email, password, name || undefined);
-    if (!res.success) {
-      Alert.alert("Registration Failed", res.error || "Could not create account. Try again.");
+    const success = login(email, password);
+    if (!success) {
+      Alert.alert("Sign In Failed", "Invalid credentials. Please try again.");
     }
   };
 
@@ -100,20 +59,6 @@ export default function SignInModal() {
               autoCapitalize="none"
               keyboardType="email-address"
             />
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-
-            {isRegister && (
-              <>
-                <Text style={styles.label}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Your name"
-                  placeholderTextColor="#A0A0A0"
-                  value={name}
-                  onChangeText={setName}
-                />
-              </>
-            )}
 
             <Text style={styles.label}>Password</Text>
             <TextInput
@@ -124,24 +69,14 @@ export default function SignInModal() {
               onChangeText={setPassword}
               secureTextEntry
             />
-            {passwordError ? (
-              <Text style={[styles.errorText]}>{passwordError}</Text>
-            ) : null}
-            <Pressable
-              style={styles.button}
-              onPress={isRegister ? handleRegister : handleSignIn}
-            >
-              <Text style={styles.buttonText}>{isRegister ? "Register" : "Sign In"}</Text>
+
+            <Pressable style={styles.button} onPress={handleSignIn}>
+              <Text style={styles.buttonText}>Sign In</Text>
             </Pressable>
 
-            <Pressable
-              style={[styles.button, styles.secondaryButton]}
-              onPress={() => setIsRegister((s) => !s)}
-            >
-              <Text style={[styles.buttonText, styles.secondaryText]}>
-                {isRegister ? "Have an account? Sign In" : "Create account"}
-              </Text>
-            </Pressable>
+            <Text style={styles.hint}>
+              For testing: Use user@test.com with password 1234 :)
+            </Text>
           </View>
         </View>
       </View>
@@ -222,17 +157,5 @@ const styles = StyleSheet.create({
     color: colours.textSecondary,
     textAlign: "center",
     marginTop: 16,
-  },
-  errorText: {
-    color: "#FF4D4F",
-    marginBottom: 12,
-    fontSize: 12,
-  },
-  secondaryButton: {
-    backgroundColor: colours.card,
-    marginTop: 12,
-  },
-  secondaryText: {
-    color: colours.textPrimary,
   },
 });

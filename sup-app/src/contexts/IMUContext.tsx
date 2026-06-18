@@ -33,8 +33,12 @@
  */
 
 import React, {
-  createContext, useContext, useState,
-  useEffect, useCallback, useRef,
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
@@ -173,8 +177,17 @@ export interface IMUContextValue {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const defaultSensorState: SensorState = { connected: false, deviceId: null, deviceName: null };
-const defaultSensorData: IMUSensorData = { latest: null, state: defaultSensorState };
+const defaultSensorState: SensorState = {
+  connected: false,
+  deviceId: null,
+  deviceName: null,
+};
+
+const defaultSensorData: IMUSensorData = {
+  latest: null,
+  state: defaultSensorState,
+};
+
 const defaultCalibration: CalibrationState = {
   currentStep: null, countdown: null,
   stepComplete: [false, false, false, false, false],
@@ -477,7 +490,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            topLatestRef.current = null; setPosture(null);
+            topLatestRef.current = null; 
+            setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
             sessionStartTimeRef.current = null;
@@ -491,7 +505,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            bottomLatestRef.current = null; setPosture(null);
+            bottomLatestRef.current = null; 
+            setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
             sessionStartTimeRef.current = null;
@@ -630,7 +645,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const scan = useCallback(async () => {
     const ok = await bleService.requestPermissions();
     if (!ok) return;
-    setDiscoveredDevices([]); setIsScanning(true);
+    setDiscoveredDevices([]); 
+    setIsScanning(true);
     bleService.scan((device) => {
       setDiscoveredDevices((prev) => {
         if (prev.some((d) => d.id === device.id)) return prev;
@@ -648,7 +664,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <IMUContext.Provider value={{
-      topSensor: topData, bottomSensor: bottomData, posture, bothConnected,
+      topSensor: topData, 
+      bottomSensor: bottomData, 
+      posture, 
+      bothConnected,
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,

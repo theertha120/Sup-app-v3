@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
+
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
 import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
@@ -248,9 +249,8 @@ function MovementNudgeModal() {
   );
 }
 
-// ── Main screen ───────────────────────────────────────────────────────────────
-
 export default function DeskScreen() {
+  // ── Use the global context — NOT a local hook ──────────────────────────────
   const {
     topSensor, bottomSensor,
     posture, calibration, clinicalBaseline,
@@ -260,7 +260,7 @@ export default function DeskScreen() {
     sessionStartTimeMs,
   } = useIMUContext();
 
-  // --- Desk UI figure throttle: snapshot posture for figure/label only every 5 minutes ---
+  // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
   const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
   const livePostureRef = useRef(posture);
   const [displayPosture, setDisplayPosture] = useState(posture);
@@ -289,10 +289,9 @@ export default function DeskScreen() {
   const isTracking     = bothConnected && isNeutralCalibrated;
   const figureColor    = isTracking ? STATE_COLORS[currentState] : STATE_COLORS["upright"];
   const currentDesc    = (displayPosture?.description ?? posture?.description) ?? "connect your s'pots via s'pot setup.";
-  const currentLabel = (displayPosture?.label ?? posture?.label) ?? "waiting for s'pots…";
 
   // Ensure the visible numeric 'score' shown on the avatar follows the
-  // throttled `displayPosture` (so it updates with the avatar every 5 minutes).
+  // throttled `displayPosture` (so it updates with the avatar every 3 seconds).
   const displayScore = (
     (displayPosture?.state ?? posture?.state) === "upright"      ? 95 :
     (displayPosture?.state ?? posture?.state) === "transition"   ? 75 :
@@ -328,6 +327,7 @@ export default function DeskScreen() {
                   : "live posture analysis"}
             </Text>
           </View>
+          {/* Quick link to sensor setup */}
           {!bothConnected && (
             <Pressable style={s.setupLink} onPress={() => router.push("/sensor-setup")}>
               <Ionicons name="hardware-chip-outline" size={16} color={colours.primary} />
@@ -548,13 +548,13 @@ const s = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: colours.background },
   container: { paddingHorizontal: 20, paddingTop: 8, alignItems: "center" },
 
-  header:        { alignSelf: "stretch", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  headerTitle:   { fontSize: 26, fontWeight: "700", color: colours.textPrimary },
-  headerSub:     { fontSize: 14, color: colours.textSecondary, marginTop: 2 },
-  setupLink:     { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
+  header:     { alignSelf: "stretch", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  headerTitle: { fontSize: 26, fontWeight: "700", color: colours.textPrimary },
+  headerSub:   { fontSize: 14, color: colours.textSecondary, marginTop: 2 },
+  setupLink:   { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
   setupLinkText: { fontSize: 13, fontWeight: "600", color: colours.primary },
 
-  pillRow: { alignSelf: "stretch", flexDirection: "row", gap: 8, marginBottom: 12 },
+  pillRow: { alignSelf: "stretch", flexDirection: "row", gap: 8, marginBottom: 16 },
   pill:    { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 10 },
   pillDot: { width: 7, height: 7, borderRadius: 4 },
   pillText:{ fontSize: 12, fontWeight: "600" },

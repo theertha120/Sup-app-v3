@@ -1,60 +1,95 @@
-/**
- * mockDeskPostureData.ts
- *
- * UI helpers for the Desk Mode posture figure and score display.
- * State list updated to include hip_hinge and transition states
- * from the new biomechanical classification model.
- *
- * s'up brand: all UI strings lowercase, "s'pot" not "sensor".
- */
-
 export type DeskPostureState =
   | "upright"
-  | "transition"     // early flexion zone — watch and wait, no alert
-  | "forward_lean"   // true lumbar flexion beginning — upper back rounding relative to pelvis
-  | "slouched"       // significant lumbar flexion — disc compression zone
-  | "severe"         // >35° relative flexion — passive ligament loading zone
+  | "forward_lean"
+  | "slouched"
   | "tilted_left"
   | "tilted_right";
 
-// Posture figure animation angles — used by DeskPostureFigure.tsx
-// torso    → side-view: forward(+) / back(-) lean in degrees
-// shoulder → front-view: right(+) / left(-) tilt in degrees
-// head     → head tilt applied in both views
+export interface DeskPostureSnapshot {
+  timestamp: number; // ms from session start
+  state: DeskPostureState;
+  score: number; // 0–100
+  label: string;
+  description: string;
+}
+
+// Posture config for each state – angles in degrees used by the animation.
+// torso    → side-view panel: forward(+) / back(-) lean
+// shoulder → front-view panel: right(+) / left(-) tilt
+// head     → head tilt, applied in both views
 export const POSTURE_ANGLES: Record<
   DeskPostureState,
   { torso: number; head: number; shoulder: number }
 > = {
-  upright:      { torso:  0,  head:  0,  shoulder:  0  },
-  transition:   { torso: 12,  head:  5,  shoulder:  0  }, // subtle early lean
-  forward_lean: { torso: 22,  head: 13,  shoulder:  0  },
-  slouched:     { torso: 34,  head: 22,  shoulder:  0  },
-  severe:       { torso: 34,  head: 22,  shoulder:  0  }, // same figure as slouched, worse loading
-  tilted_left:  { torso:  0,  head: -8,  shoulder: -22 },
-  tilted_right: { torso:  0,  head:  8,  shoulder:  22 },
+  upright:      { torso: 0,   head: 0,   shoulder: 0   },
+  forward_lean: { torso: 22,  head: 13,  shoulder: 0   },
+  slouched:     { torso: 34,  head: 22,  shoulder: 0   },
+  tilted_left:  { torso: 0,   head: -8,  shoulder: -22 },
+  tilted_right: { torso: 0,   head: 8,   shoulder: 22  },
 };
 
-// ── Spine Health Score (SHS) colour bands ─────────────────────────────────────
-//
-// Updated from old PLI bands to reflect the new BIS/SHS model.
-// Red is now reserved for genuinely sustained dangerous postures —
-// a momentary lean should not turn the figure red.
-//
-//   80–100  green   — excellent structural alignment
-//   60–79   amber   — notice this, small adjustment helpful
-//   40–59   orange  — act on this, tissue loading accumulating
-//   0–39    red     — urgent, significant structural debt accumulated
-
+// Score thresholds
 export function getScoreColor(score: number): string {
   if (score >= 80) return "#4CAF50"; // green
-  if (score >= 60) return "#FF9800"; // amber
-  if (score >= 40) return "#FF5722"; // orange
-  return "#F44336";                  // red — reserved for sustained bad posture only
+  if (score >= 55) return "#FF9800"; // amber
+  return "#F44336";                  // red
 }
 
 export function getScoreLabel(score: number): string {
-  if (score >= 80) return "great";
-  if (score >= 60) return "fair";
-  if (score >= 40) return "notice this";
-  return "act on this";
+  if (score >= 80) return "Great";
+  if (score >= 55) return "Fair";
+  return "Poor";
 }
+
+// Mock session – cycles every 4 s when played back in the UI
+export const MOCK_DESK_POSTURE_SEQUENCE: DeskPostureSnapshot[] = [
+  {
+    timestamp: 0,
+    state: "upright",
+    score: 93,
+    label: "Perfect Posture",
+    description: "Spine aligned, head level above shoulders.",
+  },
+  {
+    timestamp: 4000,
+    state: "forward_lean",
+    score: 55,
+    label: "Forward Lean",
+    description: "Head and shoulders pushed forward. Move back!",
+  },
+  {
+    timestamp: 8000,
+    state: "slouched",
+    score: 32,
+    label: "Slouching",
+    description: "Back curved and rounded. Sit up straight.",
+  },
+  {
+    timestamp: 12000,
+    state: "upright",
+    score: 88,
+    label: "Good Posture",
+    description: "Solid recovery – keep it up!",
+  },
+  {
+    timestamp: 16000,
+    state: "tilted_left",
+    score: 60,
+    label: "Leaning Left",
+    description: "Weight shifted to left side. Even out.",
+  },
+  {
+    timestamp: 20000,
+    state: "tilted_right",
+    score: 63,
+    label: "Leaning Right",
+    description: "Weight shifted to right side. Even out.",
+  },
+  {
+    timestamp: 24000,
+    state: "upright",
+    score: 95,
+    label: "Excellent!",
+    description: "Perfect alignment maintained.",
+  },
+];

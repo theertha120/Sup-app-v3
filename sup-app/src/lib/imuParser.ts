@@ -1,5 +1,6 @@
 /**
  * imuParser.ts
+ * Converts raw BLE bytes from the WT9011DCL into usable sensor values.
  *
  * Parses raw BLE packets from the WT9011DCL IMU inside each s'pot,
  * classifies spine posture using biomechanically grounded thresholds,
@@ -31,21 +32,15 @@
  *   [0x55] [0x61] [AXL AXH] [AYL AYH] [AZL AZH]
  *                 [WXL WXH] [WYL WYH] [WZL WZH]
  *                 [RollL RollH] [PitchL PitchH] [YawL YawH]
- *   Total: 20 bytes
- *
- * FUTURE v0.2:
- *   - Hip hinge vs slouch discrimination using bottomAbsPitch
- *   - Quaternion relative rotation: q_lumbar = q_upper ⊗ q_lower⁻¹
+ * Total: 20 bytes
  */
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export interface ParsedIMU {
-  /** Acceleration in g */
+  /** Acceleration in g (gravity units) */
   accel: { x: number; y: number; z: number };
-  /** Angular velocity in deg/s */
-  gyro:  { x: number; y: number; z: number };
-  /** Absolute Euler angle in degrees relative to gravity */
+  /** Angular velocity in degrees/second */
+  gyro: { x: number; y: number; z: number };
+  /** Angle in degrees */
   angle: { roll: number; pitch: number; yaw: number };
 }
 
@@ -137,6 +132,7 @@ const LATERAL_MAX         =   8; // deg
  * Returns null if invalid.
  */
 export function parseIMUPacket(data: DataView): ParsedIMU | null {
+  // Must be 20 bytes, start with 0x55, flag 0x61
   if (data.byteLength < 20) return null;
   if (data.getUint8(0) !== 0x55) return null;
   const flag = data.getUint8(1);
@@ -144,26 +140,40 @@ export function parseIMUPacket(data: DataView): ParsedIMU | null {
     console.warn(`[imuParser] unexpected packet flag 0x${flag.toString(16)} — attempting parse anyway`);
   }
 
-  function int16(low: number, high: number): number {
-    const val = (high << 8) | low;
+  // Read signed 16-bit little-endian values
+  function int16(lowByte: number, highByte: number): number {
+    const val = (highByte << 8) | lowByte;
+    // Convert to signed
     return val > 32767 ? val - 65536 : val;
   }
 
+  const AXL = data.getUint8(2);  const AXH = data.getUint8(3);
+  const AYL = data.getUint8(4);  const AYH = data.getUint8(5);
+  const AZL = data.getUint8(6);  const AZH = data.getUint8(7);
+
+  const WXL = data.getUint8(8);  const WXH = data.getUint8(9);
+  const WYL = data.getUint8(10); const WYH = data.getUint8(11);
+  const WZL = data.getUint8(12); const WZH = data.getUint8(13);
+
+  const RollL  = data.getUint8(14); const RollH  = data.getUint8(15);
+  const PitchL = data.getUint8(16); const PitchH = data.getUint8(17);
+  const YawL   = data.getUint8(18); const YawH   = data.getUint8(19);
+
   return {
     accel: {
-      x: (int16(data.getUint8(2),  data.getUint8(3))  / 32768) * 16,
-      y: (int16(data.getUint8(4),  data.getUint8(5))  / 32768) * 16,
-      z: (int16(data.getUint8(6),  data.getUint8(7))  / 32768) * 16,
+      x: (int16(AXL, AXH) / 32768) * 16,
+      y: (int16(AYL, AYH) / 32768) * 16,
+      z: (int16(AZL, AZH) / 32768) * 16,
     },
     gyro: {
-      x: (int16(data.getUint8(8),  data.getUint8(9))  / 32768) * 2000,
-      y: (int16(data.getUint8(10), data.getUint8(11)) / 32768) * 2000,
-      z: (int16(data.getUint8(12), data.getUint8(13)) / 32768) * 2000,
+      x: (int16(WXL, WXH) / 32768) * 2000,
+      y: (int16(WYL, WYH) / 32768) * 2000,
+      z: (int16(WZL, WZH) / 32768) * 2000,
     },
     angle: {
-      roll:  (int16(data.getUint8(14), data.getUint8(15)) / 32768) * 180,
-      pitch: (int16(data.getUint8(16), data.getUint8(17)) / 32768) * 180,
-      yaw:   (int16(data.getUint8(18), data.getUint8(19)) / 32768) * 180,
+      roll:  (int16(RollL,  RollH)  / 32768) * 180,
+      pitch: (int16(PitchL, PitchH) / 32768) * 180,
+      yaw:   (int16(YawL,   YawH)   / 32768) * 180,
     },
   };
 }
@@ -186,10 +196,8 @@ function computeInstantScore(state: PostureState): number {
 // ── Spine classifier ──────────────────────────────────────────────────────────
 
 /**
- * Classify spine posture from readings from both s'pots.
- *
- * topSensor    = top s'pot    — upper back (T4–T6)
- * bottomSensor = bottom s'pot — lower back (L2–L4)
+ * Given top and bottom sensor angles, determine posture state.
+ * Top sensor = upper back, Bottom sensor = lower back.
  *
  * Axis mapping (confirmed from physical device testing on WT9011DCL):
  *   sagittal flex → roll axis  (mounted vertically; roll = forward/back)
@@ -276,8 +284,7 @@ export function classifySpinePosture(
 
   return {
     state,
-    severity,
-    instantScore: computeInstantScore(state),
+    score: Math.round(score),
     pitchDiff,
     rollDiff,
   };

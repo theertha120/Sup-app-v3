@@ -1,106 +1,25 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { supabase } from "@/src/lib/supabase";
+import React, { createContext, useContext, useState, ReactNode } from "react";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
-import { createDefaultBehaviorProfile } from "@/src/services/user/behaviorProfileService";
+import { CURRENT_USER_ID } from "@/constants/env";
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  loading: boolean;
-  userId: string | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (
-    email: string,
-    password: string,
-    name?: string
-  ) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
+  login: (email: string, password: string) => boolean;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
 
-  // Listen for auth state changes so UI stays in sync
-  useEffect(() => {
-    let mounted = true;
-    async function checkAuth() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!mounted) return;
-        setIsAuthenticated(!!user);
-        setUserId(user?.id ?? null);
-      } catch (err) {
-        if (!mounted) return;
-        setIsAuthenticated(false);
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
-      }
-    }
-    checkAuth();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session?.user);
-      setUserId(session?.user?.id ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      listener?.subscription.unsubscribe();
-    };
-  }, []);
-
-  async function login(
-    email: string,
-    password: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signInWithPassword({ email, password });
-
-      if (error || !user) {
-        const msg = error?.message || "Sign in failed";
-        console.warn("[auth] signIn failed", error);
-        return { success: false, error: msg };
-      }
-
-      // Save timezone and mark authenticated
-      await autoDetectAndSaveTimezone(user.id);
-      setUserId(user.id);
+  const login = async (email: string, password: string): Promise<boolean> => {
+    // Simple authentication check, later integrate with 'users' list in backend
+    if (email === "user@test.com" && password === "1234") {
       setIsAuthenticated(true);
-      return { success: true };
-    } catch (err) {
-      console.error("[auth] login error", err);
-      return { success: false, error: String(err) };
-    }
-  }
 
-  async function register(
-    email: string,
-    password: string,
-    name?: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signUp({ email, password });
-
-      if (error) {
-        console.warn("[auth] signUp failed", error);
-        return { success: false, error: error.message };
-      }
-
-      if (!user) {
-        return { success: false, error: "No user returned from signUp" };
-      }
+      // Auto-detect and save timezone
+      await autoDetectAndSaveTimezone(CURRENT_USER_ID);
 
       // Try to create profile rows immediately using the returned user id.
       const displayName = name || email.split("@")[0];
@@ -150,21 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("[auth] register error", err);
       return { success: false, error: String(err) };
     }
-  }
+    return false;
+  };
 
-  async function logout(): Promise<void> {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.warn("[auth] signOut failed", err);
-    } finally {
-      setIsAuthenticated(false);
-      setUserId(null);
-    }
-  }
+  const logout = () => {
+    setIsAuthenticated(false);
+  };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
