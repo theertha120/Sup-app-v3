@@ -21,7 +21,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Auto-detect and save timezone
       await autoDetectAndSaveTimezone(CURRENT_USER_ID);
 
-      return true;
+      // Try to create profile rows immediately using the returned user id.
+      const displayName = name || email.split("@")[0];
+      try {
+        await supabase.from("profiles").insert({
+          id: user.id,
+          name: displayName,
+          avatar_url: null,
+          current_streak: 0,
+          weekly_total_points: 0,
+        });
+
+        const def = createDefaultBehaviorProfile();
+        await supabase.from("user_profile").upsert({
+          id: user.id,
+          primary_goals: def.primaryGoal,
+          preferred_tones: def.preferredTone,
+          reminder_frequency: def.reminderFrequency,
+          active_time_start: def.activeTimeStart,
+          active_time_end: def.activeTimeEnd,
+          weekly_goals: def.weeklyGoal,
+        });
+      } catch (e) {
+        console.warn("[auth] failed to create profile rows after signUp", e);
+      }
+
+      // After sign-up, attempt to sign in immediately to establish a session.
+      const signIn = await supabase.auth.signInWithPassword({ email, password });
+
+      if (signIn.error || !signIn.data?.user) {
+        // Sign-in failed (likely due to email confirmation). Return success=false but inform user,
+        // profiles were created and user can confirm email to sign in.
+        const errMsg = signIn.error?.message || "Please confirm your email before signing in.";
+        console.warn("[auth] post-signup signIn failed", signIn.error);
+        return { success: false, error: errMsg };
+      }
+
+      const signedInUser = signIn.data.user;
+
+      // After successful sign-in, auto-detect timezone
+      await autoDetectAndSaveTimezone(signedInUser.id);
+
+      setUserId(signedInUser.id);
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] register error", err);
+      return { success: false, error: String(err) };
     }
     return false;
   };

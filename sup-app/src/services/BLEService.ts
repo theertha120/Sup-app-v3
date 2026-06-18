@@ -43,7 +43,12 @@ class BLEService {
   private subscriptions: Record<SensorSlot, any> = { top: null, bottom: null };
   private isScanning = false;
 
-  private onData?: DataCallback;
+  // Reconnect guard — prevents parallel reconnect loops for the same slot.
+  // true = a reconnect is already in flight for that slot; ignore new attempts.
+  private reconnecting: Record<SensorSlot, boolean> = { top: false, bottom: false };
+  private reconnectingAny = false; // global lock — only one slot reconnects at a time
+  private onData?:   DataCallback;
+
   private onStatus?: StatusCallback;
 
   constructor() {
@@ -171,6 +176,53 @@ class BLEService {
           deviceId: null,
           deviceName: null,
         });
+
+        // Only attempt reconnect if not already reconnecting this slot
+        if (this.reconnecting[slot]) {
+          console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
+          return;
+        }
+
+        this.reconnecting[slot] = true;
+        let attempts = 0;
+
+        while (attempts < 5) {
+          attempts++;
+          const delayMs = attempts * 2000;
+          console.log(`[BLE] ${slot} reconnect attempt ${attempts}/5 in ${delayMs}ms`);
+          await new Promise((r) => setTimeout(r, delayMs));
+
+          if (this.devices[slot] !== null) {
+            console.log(`[BLE] ${slot} already reconnected externally — aborting loop`);
+            break;
+          }
+
+          // Wait for any other slot to finish reconnecting first
+          // This prevents parallel BLE connections which cancel each other on iOS
+          let waited = 0;
+          while (this.reconnectingAny && waited < 15000) {
+            await new Promise((r) => setTimeout(r, 500));
+            waited += 500;
+          }
+
+          if (this.devices[slot] !== null) break; // reconnected while waiting
+
+          this.reconnectingAny = true;
+          try {
+            await this.reconnectDirect(device, slot);
+            console.log(`[BLE] ${slot} s'pot reconnected`);
+            break;
+          } catch (e: any) {
+            console.warn(`[BLE] ${slot} reconnect attempt ${attempts} failed:`, e.message);
+            if (attempts >= 5) {
+              console.log(`[BLE] ${slot} giving up after 5 attempts`);
+            }
+          } finally {
+            this.reconnectingAny = false;
+          }
+        }
+
+        this.reconnecting[slot] = false;
       });
     } catch (e: any) {
       console.error(`[BLE] Failed to connect ${slot}:`, e.message);

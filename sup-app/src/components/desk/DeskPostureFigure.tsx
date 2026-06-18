@@ -128,14 +128,27 @@ const TILTED_LEFT: Joints = {
   fax:  98, fay: 148,
 };
 
-const POSES: Record<DeskPostureState, Joints> = {
-  upright:      UPRIGHT,
-  slouched:     SLOUCHED,
-  forward_lean: FORWARD_LEAN,
-  tilted_right: TILTED_RIGHT,
-  tilted_left:  TILTED_LEFT,
+const TRANSITION: Joints = {
+  hx: 108, hy: 32,
+  n1x: 105, n1y: 52,   n2x: 102, n2y: 68,
+  sx: 102,  sy:  68,
+  shFx: 122, shFy: 76,  shBx: 84, shBy: 76,
+  c1x: 102, c1y: 100,
+  c2x:  99, c2y: 128,
+  px:   96, py:  150,
+  uax:  78, uay: 116,
+  fax: 110, fay: 150,
 };
 
+const POSES: Record<DeskPostureState, Joints> = {
+    upright:      UPRIGHT,
+    transition:   TRANSITION,   // was UPRIGHT — now distinct
+    forward_lean: FORWARD_LEAN,
+    tilted_right: TILTED_RIGHT,
+    tilted_left:  TILTED_LEFT,
+    severe:       SLOUCHED,
+    slouched:     SLOUCHED,
+  };
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function lerp(a: number, b: number, t: number) {
@@ -193,8 +206,7 @@ export default function DeskPostureFigure({ state, score }: Props) {
 
   useEffect(() => {
     const target = POSES[state];
-    if (target === toRef.current) return;
-
+    if (JSON.stringify(target) === JSON.stringify(toRef.current)) return;
     if (animRef.current) animRef.current.stop();
 
     fromRef.current = { ...currentRef.current };
