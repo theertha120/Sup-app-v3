@@ -1,6 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions } from "react-native";
+import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
-import React, { useState, useEffect, useRef, useCallback , useMemo } from "react";
+import { useFonts } from "expo-font";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -20,6 +22,8 @@ import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorPro
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import { useSessionStats } from "../../src/hooks/useSessionStats";
 
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+
 // Helper to derive status from stability score
 function getPostureStatus(score: number): string {
   if (score >= 85) return "Excellent";
@@ -36,7 +40,72 @@ function getEncouragingMessage(score: number): string {
   return "Every effort counts, keep going!";
 }
 
+/**
+ * Three large, soft, Gaussian-blurred ellipses sitting behind all content.
+ * Uses react-native-svg's feGaussianBlur filter, which is the closest
+ * equivalent to the `filter: blur(25px)` values from the Figma file —
+ * plain RN Views/StyleSheet can't produce a true blur on their own.
+ */
+function BackgroundBlobs() {
+  return (
+    <Svg
+      width={SCREEN_W}
+      height={SCREEN_H}
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+    >
+      <Defs>
+        <Filter id="blur1" x="-50%" y="-50%" width="200%" height="200%">
+          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
+        </Filter>
+        <Filter id="blur2" x="-50%" y="-50%" width="200%" height="200%">
+          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
+        </Filter>
+        <Filter id="blur3" x="-50%" y="-50%" width="200%" height="200%">
+          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
+        </Filter>
+      </Defs>
+
+      {/* Pink ellipse — upper right */}
+      <Ellipse
+        cx={SCREEN_W * 0.78}
+        cy={SCREEN_H * 0.12}
+        rx={190}
+        ry={190}
+        fill="rgba(225, 163, 175, 0.62)"
+        filter="url(#blur1)"
+      />
+
+      {/* Purple ellipse — left, mid height */}
+      <Ellipse
+        cx={SCREEN_W * 0.08}
+        cy={SCREEN_H * 0.45}
+        rx={155}
+        ry={155}
+        fill="rgba(179, 163, 225, 0.62)"
+        filter="url(#blur2)"
+      />
+
+      {/* Cyan ellipse — lower right */}
+      <Ellipse
+        cx={SCREEN_W * 0.85}
+        cy={SCREEN_H * 0.82}
+        rx={178}
+        ry={178}
+        fill="rgba(163, 218, 225, 0.62)"
+        filter="url(#blur3)"
+      />
+    </Svg>
+  );
+}
+
 export default function HomeScreen() {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular": require("../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-TextBold": require("../../assets/fonts/Agrandir-TextBold.otf"),
+  });
+
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
@@ -116,7 +185,6 @@ export default function HomeScreen() {
   };
 
   const handleSaveProfile = async (updatedUser: User) => {
-    // Update local state with the updated user from profileService
     setCurrentUser(updatedUser);
     showToast("Profile glow-up saved", "success");
   };
@@ -142,12 +210,9 @@ export default function HomeScreen() {
   const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
   const MIN_MS = 5 * 60_000; // 5 minutes
-  // Live calculations (continue every 5s inside useSessionStats)
   const liveAvgScore = sessionTotalMs > 0 ? Math.round(((sessionStats.upright ?? 0) / sessionTotalMs) * 100) : 0;
   const liveGoodPosturePercent = sessionTotalMs > 0 ? ((sessionStats.upright ?? 0) / sessionTotalMs) * 100 : 0;
 
-  // UI layer: update visible values only every 5 minutes to avoid flicker
-  const HOME_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
   const [displaySessionTotalMs, setDisplaySessionTotalMs] = useState<number>(sessionTotalMs);
   const [displayAvgScore, setDisplayAvgScore] = useState<number>(liveAvgScore);
   const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(liveGoodPosturePercent);
@@ -155,37 +220,45 @@ export default function HomeScreen() {
   const hasData = displaySessionTotalMs > 0;
   const hasEnoughData = displaySessionTotalMs >= MIN_MS;
 
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+      <BackgroundBlobs />
+
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Enhanced Header Section */}
-      <View style={styles.headerContainer}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>Welcome back!</Text>
-            <Text style={styles.subtitle}>We&apos;re here to support your posture today</Text>
-          </View>
+        {/* Wordmark + icons */}
+        <View style={styles.topBar}>
+          <Text style={styles.logo}>
+            s<Text style={styles.logoApostrophe}>’</Text>up
+          </Text>
           <View style={styles.headerButtons}>
-            <Pressable
-              style={styles.iconButton}
-              onPress={() => router.push("/sensor-setup")}
-            >
-              <Ionicons name="hardware-chip-outline" size={24} color="#666" />
+            <Pressable style={styles.iconButton} onPress={() => router.push("/sensor-setup")}>
+              <Ionicons name="hardware-chip-outline" size={22} color="#3F2483" />
             </Pressable>
             <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
-              <Text style={styles.gearIcon}>⚙</Text>
+              <Ionicons name="settings-outline" size={22} color="#3F2483" />
             </Pressable>
           </View>
         </View>
 
-        {/* User Profile Card */}
-        <Pressable style={styles.profileCard} onPress={handleProfilePress}>
+        {/* Greeting bubble */}
+        <View style={[styles.bubble, styles.bubbleLeft]}>
+          <Text style={styles.bubbleText}>
+            {currentUser?.name ? `${currentUser.name}!` : "hey!"}{"\n"}you're back :)
+          </Text>
+        </View>
+
+        {/* Profile / stats bubble */}
+        <Pressable style={[styles.bubble, styles.bubbleLeft]} onPress={handleProfilePress}>
           <View style={styles.profileContent}>
             <View style={styles.avatarWrapper}>
               <UserSupsonaAvatar
                 avatar={currentUser?.avatar}
                 name={currentUser?.name ?? ""}
-                size={64}
+                size={56}
                 style={styles.avatar}
                 textStyle={styles.avatarText}
                 defaultAvatarBackgroundColor="white"
@@ -207,167 +280,193 @@ export default function HomeScreen() {
             </View>
           </View>
         </Pressable>
-      </View>
 
-      {/* Status Card */}
-      <View style={styles.statusCard}>
-        <Text style={styles.statusTitle}>Your posture status</Text>
-        {hasEnoughData ? (
-          <>
-            <Text style={styles.statusValue}>{getPostureStatus(displayAvgScore)}</Text>
-            <Text style={styles.statusHint}>
-              {Math.round(displayGoodPosturePercent)}% good posture · {(displaySessionTotalMs / 60000).toFixed(2)} min tracked · {getEncouragingMessage(displayAvgScore)}
-            </Text>
-          </>
-        ) : hasData ? (
-          <>
-            <Text style={styles.statusValue}>Not enough data</Text>
-            <Text style={styles.statusHint}>
-              Use your s'pots to get insights
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.statusValue}>Not yet measured</Text>
-            <Text style={styles.statusHint}>
-              Wear your s'pots to begin tracking
-            </Text>
-          </>
-        )}
-      </View>
+        {/* Status bubble */}
+        <View style={[styles.bubble, styles.bubbleLeft]}>
+          <Text style={styles.bubbleLabel}>Your posture status</Text>
+          {hasEnoughData ? (
+            <>
+              <Text style={styles.bubbleHeadline}>{getPostureStatus(displayAvgScore)}</Text>
+              <Text style={styles.bubbleSubtext}>
+                {Math.round(displayGoodPosturePercent)}% good posture · {(displaySessionTotalMs / 60000).toFixed(2)} min tracked{"\n"}
+                {getEncouragingMessage(displayAvgScore)}
+              </Text>
+            </>
+          ) : hasData ? (
+            <>
+              <Text style={styles.bubbleHeadline}>Not enough data</Text>
+              <Text style={styles.bubbleSubtext}>Use your s'pots to get insights</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.bubbleHeadline}>Not yet measured</Text>
+              <Text style={styles.bubbleSubtext}>
+                Wear your s'pots for 30 minutes to get your new plan.
+              </Text>
+            </>
+          )}
+        </View>
 
-      {/* Prompt Card */}
-      <View style={styles.promptCard}>
-        <Text style={styles.promptTitle}>Gentle reminder</Text>
-        <Text style={styles.promptText}>
-          Try rolling your shoulders back and down while breathing slowly.
-        </Text>
+        {/* Reminder bubble */}
+        <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast]}>
+          <Text style={styles.bubbleLabel}>Gentle reminder</Text>
+          <Text style={styles.bubbleSubtext}>
+            Try rolling your shoulders back and down while breathing slowly.
+          </Text>
+          <Pressable style={styles.promptButton} onPress={() => router.push("/posture-tip")}>
+            <Text style={styles.promptButtonText}>view posture tip</Text>
+          </Pressable>
+        </View>
 
+        {/* Action bubble — right aligned like "see all data >>" */}
         <Pressable
-          style={styles.promptButton}
-          onPress={() => router.push("/posture-tip")}
-        >
-          <Text style={styles.promptButtonText}>View posture tip</Text>
-        </Pressable>
-      </View>
-
-      {/* Quick Actions */}
-      <View style={styles.actions}>
-        <Pressable
-          style={styles.actionCard}
+          style={[styles.bubble, styles.bubbleRight]}
           onPress={() => router.push("/stats")}
         >
-          <Text style={styles.actionTitle}>View stats</Text>
-          <Text style={styles.actionSub}>Track your progress</Text>
+          <Text style={styles.bubbleActionText}>see all data {'>>'}</Text>
         </Pressable>
 
         <Pressable
-          style={styles.actionCard}
+          style={[styles.bubble, styles.bubbleRight]}
           onPress={() => router.push("/leaderboard")}
         >
-          <Text style={styles.actionTitle}>Community</Text>
-          <Text style={styles.actionSub}>See how others are doing</Text>
+          <Text style={styles.bubbleActionText}>community {'>>'}</Text>
         </Pressable>
-      </View>
 
-      {/* Reassurance */}
-      <Text style={styles.footer}>
-        Recovery takes time. Small adjustments make a difference.
-      </Text>
+        {/* Reassurance */}
+        <Text style={styles.footer}>
+          Recovery takes time. Small adjustments make a difference.
+        </Text>
 
-      {/* Profile Modal */}
-      <ProfileModal
-        visible={showProfileModal}
-        user={currentUser}
-        isCurrentUser={true}
-        onClose={handleCloseProfile}
-        onSave={handleSaveProfile}
-        loading={isLoadingProfile}
-      />
+        <ProfileModal
+          visible={showProfileModal}
+          user={currentUser}
+          isCurrentUser={true}
+          onClose={handleCloseProfile}
+          onSave={handleSaveProfile}
+          loading={isLoadingProfile}
+        />
 
-      <CoachingSetupModal
-        visible={showCoachingSetupModal}
-        onComplete={handleCoachingSetupComplete}
-      />
-    </ScrollView>
+        <CoachingSetupModal
+          visible={showCoachingSetupModal}
+          onComplete={handleCoachingSetupComplete}
+        />
+      </ScrollView>
     </Animated.View>
   );
 }
 
+const PRIMARY_TEXT = "#3F2483";
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EDE9FF",
   },
 
-  headerContainer: {
-    backgroundColor: "white",
-    paddingBottom: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  header: {
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#222",
-  },
-  subtitle: {
-    marginTop: 4,
-    color: "#666",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
     alignItems: "center",
+    paddingTop: 56,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  gearIcon: {
-    fontSize: 30,
-    color: "#666",
-    opacity: 0.8,
+  logo: {
+    color: PRIMARY_TEXT,
+    fontFamily: "Agrandir-TextBold",
+    fontSize: 50,
   },
-
+  // The apostrophe glyph in Agrandir doesn't match the brand mark, so it's
+  // rendered in Arial per the Figma spec while the rest of the wordmark
+  // stays in Agrandir.
+  logoApostrophe: {
+    fontFamily: "Arial",
+  },
   headerButtons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 8,
   },
   iconButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderRadius: 20,
   },
 
-  profileCard: {
-    backgroundColor: colours.primary,
+  // Chat-bubble card shared styles
+  bubble: {
+    backgroundColor: "rgba(255,255,255,0.55)",
     marginHorizontal: 20,
+    marginBottom: 16,
     padding: 20,
-    borderRadius: 20,
-    shadowColor: colours.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    borderRadius: 28,
   },
+  bubbleLeft: {
+    alignSelf: "stretch",
+  },
+  // Only the last white bubble in the stack gets the sharp "tail" corner.
+  bubbleLeftLast: {
+    borderBottomLeftRadius: 6,
+  },
+  bubbleRight: {
+    alignSelf: "flex-end",
+    backgroundColor: "rgba(143, 122, 230, 0.55)",
+  },
+  bubbleText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 24,
+    lineHeight: 30,
+    color: PRIMARY_TEXT,
+    fontWeight: "600",
+  },
+  bubbleLabel: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 14,
+    color: PRIMARY_TEXT,
+    opacity: 0.8,
+    marginBottom: 6,
+  },
+  bubbleHeadline: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 26,
+    fontWeight: "700",
+    color: PRIMARY_TEXT,
+    marginBottom: 6,
+  },
+  bubbleSubtext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 14,
+    color: PRIMARY_TEXT,
+    opacity: 0.85,
+    lineHeight: 20,
+  },
+  bubbleActionText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+  },
+
+  promptButton: {
+    alignSelf: "flex-start",
+    marginTop: 14,
+    backgroundColor: "transparent",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: PRIMARY_TEXT,
+  },
+  promptButtonText: {
+    fontFamily: "Agrandir-Regular",
+    color: PRIMARY_TEXT,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
   profileContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -377,138 +476,67 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
-    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   avatarText: {
     color: colours.primary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
   },
   editBadge: {
     position: "absolute",
     bottom: -2,
     right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: colours.primary,
+    borderColor: PRIMARY_TEXT,
   },
   editBadgeText: {
-    fontSize: 12,
-    color: colours.primary,
+    fontSize: 11,
+    color: PRIMARY_TEXT,
   },
   profileInfo: {
     flex: 1,
     gap: 8,
   },
   userName: {
-    fontSize: 22,
+    fontFamily: "Agrandir-Regular",
+    fontSize: 20,
     fontWeight: "700",
-    color: "white",
+    color: PRIMARY_TEXT,
   },
   statsRow: {
     flexDirection: "row",
     gap: 8,
   },
   statBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(63, 36, 131, 0.12)",
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
   },
   statBadgeText: {
-    color: "white",
+    fontFamily: "Agrandir-Regular",
+    color: PRIMARY_TEXT,
     fontSize: 12,
     fontWeight: "600",
-  },
-
-  statusCard: {
-    backgroundColor: colours.primary,
-    marginHorizontal: 16,
-    marginTop: 24,
-    padding: 24,
-    borderRadius: 24,
-  },
-  statusTitle: {
-    color: "white",
-    opacity: 0.9,
-  },
-  statusValue: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "700",
-    marginVertical: 6,
-  },
-  statusHint: {
-    color: "white",
-    opacity: 0.8,
-    fontSize: 12,
-  },
-
-  promptCard: {
-    backgroundColor: "white",
-    margin: 16,
-    padding: 20,
-    borderRadius: 20,
-  },
-  promptTitle: {
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  promptText: {
-    color: "#555",
-    marginBottom: 16,
-  },
-  promptButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "transparent",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: colours.primary,
-  },
-  promptButtonText: {
-    color: colours.primary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  actions: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  actionCard: {
-    flex: 1,
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 16,
-  },
-  actionTitle: {
-    fontWeight: "600",
-    color: "#333",
-  },
-  actionSub: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 4,
   },
 
   footer: {
+    fontFamily: "Agrandir-Regular",
     textAlign: "center",
-    color: "#777",
+    color: PRIMARY_TEXT,
+    opacity: 0.7,
     fontSize: 12,
     padding: 24,
   },
