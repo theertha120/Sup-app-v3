@@ -24,23 +24,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="leaderboard"
+        options={{
+          title: "Leaderboard",
+        }}
+      />
+
+      <Tabs.Screen
         name="desk"
         options={{
           title: "Desk",
-        }}
-      />
-
-      <Tabs.Screen
-        name="quests"
-        options={{
-          title: "S'Quest",
-        }}
-      />
-
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
         }}
       />
     </Tabs>
