@@ -19,33 +19,8 @@ import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 
-import { useIMUContext } from "../../src/contexts/IMUContext";
-import { useSessionStats } from "../../src/hooks/useSessionStats";
-
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
-// Helper to derive status from stability score
-function getPostureStatus(score: number): string {
-  if (score >= 85) return "Excellent";
-  if (score >= 70) return "Good";
-  if (score >= 50) return "Fair";
-  return "Needs Attention";
-}
-
-// Helper to get encouraging message based on score
-function getEncouragingMessage(score: number): string {
-  if (score >= 85) return "Keep up the fantastic work!";
-  if (score >= 70) return "You're doing great, stay consistent!";
-  if (score >= 50) return "Small steps lead to progress!";
-  return "Every effort counts, keep going!";
-}
-
-/**
- * Three large, soft, Gaussian-blurred ellipses sitting behind all content.
- * Uses react-native-svg's feGaussianBlur filter, which is the closest
- * equivalent to the `filter: blur(25px)` values from the Figma file —
- * plain RN Views/StyleSheet can't produce a true blur on their own.
- */
 function BackgroundBlobs() {
   return (
     <Svg
@@ -104,7 +79,6 @@ export default function HomeScreen() {
     "Agrandir-Regular": require("../../assets/fonts/Agrandir-Regular.otf"),
     "Agrandir-TextBold": require("../../assets/fonts/Agrandir-TextBold.otf"),
   });
-
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
@@ -167,11 +141,10 @@ export default function HomeScreen() {
 
     return unsubscribe;
   }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;
-
-      // Refetch when returning from e.g. Supsona Builder so avatar updates
       loadProfile();
     }, [isAuthenticated])
   );
@@ -203,23 +176,6 @@ export default function HomeScreen() {
     router.push("/settings");
   };
 
-  const { posture, bothConnected, isNeutralCalibrated } = useIMUContext();
-  const currentState = (posture?.state ?? "upright") as any;
-  const isTracking = bothConnected && isNeutralCalibrated;
-
-  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
-
-  const MIN_MS = 5 * 60_000; // 5 minutes
-  const liveAvgScore = sessionTotalMs > 0 ? Math.round(((sessionStats.upright ?? 0) / sessionTotalMs) * 100) : 0;
-  const liveGoodPosturePercent = sessionTotalMs > 0 ? ((sessionStats.upright ?? 0) / sessionTotalMs) * 100 : 0;
-
-  const [displaySessionTotalMs, setDisplaySessionTotalMs] = useState<number>(sessionTotalMs);
-  const [displayAvgScore, setDisplayAvgScore] = useState<number>(liveAvgScore);
-  const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(liveGoodPosturePercent);
-
-  const hasData = displaySessionTotalMs > 0;
-  const hasEnoughData = displaySessionTotalMs >= MIN_MS;
-
   if (!fontsLoaded) {
     return null;
   }
@@ -232,7 +188,7 @@ export default function HomeScreen() {
         {/* Wordmark + icons */}
         <View style={styles.topBar}>
           <Text style={styles.logo}>
-            s<Text style={styles.logoApostrophe}>’</Text>up
+            s<Text style={styles.logoApostrophe}>'</Text>up
           </Text>
           <View style={styles.headerButtons}>
             <Pressable style={styles.iconButton} onPress={() => router.push("/sensor-setup")}>
@@ -245,112 +201,30 @@ export default function HomeScreen() {
         </View>
 
         {/* Greeting bubble */}
-        <View style={[styles.bubble, styles.bubbleLeft]}>
+        <View style={[styles.bubble, styles.bubbleLeft, styles.shadow]}>
           <Text style={styles.bubbleText}>
             {currentUser?.name ? `${currentUser.name}!` : "hey!"}{"\n"}you're back :)
           </Text>
         </View>
 
-        {/* Profile / stats bubble */}
-        <Pressable style={[styles.bubble, styles.bubbleLeft]} onPress={handleProfilePress}>
-          <View style={styles.profileContent}>
-            <View style={styles.avatarWrapper}>
-              <UserSupsonaAvatar
-                avatar={currentUser?.avatar}
-                name={currentUser?.name ?? ""}
-                size={56}
-                style={styles.avatar}
-                textStyle={styles.avatarText}
-                defaultAvatarBackgroundColor="white"
-              />
-              <View style={styles.editBadge}>
-                <Text style={styles.editBadgeText}>✎</Text>
-              </View>
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.userName}>{currentUser?.name || "Loading..."}</Text>
-              <View style={styles.statsRow}>
-                <View style={styles.statBadge}>
-                  <Text style={styles.statBadgeText}>⚡ {currentUser?.currentStreak || 0} day streak</Text>
-                </View>
-                <View style={styles.statBadge}>
-                  <Text style={styles.statBadgeText}>🏆 {currentUser?.weeklyTotalPoints || 0} pts</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </Pressable>
-
         {/* Status bubble */}
-        <View style={[styles.bubble, styles.bubbleLeft]}>
-          <Text style={styles.bubbleLabel}>Your posture status</Text>
-          {hasEnoughData ? (
-            <>
-              <Text style={styles.bubbleHeadline}>{getPostureStatus(displayAvgScore)}</Text>
-              <Text style={styles.bubbleSubtext}>
-                {Math.round(displayGoodPosturePercent)}% good posture · {(displaySessionTotalMs / 60000).toFixed(2)} min tracked{"\n"}
-                {getEncouragingMessage(displayAvgScore)}
-              </Text>
-            </>
-          ) : hasData ? (
-            <>
-              <Text style={styles.bubbleHeadline}>Not enough data</Text>
-              <Text style={styles.bubbleSubtext}>Use your s'pots to get insights</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.bubbleHeadline}>Not yet measured</Text>
-              <Text style={styles.bubbleSubtext}>
-                Wear your s'pots for 30 minutes to get your new plan.
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* Reminder bubble */}
-        <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast]}>
-          <Text style={styles.bubbleLabel}>Gentle reminder</Text>
-          <Text style={styles.bubbleSubtext}>
-            Try rolling your shoulders back and down while breathing slowly.
+        <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
+          <Text style={styles.bubbleHeadline}>
+            Time to get back{"\n"}in the routine.
           </Text>
-          <Pressable style={styles.promptButton} onPress={() => router.push("/posture-tip")}>
-            <Text style={styles.promptButtonText}>view posture tip</Text>
-          </Pressable>
+          <Text style={styles.bubbleSubtext}>
+            Wear your s'pots for 30 minutes to get your new plan.
+          </Text>
         </View>
 
-        {/* Action bubble — right aligned like "see all data >>" */}
+        {/* Action bubble — navigate to daily summary */}
         <Pressable
-          style={[styles.bubble, styles.bubbleRight]}
-          onPress={() => router.push("/stats")}
+          style={[styles.bubble, styles.bubbleRight, styles.shadow]}
+          onPress={() => router.push("/daily")}
         >
-          <Text style={styles.bubbleActionText}>see all data {'>>'}</Text>
+          <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
         </Pressable>
 
-        <Pressable
-          style={[styles.bubble, styles.bubbleRight]}
-          onPress={() => router.push("/leaderboard")}
-        >
-          <Text style={styles.bubbleActionText}>community {'>>'}</Text>
-        </Pressable>
-
-        {/* Reassurance */}
-        <Text style={styles.footer}>
-          Recovery takes time. Small adjustments make a difference.
-        </Text>
-
-        <ProfileModal
-          visible={showProfileModal}
-          user={currentUser}
-          isCurrentUser={true}
-          onClose={handleCloseProfile}
-          onSave={handleSaveProfile}
-          loading={isLoadingProfile}
-        />
-
-        <CoachingSetupModal
-          visible={showCoachingSetupModal}
-          onComplete={handleCoachingSetupComplete}
-        />
       </ScrollView>
     </Animated.View>
   );
@@ -376,9 +250,6 @@ const styles = StyleSheet.create({
     fontFamily: "Agrandir-TextBold",
     fontSize: 50,
   },
-  // The apostrophe glyph in Agrandir doesn't match the brand mark, so it's
-  // rendered in Arial per the Figma spec while the rest of the wordmark
-  // stays in Agrandir.
   logoApostrophe: {
     fontFamily: "Arial",
   },
@@ -396,24 +267,29 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
 
-  // Chat-bubble card shared styles
   bubble: {
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "#FFFFFF",
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 20,
     borderRadius: 28,
   },
+  shadow: {
+    shadowColor: "#3F2483",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    elevation: 5,
+  },
   bubbleLeft: {
     alignSelf: "stretch",
   },
-  // Only the last white bubble in the stack gets the sharp "tail" corner.
   bubbleLeftLast: {
     borderBottomLeftRadius: 6,
   },
   bubbleRight: {
     alignSelf: "flex-end",
-    backgroundColor: "rgba(143, 122, 230, 0.55)",
+    backgroundColor: "rgba(143, 122, 230)",
   },
   bubbleText: {
     fontFamily: "Agrandir-Regular",
@@ -422,19 +298,12 @@ const styles = StyleSheet.create({
     color: PRIMARY_TEXT,
     fontWeight: "600",
   },
-  bubbleLabel: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 14,
-    color: PRIMARY_TEXT,
-    opacity: 0.8,
-    marginBottom: 6,
-  },
   bubbleHeadline: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
     color: PRIMARY_TEXT,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   bubbleSubtext: {
     fontFamily: "Agrandir-Regular",
@@ -448,23 +317,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
-  },
-
-  promptButton: {
-    alignSelf: "flex-start",
-    marginTop: 14,
-    backgroundColor: "transparent",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: PRIMARY_TEXT,
-  },
-  promptButtonText: {
-    fontFamily: "Agrandir-Regular",
-    color: PRIMARY_TEXT,
-    fontSize: 13,
-    fontWeight: "600",
   },
 
   profileContent: {
