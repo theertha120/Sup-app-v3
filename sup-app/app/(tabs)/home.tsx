@@ -18,61 +18,9 @@ import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
+import BackgroundBlobs from "./backgroundBlobs";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-
-function BackgroundBlobs() {
-  return (
-    <Svg
-      width={SCREEN_W}
-      height={SCREEN_H}
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    >
-      <Defs>
-        <Filter id="blur1" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-        <Filter id="blur2" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-        <Filter id="blur3" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-      </Defs>
-
-      {/* Pink ellipse — upper right */}
-      <Ellipse
-        cx={SCREEN_W * 0.78}
-        cy={SCREEN_H * 0.12}
-        rx={190}
-        ry={190}
-        fill="rgba(225, 163, 175, 0.62)"
-        filter="url(#blur1)"
-      />
-
-      {/* Purple ellipse — left, mid height */}
-      <Ellipse
-        cx={SCREEN_W * 0.08}
-        cy={SCREEN_H * 0.45}
-        rx={155}
-        ry={155}
-        fill="rgba(179, 163, 225, 0.62)"
-        filter="url(#blur2)"
-      />
-
-      {/* Cyan ellipse — lower right */}
-      <Ellipse
-        cx={SCREEN_W * 0.85}
-        cy={SCREEN_H * 0.82}
-        rx={178}
-        ry={178}
-        fill="rgba(163, 218, 225, 0.62)"
-        filter="url(#blur3)"
-      />
-    </Svg>
-  );
-}
 
 export default function HomeScreen() {
   const [fontsLoaded] = useFonts({

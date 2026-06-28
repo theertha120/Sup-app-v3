@@ -17,6 +17,7 @@ import React, { useRef, useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStepCount } from "../../src/hooks/useStepCount";
+import BackgroundBlobs from "./backgroundBlobs";
 
 // Static data — swap these out when connecting to real data
 const avg_SHS_today = 72;            // 0–100 spine health score average
@@ -78,53 +79,6 @@ const METRIC_INFO: Record<string, { title: string; body: string }> = {
     body: "Total steps taken today, synced from your device. Regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
   },
 };
-
-function BackgroundBlobs() {
-  return (
-    <Svg
-      width={SCREEN_W}
-      height={SCREEN_H}
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    >
-      <Defs>
-        <Filter id="blur1" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-        <Filter id="blur2" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-        <Filter id="blur3" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur in="SourceGraphic" stdDeviation="25" />
-        </Filter>
-      </Defs>
-      <Ellipse
-        cx={SCREEN_W * 0.78}
-        cy={SCREEN_H * 0.12}
-        rx={190}
-        ry={190}
-        fill="rgba(225, 163, 175, 0.62)"
-        filter="url(#blur1)"
-      />
-      <Ellipse
-        cx={SCREEN_W * 0.08}
-        cy={SCREEN_H * 0.45}
-        rx={155}
-        ry={155}
-        fill="rgba(179, 163, 225, 0.62)"
-        filter="url(#blur2)"
-      />
-      <Ellipse
-        cx={SCREEN_W * 0.85}
-        cy={SCREEN_H * 0.82}
-        rx={178}
-        ry={178}
-        fill="rgba(163, 218, 225, 0.62)"
-        filter="url(#blur3)"
-      />
-    </Svg>
-  );
-}
 
 /** Gradient score bar: green → yellow → red */
 function ScoreBar() {
