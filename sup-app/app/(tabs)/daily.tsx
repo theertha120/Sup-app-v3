@@ -12,10 +12,11 @@ import {
 } from "react-native";
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
-import { useFonts } from "expo-font";
+import { isLoading, useFonts } from "expo-font";
 import React, { useRef, useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useStepCount } from "../../src/hooks/useStepCount";
 
 // Static data — swap these out when connecting to real data
 const avg_SHS_today = 72;            // 0–100 spine health score average
@@ -23,10 +24,10 @@ const tracked_any_session_today = true;
 const totalTrackedMs_today = (7 * 60 + 21) * 60 * 1000; // 7 h 21 m
 const streak_days = 4;
 const PREV_SCORE      = 63;
-const PREV_STEPS      = 6620;
+// const PREV_STEPS      = 6620;
 const PREV_SMOVE      = 3;          // completed moves yesterday
 const PREV_SESSION_MS = (6 * 60 + 45) * 60 * 1000;
-const STATIC_STEPS           = 4640;
+// const STATIC_STEPS           = 4640;
 const STATIC_SMOVE_COMPLETED = 2;
 const STATIC_SMOVE_TOTAL     = 5;
 const STATIC_SNAPSHOT_MESSAGE_1 =
@@ -46,26 +47,6 @@ const SCORE           = Math.round(quality_score + showing_up_score + streak_sco
 const sessionHours   = Math.floor(totalTrackedMs_today / 3_600_000);
 const sessionMinutes = Math.floor((totalTrackedMs_today % 3_600_000) / 60_000);
 const prevSessionMins = PREV_SESSION_MS / 60000;
-
-// % changes per metric
-const scoreChange   = Math.round(((SCORE - PREV_SCORE)                       / PREV_SCORE)      * 100);
-const stepsChange   = Math.round(((STATIC_STEPS - PREV_STEPS)                / PREV_STEPS)      * 100);
-const smoveChange   = Math.round(((STATIC_SMOVE_COMPLETED - PREV_SMOVE)      / PREV_SMOVE)      * 100);
-const sessionChange = Math.round(((totalMins - prevSessionMins)               / prevSessionMins) * 100);
-
-// Pick the 2 metrics with the largest absolute % change
-const allChanges: { key: string; value: number }[] = [
-  { key: "session", value: sessionChange },
-  { key: "score",   value: scoreChange   },
-  { key: "smove",   value: smoveChange   },
-  { key: "steps",   value: stepsChange   },
-];
-const topTwoKeys = new Set(
-  [...allChanges]
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 2)
-    .map((c) => c.key)
-);
 
 // Score bar: good % = score (0–100)
 const SCORE_BAR_GOOD_PERCENT = Math.min(100, Math.max(0, SCORE));
@@ -331,6 +312,32 @@ export default function DailyScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
+  const { todaySteps, yesterdaySteps, isLoading } = useStepCount();
+
+  const STATIC_STEPS = todaySteps;
+  const PREV_STEPS   = yesterdaySteps;
+
+  // % changes per metric (computed here so they use live step data)
+  const scoreChange   = Math.round(((SCORE - PREV_SCORE)                  / PREV_SCORE)      * 100);
+  const stepsChange   = PREV_STEPS > 0
+    ? Math.round(((STATIC_STEPS - PREV_STEPS) / PREV_STEPS) * 100)
+    : 0;
+  const smoveChange   = Math.round(((STATIC_SMOVE_COMPLETED - PREV_SMOVE) / PREV_SMOVE)      * 100);
+  const sessionChange = Math.round(((totalMins - prevSessionMins)          / prevSessionMins) * 100);
+
+  // Pick the 2 metrics with the largest absolute % change
+  const allChanges: { key: string; value: number }[] = [
+    { key: "session", value: sessionChange },
+    { key: "score",   value: scoreChange   },
+    { key: "smove",   value: smoveChange   },
+    { key: "steps",   value: stepsChange   },
+  ];
+  const topTwoKeys = new Set(
+    [...allChanges]
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 2)
+      .map((c) => c.key)
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -425,7 +432,7 @@ export default function DailyScreen() {
             {topTwoKeys.has("steps") && <ChangeBadge value={stepsChange} />}
             <Text style={styles.statLabel}>s'teps</Text>
             <Text style={styles.statValue}>
-              {STATIC_STEPS.toLocaleString()}
+                {isLoading ? "—" : STATIC_STEPS.toLocaleString()}
             </Text>
           </View>
         </View>

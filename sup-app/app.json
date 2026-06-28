@@ -9,9 +9,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.supapp.app"
+      "bundleIdentifier": "com.supapp.app",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Sup uses your step count to track your daily activity.",
+        "NSHealthUpdateUsageDescription": "Sup uses your step count to track your daily activity."
+      }
     },
     "android": {
+      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
       },
@@ -59,12 +64,20 @@
             }
           },
           "android": {
-            "compileSdkVersion": 35
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 26
           }
         }
       ],
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-health-connect",
+        {
+          "healthSharePermission": "Sup uses your step count to track your daily activity."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
