@@ -15,17 +15,17 @@ export default function BackgroundBlobs() {
       <Defs>
         <RadialGradient id="g1" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
           <Stop offset="0%"   stopColor="rgba(225, 163, 175, 1)" stopOpacity="1" />
-          <Stop offset="90%"  stopColor="rgba(225, 163, 175, 1)" stopOpacity="0.9" />
+          <Stop offset="50%"  stopColor="rgba(225, 163, 175, 1)" stopOpacity="0.9" />
           <Stop offset="100%" stopColor="rgba(225, 163, 175, 0)" stopOpacity="0"   />
         </RadialGradient>
         <RadialGradient id="g2" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
           <Stop offset="0%"   stopColor="rgba(179, 163, 225, 1)" stopOpacity="1" />
-          <Stop offset="90%"  stopColor="rgba(179, 163, 225, 1)" stopOpacity="0.9" />
+          <Stop offset="50%"  stopColor="rgba(179, 163, 225, 1)" stopOpacity="0.9" />
           <Stop offset="100%" stopColor="rgba(179, 163, 225, 0)" stopOpacity="0"   />
         </RadialGradient>
         <RadialGradient id="g3" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
           <Stop offset="0%"   stopColor="rgba(163, 218, 225, 1)" stopOpacity="1" />
-          <Stop offset="90%"  stopColor="rgba(163, 218, 225, 1)" stopOpacity="0.9" />
+          <Stop offset="50%"  stopColor="rgba(163, 218, 225, 1)" stopOpacity="0.9" />
           <Stop offset="100%" stopColor="rgba(163, 218, 225, 0)" stopOpacity="0"   />
         </RadialGradient>
       </Defs>
