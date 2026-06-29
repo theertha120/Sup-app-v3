@@ -1,5 +1,4 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions } from "react-native";
-import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
 import { useFonts } from "expo-font";
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -132,7 +131,7 @@ export default function HomeScreen() {
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Wordmark + icons */}
         <View style={styles.topBar}>
           <Text style={styles.logo}>
@@ -148,31 +147,32 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Greeting bubble */}
-        <View style={[styles.bubble, styles.bubbleLeft, styles.shadow]}>
-          <Text style={styles.bubbleText}>
-            {currentUser?.name ? `${currentUser.name}!` : "hey!"}{"\n"}you're back :)
-          </Text>
+        <View style={styles.bubblesContainer}>
+          {/* Greeting bubble */}
+          <View style={[styles.bubble, styles.bubbleLeft, styles.shadow]}>
+            <Text style={styles.bubbleText}>
+              {currentUser?.name ? `${currentUser.name}!` : "hey!"}{"\n"}you're back :)
+            </Text>
+          </View>
+
+          {/* Status bubble */}
+          <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
+            <Text style={styles.bubbleHeadline}>
+              Time to get back{"\n"}in the routine.
+            </Text>
+            <Text style={styles.bubbleSubtext}>
+              Wear your s'pots for 30 minutes to get your new plan.
+            </Text>
+          </View>
+
+          {/* Action bubble — navigate to daily summary */}
+          <Pressable
+            style={[styles.bubble, styles.bubbleRight, styles.shadow]}
+            onPress={() => router.push("/daily")}
+          >
+            <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
+          </Pressable>
         </View>
-
-        {/* Status bubble */}
-        <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
-          <Text style={styles.bubbleHeadline}>
-            Time to get back{"\n"}in the routine.
-          </Text>
-          <Text style={styles.bubbleSubtext}>
-            Wear your s'pots for 30 minutes to get your new plan.
-          </Text>
-        </View>
-
-        {/* Action bubble — navigate to daily summary */}
-        <Pressable
-          style={[styles.bubble, styles.bubbleRight, styles.shadow]}
-          onPress={() => router.push("/daily")}
-        >
-          <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
-        </Pressable>
-
       </ScrollView>
     </Animated.View>
   );
@@ -184,7 +184,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-
+  scrollContent: {
+    flexGrow: 1,
+  },
+  bubblesContainer: {
+    flex: 1,
+    justifyContent: "center",
+    paddingBottom: 40,
+  },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
