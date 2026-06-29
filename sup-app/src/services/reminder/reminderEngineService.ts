@@ -495,7 +495,7 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
       .from("user_profile")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profileData) {
       console.error("Failed to fetch user profile:", profileError);

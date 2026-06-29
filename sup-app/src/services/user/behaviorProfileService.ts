@@ -185,9 +185,6 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
       .maybeSingle();
 
     if (error) {
-      if (error.code === "PGRST116") {
-        return null;
-      }
       console.warn("[behavior-profile] Remote fetch failed", error);
       return null;
     }
