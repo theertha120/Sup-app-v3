@@ -558,25 +558,29 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.setItem(NEUTRAL_OFFSET_STORAGE_KEY, JSON.stringify(offset))
           .catch((e) => console.warn("[IMUContext] Failed to save neutral offset:", e));
       } else if (step === 2) {
+        // Forward lean: sagittal axis = pitch (matches classifySpinePosture pitchDiff)
         const neutral = captureRef.current.neutral;
-        const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
-        const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
-        captureRef.current.maxForward  = Math.max(Math.abs(tRoll - bRoll), 10);
+        const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
+        const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
+        captureRef.current.maxForward  = Math.max(Math.abs(tPitch - bPitch), 10);
       } else if (step === 3) {
+        // Backward lean: same sagittal axis
+        const neutral = captureRef.current.neutral;
+        const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
+        const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
+        captureRef.current.maxBackward = Math.max(Math.abs(tPitch - bPitch), 5);
+      } else if (step === 4) {
+        // Right lateral: lateral axis = roll (matches classifySpinePosture rollDiff)
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
         const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
-        captureRef.current.maxBackward = Math.max(Math.abs(tRoll - bRoll), 5);
-      } else if (step === 4) {
-        const neutral = captureRef.current.neutral;
-        const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
-        const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
-        captureRef.current.maxRight    = Math.max(Math.abs(tPitch - bPitch), 5);
+        captureRef.current.maxRight    = Math.max(Math.abs(tRoll - bRoll), 5);
       } else if (step === 5) {
+        // Left lateral: same lateral axis
         const neutral = captureRef.current.neutral;
-        const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
-        const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
-        captureRef.current.maxLeft     = Math.max(Math.abs(tPitch - bPitch), 5);
+        const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
+        const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
+        captureRef.current.maxLeft     = Math.max(Math.abs(tRoll - bRoll), 5);
       }
 
       setCalibration((prev) => {

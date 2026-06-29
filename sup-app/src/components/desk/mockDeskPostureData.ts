@@ -52,9 +52,3 @@ export function getScoreColor(score: number): string {
   return "#F44336";                  // red — reserved for sustained bad posture only
 }
 
-export function getScoreLabel(score: number): string {
-  if (score >= 80) return "great";
-  if (score >= 60) return "fair";
-  if (score >= 40) return "notice this";
-  return "act on this";
-}

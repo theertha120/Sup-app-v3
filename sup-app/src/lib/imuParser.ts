@@ -222,54 +222,75 @@ export function classifySpinePosture(
     yaw:   bottomSensor.angle.yaw,
   } : bottomSensor.angle;
 
-  // Inter-s'pot relative angles (offset-corrected)
-  // pitchDiff POSITIVE = forward flexion (spine rounding forward)
-  // pitchDiff NEGATIVE = backward extension (leaning back)
-  // rollDiff  POSITIVE = right lateral tilt
-  const pitchDiff = topAngle.roll   - bottomAngle.roll;    // sagittal (confirmed axis)
-  const rollDiff  = -(topAngle.pitch - bottomAngle.pitch); // lateral  (confirmed axis)
+  // Inter-s'pot relative angles (offset-corrected, sign-corrected)
+  // pitchDiff POSITIVE = forward flexion  (sensor reports inverted — negated here)
+  // pitchDiff NEGATIVE = backward extension
+  // rollDiff  POSITIVE = right lateral    (sensor reports inverted — negated here)
+  // Negated so that positive = forward lean / right lateral (sensor convention is inverted)
+  const pitchDiff = -(topAngle.pitch - bottomAngle.pitch);  // positive = forward flexion
+  const rollDiff  = -(topAngle.roll   - bottomAngle.roll);  // positive = right lateral
 
-  const absRoll = Math.abs(rollDiff);
+  const absRoll  = Math.abs(rollDiff);
+  const absPitch = Math.abs(pitchDiff);
+
+  // ── Personalised thresholds ───────────────────────────────────────────────
+  //
+  // If a full ClinicalBaseline is available, scale each band as a fraction of
+  // the user's actual ROM captured during calibration.
+  // Falls back to population-level fixed values when no baseline exists.
+  //
+  // Sagittal fractions (derived from fixed defaults vs 50° average ROM):
+  //   upright ceiling  = 24% of maxForward  (12° / 50° ≈ 0.24)
+  //   transition       = 36% of maxForward  (18° / 50°)
+  //   forward_lean     = 56% of maxForward  (28° / 50°)
+  //   slouched         = 84% of maxForward  (42° / 50°)
+  //   severe           = beyond slouched
+  //
+  // Lateral fraction: 32% of maxRight/maxLeft (8° / 25° average lateral ROM)
+
+  const cal = baseline && "maxForwardDeg" in baseline ? baseline : null;
+
+  const t_neutral    = cal ? cal.maxForwardDeg  * 0.24 : NEUTRAL_FORWARD_MAX;
+  const t_transition = cal ? cal.maxForwardDeg  * 0.36 : TRANSITION_MAX;
+  const t_forward    = cal ? cal.maxForwardDeg  * 0.56 : FORWARD_MAX;
+  const t_slouch     = cal ? cal.maxForwardDeg  * 0.84 : SLOUCH_MAX;
+  const t_lat_right  = cal ? Math.max(cal.maxRightDeg * 0.32, 5) : LATERAL_MAX;
+  const t_lat_left   = cal ? Math.max(cal.maxLeftDeg  * 0.32, 5) : LATERAL_MAX;
+  const t_lateral    = rollDiff >= 0 ? t_lat_right : t_lat_left;
 
   // ── State classification ──────────────────────────────────────────────────
   //
-  // Order of priority:
-  //   1. Lateral if dominant
-  //   2. Backward lean → upright (benign seated extension, not penalised)
-  //   3. Forward bands by signed pitchDiff
+  // Priority:
+  //   1. Lateral when it is the dominant axis
+  //   2. Sagittal bands by signed pitchDiff
 
   let state:    PostureState;
   let severity: PostureSeverity;
 
-  if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff) * 0.7) {
+  if (absRoll > t_lateral && absRoll > absPitch) {
     // Lateral bending is dominant
     state    = rollDiff > 0 ? "tilted_right" : "tilted_left";
-    severity = absRoll > LATERAL_MAX * 2 ? "moderate" : "mild";
+    severity = absRoll > t_lateral * 2 ? "moderate" : "mild";
 
-  } else if (pitchDiff <= NEUTRAL_FORWARD_MAX) {
-    // At or behind neutral (includes all backward lean) → upright
-    // Backward extension in seated posture is generally benign and self-limiting.
-    // The chair backrest prevents extreme extension naturally.
+  } else if (pitchDiff <= t_neutral) {
+    // Within neutral band (includes backward lean) → upright
     state    = "upright";
     severity = "minimal";
 
-  } else if (pitchDiff <= TRANSITION_MAX) {
-    // +12° to +18° — early forward flexion, watch and wait
+  } else if (pitchDiff <= t_transition) {
     state    = "transition";
     severity = "mild";
 
-  } else if (pitchDiff <= FORWARD_MAX) {
-    // +18° to +28° — lumbar flexion beginning
+  } else if (pitchDiff <= t_forward) {
     state    = "forward_lean";
     severity = "mild";
 
-  } else if (pitchDiff <= SLOUCH_MAX) {
-    // +28° to +42° — significant rounding, disc compression
+  } else if (pitchDiff <= t_slouch) {
     state    = "slouched";
     severity = "moderate";
 
   } else {
-    // >+42° — passive ligament loading zone
+    // Beyond slouched ceiling → severe
     state    = "severe";
     severity = "severe";
   }

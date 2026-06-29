@@ -22,7 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
-import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
+import { DeskPostureState, getScoreColor } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
@@ -261,7 +261,7 @@ export default function DeskScreen() {
   } = useIMUContext();
 
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
-  const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
+  // const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
   const livePostureRef = useRef(posture);
   const [displayPosture, setDisplayPosture] = useState(posture);
 
@@ -278,7 +278,7 @@ export default function DeskScreen() {
     // periodic snapshot for figure to reduce flicker
     const id = setInterval(() => {
       setDisplayPosture(livePostureRef.current);
-    }, DESK_UI_UPDATE_MS);
+    });
     return () => clearInterval(id);
   }, []);
 
@@ -302,11 +302,10 @@ export default function DeskScreen() {
   );
 
   const shsColor     = getScoreColor(shs);
-  const shsLabel     = getScoreLabel(shs);
   const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
-  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
-
+  const liveState = (posture?.state ?? "upright") as DeskPostureState;
+  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? liveState : undefined);
   return (
     <SafeAreaView style={s.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />

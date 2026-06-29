@@ -73,82 +73,92 @@ const UPRIGHT: Joints = {
   fax: 108, fay: 148,  // forearm rests on lap/thigh
 };
 
-// Kyphosis: mid-back bows BACKWARD (control points go LEFT / smaller x)
-// Head & shoulders roll FORWARD (larger x)
-const SLOUCHED: Joints = {
-  // Head drops forward and lower — chin-toward-chest look
-  hx: 124, hy: 50,
-  // n2 is at spine top; n1 is pulled well forward → neck kinks forward
-  n1x: 120, n1y: 65,   n2x: 107, n2y: 73,
-  sx: 107,  sy:  73,
-  shFx: 128, shFy: 80,  shBx: 88, shBy: 80,
-  c1x:  76, c1y:  99,  // ← LEFT of spine = back bows backward (true kyphosis)
-  c2x:  80, c2y: 128,
+// Whole trunk tilts forward from the hips (craning at screen) — spine stays straight
+const FORWARD_LEAN: Joints = {
+  hx: 124, hy: 44,
+  n1x: 116, n1y: 63,   n2x: 112, n2y: 79,
+  sx: 112,  sy:  79,
+  shFx: 134, shFy: 87,  shBx: 93, shBy: 87,
+  c1x: 110, c1y: 108,  // inline with tilt — no kyphosis
+  c2x: 105, c2y: 133,
   px:   96, py:  150,
-  uax:  86, uay: 118,
-  fax: 114, fay: 150,
+  uax:  91, uay: 124,
+  fax: 120, fay: 154,
 };
 
-// Whole trunk tilts forward from the hips (craning at screen)
-const FORWARD_LEAN: Joints = {
-  hx: 122, hy: 42,
-  n1x: 114, n1y: 62,   n2x: 110, n2y: 77,
-  sx: 110,  sy:  77,
-  shFx: 132, shFy: 85,  shBx: 91, shBy: 85,
-  c1x: 108, c1y: 106,  // inline with tilt — no lateral bow
-  c2x: 103, c2y: 131,
+// Kyphosis: mid-back bows BACKWARD — head droops lower than forward_lean
+const SLOUCHED: Joints = {
+  hx: 129, hy: 57,
+  n1x: 125, n1y: 71,   n2x: 112, n2y: 80,
+  sx: 112,  sy:  80,
+  shFx: 133, shFy: 87,  shBx: 93, shBy: 87,
+  c1x:  70, c1y:  99,  // strong kyphotic bow backward
+  c2x:  74, c2y: 128,
   px:   96, py:  150,
-  uax:  89, uay: 122,
-  fax: 118, fay: 153,
+  uax:  91, uay: 123,
+  fax: 119, fay: 153,
+};
+
+// Extreme kyphosis — passive ligament zone, maximum head drop
+const SEVERE: Joints = {
+  hx: 136, hy: 68,
+  n1x: 132, n1y: 82,   n2x: 119, n2y: 91,
+  sx: 119,  sy:  91,
+  shFx: 140, shFy: 98,  shBx: 100, shBy: 98,
+  c1x:  60, c1y: 100,  // very strong backward bow
+  c2x:  66, c2y: 130,
+  px:   96, py:  150,
+  uax:  98, uay: 130,
+  fax: 126, fay: 157,
 };
 
 // Lateral drift to the right
 const TILTED_RIGHT: Joints = {
-  hx: 108, hy: 23,
-  n1x: 105, n1y: 43,   n2x: 102, n2y: 61,
-  sx: 102,  sy:  61,
-  shFx: 122, shFy: 69,  shBx: 83, shBy: 69,
-  c1x: 102, c1y:  95,
-  c2x:  99, c2y: 124,
+  hx: 117, hy: 20,
+  n1x: 114, n1y: 40,   n2x: 111, n2y: 58,
+  sx: 111,  sy:  58,
+  shFx: 132, shFy: 66,  shBx: 93, shBy: 66,
+  c1x: 111, c1y:  92,
+  c2x: 108, c2y: 121,
   px:   96, py:  150,
-  uax:  76, uay: 107,
-  fax: 106, fay: 148,
+  uax:  86, uay: 103,
+  fax: 116, fay: 144,
 };
 
 // Lateral drift to the left
 const TILTED_LEFT: Joints = {
-  hx:  90, hy: 23,
-  n1x:  90, n1y: 43,   n2x:  91, n2y: 61,
-  sx:   91, sy:  61,
-  shFx: 111, shFy: 69,  shBx: 72, shBy: 69,
-  c1x:  91, c1y:  95,
-  c2x:  93, c2y: 124,
+  hx:  81, hy: 20,
+  n1x:  82, n1y: 40,   n2x:  83, n2y: 58,
+  sx:   83, sy:  58,
+  shFx: 103, shFy: 66,  shBx: 64, shBy: 66,
+  c1x:  83, c1y:  92,
+  c2x:  87, c2y: 121,
   px:   96, py:  150,
-  uax:  67, uay: 107,
-  fax:  98, fay: 148,
+  uax:  58, uay: 103,
+  fax:  90, fay: 144,
 };
 
 const TRANSITION: Joints = {
-  hx: 108, hy: 32,
-  n1x: 105, n1y: 52,   n2x: 102, n2y: 68,
-  sx: 102,  sy:  68,
-  shFx: 122, shFy: 76,  shBx: 84, shBy: 76,
-  c1x: 102, c1y: 100,
-  c2x:  99, c2y: 128,
+  hx: 114, hy: 38,
+  n1x: 110, n1y: 57,   n2x: 107, n2y: 73,
+  sx: 107,  sy:  73,
+  shFx: 128, shFy: 81,  shBx: 90, shBy: 81,
+  c1x: 106, c1y: 103,
+  c2x: 102, c2y: 130,
   px:   96, py:  150,
-  uax:  78, uay: 116,
-  fax: 110, fay: 150,
+  uax:  83, uay: 119,
+  fax: 114, fay: 151,
 };
 
 const POSES: Record<DeskPostureState, Joints> = {
-    upright:      UPRIGHT,
-    transition:   TRANSITION,   // was UPRIGHT — now distinct
-    forward_lean: FORWARD_LEAN,
-    tilted_right: TILTED_RIGHT,
-    tilted_left:  TILTED_LEFT,
-    severe:       SLOUCHED,
-    slouched:     SLOUCHED,
-  };
+  upright:      UPRIGHT,
+  transition:   TRANSITION,
+  forward_lean: FORWARD_LEAN,
+  slouched:     SLOUCHED,
+  severe:       SEVERE,
+  tilted_left:  TILTED_LEFT,
+  tilted_right: TILTED_RIGHT,
+};
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function lerp(a: number, b: number, t: number) {
