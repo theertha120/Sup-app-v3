@@ -35,6 +35,24 @@ const STATIC_SNAPSHOT_MESSAGE_1 =
   "you have been leaning forward for too long, take a stretch break immediately";
 const STATIC_SNAPSHOT_MESSAGE_2 =
   "stand up before 3:30 pm to stay ahead of posture dips and missed walking breaks";
+const SESSION_DATA = {
+  session1: {
+    goodAlignment:   18,
+    leaningForward:   2,
+    spineRounding:    2,
+    highSpinalLoad:   5,
+    shiftingLeft:     2,
+    shiftingRight:   72,
+  },
+  session2: {
+    goodAlignment:   20,
+    leaningForward:   3,
+    spineRounding:    3,
+    highSpinalLoad:   4,
+    shiftingLeft:     3,
+    shiftingRight:   68,
+  },
+};
 
 // Derived values 
 const quality_score   = (avg_SHS_today / 100) * 50;
@@ -49,9 +67,30 @@ const sessionHours   = Math.floor(totalTrackedMs_today / 3_600_000);
 const sessionMinutes = Math.floor((totalTrackedMs_today % 3_600_000) / 60_000);
 const prevSessionMins = PREV_SESSION_MS / 60000;
 
-// Score bar: good % = score (0–100)
-const SCORE_BAR_GOOD_PERCENT = Math.min(100, Math.max(0, SCORE));
-// 
+const sessions = Object.values(SESSION_DATA);
+
+function rawAvg(key: keyof typeof SESSION_DATA.session1): number {
+  return sessions.reduce((sum, s) => sum + s[key], 0) / sessions.length;
+}
+const RAW_AVERAGES = {
+  goodAlignment:  rawAvg("goodAlignment"),   // 19
+  leaningForward: rawAvg("leaningForward"),  // 2.5
+  spineRounding:  rawAvg("spineRounding"),   // 2.5
+  highSpinalLoad: rawAvg("highSpinalLoad"),  // 4.5
+  shiftingLeft:   rawAvg("shiftingLeft"),    // 2.5
+  shiftingRight:  rawAvg("shiftingRight"),   // 70
+};
+
+// normalise average scores to out of 100%
+const RAW_TOTAL = Object.values(RAW_AVERAGES).reduce((sum, v) => sum + v, 0); // 101
+const POSTURE_AVERAGES = (
+  Object.fromEntries(
+    Object.entries(RAW_AVERAGES).map(([key, val]) => [
+      key,
+      (val / RAW_TOTAL) * 100,  // e.g. 19/101*100 ≈ 18.81
+    ])
+  )
+) as Record<keyof typeof RAW_AVERAGES, number>;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#3F2483";
@@ -59,7 +98,7 @@ const PRIMARY_TEXT = "#3F2483";
 const METRIC_INFO: Record<string, { title: string; body: string }> = {
   snapshot: {
     title: "s'napshot",
-    body: "A real-time summary of your posture health. The bar shows how your spine health score breaks down across your session — green is strong, yellow is fair, red needs attention. Tips below are personalised to your current posture patterns.",
+    body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.\n\nAverage good alignment: ${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%\nAverage leaning forward: ${POSTURE_AVERAGES.leaningForward.toFixed(1)}%\nAverage spine rounding: ${POSTURE_AVERAGES.spineRounding.toFixed(1)}%\nAverage high spinal load: ${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%\nAverage shifting left: ${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%\nAverage shifting right: ${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,
   },
   session: {
     title: "s'ession",
@@ -80,20 +119,34 @@ const METRIC_INFO: Record<string, { title: string; body: string }> = {
   },
 };
 
-/** Gradient score bar: green → yellow → red */
+const SEGMENT_COLORS: Record<keyof typeof POSTURE_AVERAGES, string> = {
+  goodAlignment:  "#6DC96D",  // green
+  leaningForward: "#F5C842",  // yellow
+  spineRounding:  "#F5A623",  // orange
+  highSpinalLoad: "#E8706A",  // red
+  shiftingLeft:   "#F5A623",  // orange
+  shiftingRight:  "#F5A623",  // orange
+};
+
+type Segment = { pct: number; color: string };
+
 function ScoreBar() {
-  const goodPct = SCORE_BAR_GOOD_PERCENT;
-  const midPct  = Math.min(100 - goodPct, 20);
-  const badPct  = 100 - goodPct - midPct;
+  const segments: Segment[] = (
+    Object.keys(POSTURE_AVERAGES) as Array<keyof typeof POSTURE_AVERAGES>
+  ).map((key) => ({
+    pct:   POSTURE_AVERAGES[key],
+    color: SEGMENT_COLORS[key],
+  }));
 
   return (
     <View style={[scoreBarStyles.track, scoreBarStyles.shadow]}>
-      <View style={[scoreBarStyles.segment, { flex: goodPct, backgroundColor: "#6DC96D" }]} />
-      {midPct > 0 && (
-        <View style={[scoreBarStyles.segment, { flex: midPct, backgroundColor: "#F5C842" }]} />
-      )}
-      {badPct > 0 && (
-        <View style={[scoreBarStyles.segment, { flex: badPct, backgroundColor: "#E8706A" }]} />
+      {segments.map(({ pct, color }, i) =>
+        pct > 0 ? (
+          <View
+            key={i}
+            style={[scoreBarStyles.segment, { flex: pct, backgroundColor: color }]}
+          />
+        ) : null
       )}
     </View>
   );
