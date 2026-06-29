@@ -485,6 +485,10 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
   const userId = await getCurrentUserId();
   console.log("Generating reminder for user:", userId);
 
+  if (userId === "guest") {
+    return null;
+  }
+  
   try {
     // Fetch user profile
     const { data: profileData, error: profileError } = await supabase
