@@ -222,27 +222,27 @@ export function classifySpinePosture(
     yaw:   bottomSensor.angle.yaw,
   } : bottomSensor.angle;
 
-  // Inter-s'pot relative angles (offset-corrected)
-  // pitchDiff POSITIVE = forward flexion (spine rounding forward)
-  // pitchDiff NEGATIVE = backward extension (leaning back)
-  // rollDiff  POSITIVE = right lateral tilt
-  const pitchDiff = topAngle.roll   - bottomAngle.roll;    // sagittal (confirmed axis)
-  const rollDiff  = -(topAngle.pitch - bottomAngle.pitch); // lateral  (confirmed axis)
+  // Inter-s'pot relative angles (offset-corrected, sign-corrected)
+  // Negations confirmed by physical testing: sensor convention is inverted on both axes.
+  // pitchDiff POSITIVE = forward flexion  (negate roll diff: top.roll > bottom.roll when leaning back)
+  // pitchDiff NEGATIVE = backward extension
+  // rollDiff  POSITIVE = right lateral    (no negate: top.pitch < bottom.pitch when tilting left)
+  const pitchDiff = -(topAngle.roll   - bottomAngle.roll);   // sagittal: negated for correct sign
+  const rollDiff  =   topAngle.pitch  - bottomAngle.pitch;   // lateral:  no negation
 
   const absRoll = Math.abs(rollDiff);
 
   // ── State classification ──────────────────────────────────────────────────
   //
   // Order of priority:
-  //   1. Lateral if dominant
-  //   2. Backward lean → upright (benign seated extension, not penalised)
-  //   3. Forward bands by signed pitchDiff
+  //   1. Lateral when it truly dominates the sagittal signal
+  //   2. Sagittal bands by signed pitchDiff
 
   let state:    PostureState;
   let severity: PostureSeverity;
 
-  if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff) * 0.7) {
-    // Lateral bending is dominant
+  if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff)) {
+    // Lateral bending is dominant (factor=1.0: lateral must exceed sagittal to win)
     state    = rollDiff > 0 ? "tilted_right" : "tilted_left";
     severity = absRoll > LATERAL_MAX * 2 ? "moderate" : "mild";
 

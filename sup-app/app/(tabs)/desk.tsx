@@ -278,7 +278,7 @@ export default function DeskScreen() {
     // periodic snapshot for figure to reduce flicker
     const id = setInterval(() => {
       setDisplayPosture(livePostureRef.current);
-    }, DESK_UI_UPDATE_MS);
+    });
     return () => clearInterval(id);
   }, []);
 
