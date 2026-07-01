@@ -310,8 +310,8 @@ export default function DeskScreen() {
   return (
     <SafeAreaView style={s.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
-      <InterventionModal />
-      <MovementNudgeModal />
+      {/*<InterventionModal />*/}
+      {/*<MovementNudgeModal />*/}
 
       <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
 
