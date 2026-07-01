@@ -65,13 +65,13 @@ const FREQUENCY_CONFIG: Record<
   ReminderFrequency,
   { cooldown_minutes: number; max_per_day: number }
 > = {
-  light: { cooldown_minutes: 180, max_per_day: 3 },
-  medium: { cooldown_minutes: 90, max_per_day: 6 },
-  active: { cooldown_minutes: 1, max_per_day: 10 }, // FOR TESTING ONLY
+  light: { cooldown_minutes: 5, max_per_day: 3 },
+  medium: { cooldown_minutes: 5, max_per_day: 6 },
+  active: { cooldown_minutes: 5, max_per_day: 10 }, // FOR TESTING ONLY
   // active: { cooldown_minutes: 45, max_per_day: 10 }, // ORIGINAL ACTIVE SETTINGS
 };
 
-const GLOBAL_MIN_COOLDOWN_MINUTES = 1; // TO DO CHANGE BACK 15 MIN & MIN TO MAX
+const GLOBAL_MIN_COOLDOWN_MINUTES = 5; // TO DO CHANGE BACK 15 MIN & MIN TO MAX
 
 // RULE GROUP 3: PRIMARY GOAL -> REMINDER DISTRIBUTION
 // probability distribution of reminder types for each primary goal.
