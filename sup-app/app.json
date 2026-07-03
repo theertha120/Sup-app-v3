@@ -40,7 +40,6 @@
 
     "plugins": [
       "expo-router",
-      "expo-notifications",
 
       [
         "react-native-ble-plx",
@@ -55,13 +54,7 @@
         {
           "ios": {
             "supportsTablet": true,
-            "bundleIdentifier": "com.supapp.app",
-            "entitlements": {
-              "aps-environment": "production"
-            },
-            "infoPlist": {
-              "UIBackgroundModes": ["remote-notification"]
-            }
+            "bundleIdentifier": "com.supapp.app"
           },
           "android": {
             "compileSdkVersion": 35

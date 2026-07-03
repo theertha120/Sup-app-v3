@@ -12,6 +12,8 @@
 import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
+import { useAuth } from "../contexts/AuthContext";
+import * as postureSync from "../services/posture/postureSyncService";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,8 +84,10 @@ function totalMs(map: StateTimeMap): number {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 const TICK_MS = 5_000;
+const REMOTE_SYNC_INTERVAL_MS = 5 * 60_000; // throttle posture_daily upserts to Supabase
 
 export function useSessionStats(currentState: DeskPostureState | undefined) {
+  const { userId } = useAuth();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
   const [weekDays,     setWeekDays]     = useState<DayData[]>([]);
@@ -94,6 +98,10 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   const lastTickRef        = useRef<number>(Date.now());
   const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
   const sessionRef         = useRef<StateTimeMap>({});
+  const userIdRef          = useRef<string | null>(userId);
+  const lastRemoteSyncRef  = useRef<number>(0);
+
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
 
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
 
@@ -165,6 +173,12 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
         JSON.stringify(todayLive)
       ).catch(() => {});
 
+      // Throttled sync of today's rollup to Supabase (durable, cross-device copy)
+      if (userIdRef.current && now - lastRemoteSyncRef.current >= REMOTE_SYNC_INTERVAL_MS) {
+        lastRemoteSyncRef.current = now;
+        postureSync.upsertDailyRollup(userIdRef.current, todayDK, todayLive);
+      }
+
       // Update weekDays — just patch today's entry
       setWeekDays((prev) =>
         prev.map((d) =>
@@ -190,8 +204,13 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
       setSessionStats({});
+      // Sync immediately on disconnect rather than waiting for the throttle window.
+      if (userIdRef.current) {
+        lastRemoteSyncRef.current = Date.now();
+        postureSync.upsertDailyRollup(userIdRef.current, todayDK, todayFinal);
+      }
     }
-  }, [currentState === undefined]);
+  }, [currentState === undefined, userId]);
 
   return {
     sessionStats,

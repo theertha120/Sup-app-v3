@@ -43,6 +43,8 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
+import { useAuth } from "./AuthContext";
+import * as postureSync from "../services/posture/postureSyncService";
 import {
   parseIMUPacket,
   classifySpinePosture,
@@ -71,6 +73,7 @@ const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
+const STATE_EVENT_FLUSH_MS      = 30_000; // batch posture_state_events writes to Supabase
 
 // ── Cumulative Postural Load (CPL) ────────────────────────────────────────────
 //
@@ -205,6 +208,7 @@ interface EMAState {
 const IMUContext = createContext<IMUContextValue | null>(null);
 
 export function IMUProvider({ children }: { children: React.ReactNode }) {
+  const { userId } = useAuth();
   const [topData,    setTopData]    = useState<IMUSensorData>(defaultSensorData);
   const [bottomData, setBottomData] = useState<IMUSensorData>(defaultSensorData);
   const [posture,    setPosture]    = useState<PostureResult | null>(null);
@@ -253,11 +257,27 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const upperSumMsRef           = useRef<number>(0);
   const lastPacketTimestampRef  = useRef<number | null>(null);
 
+  // ── Supabase posture-sync state ──────────────────────────────────────────
+  const userIdRef               = useRef<string | null>(null);
+  const sessionIdRef            = useRef<string | null>(null);
+  const stateEventQueueRef      = useRef<postureSync.StateEventInput[]>([]);
+  const stateSeverityRef        = useRef<PostureSeverity>("minimal");
+  const statePitchSumRef        = useRef<number>(0);
+  const stateRollSumRef         = useRef<number>(0);
+  const stateSampleCountRef     = useRef<number>(0);
+  const activeInterventionIdRef = useRef<string | null>(null);
+  const sessionShsSumRef        = useRef<number>(0);
+  const sessionShsTickCountRef  = useRef<number>(0);
+  const sessionMinShsRef        = useRef<number>(100);
+  const sessionMaxCplRef        = useRef<number>(0);
+
   const captureRef = useRef<{
     neutral: NeutralOffset | null;
     maxForward: number | null; maxBackward: number | null;
     maxRight: number | null;   maxLeft: number | null;
   }>({ neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null });
+
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
 
   // ── Load persisted data on mount ──────────────────────────────────────────
 
@@ -312,6 +332,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         setShs(Math.round(newShs));
       }
 
+      // Session SHS aggregates (for posture_sessions on disconnect)
+      sessionShsSumRef.current += shsRef.current;
+      sessionShsTickCountRef.current += 1;
+      sessionMinShsRef.current = Math.min(sessionMinShsRef.current, shsRef.current);
+
       // ── CPL ──
       let newCpl: number;
       if (state === "upright") {
@@ -321,6 +346,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       }
       cplRef.current = newCpl;
       setCpl(Math.round(newCpl));
+      sessionMaxCplRef.current = Math.max(sessionMaxCplRef.current, newCpl);
 
       // Check CPL intervention threshold for current state
       const cplThreshold = CPL_THRESHOLDS[state];
@@ -332,6 +358,19 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
           // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
           console.log("[IMUContext] CPL intervention fired for", state, "CPL:", Math.round(newCpl));
+
+          const sid = sessionIdRef.current;
+          if (sid && userIdRef.current) {
+            postureSync
+              .recordIntervention({
+                sessionId: sid,
+                userId: userIdRef.current,
+                state,
+                firedAt: Date.now(),
+                cplAtAlert: Math.round(newCpl),
+              })
+              .then((id) => { activeInterventionIdRef.current = id; });
+          }
         }
       }
     }, SHS_TICK_MS);
@@ -364,6 +403,45 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
+  // ── Posture-sync flush timer — batches queued state events to Supabase ────
+
+  useEffect(() => {
+    const flushInterval = setInterval(() => {
+      const queue = stateEventQueueRef.current;
+      if (queue.length === 0) return;
+      stateEventQueueRef.current = [];
+      postureSync.flushStateEvents(queue).then((ok) => {
+        if (!ok) {
+          // Put back for retry on the next tick, capped to bound memory.
+          stateEventQueueRef.current = [...queue, ...stateEventQueueRef.current].slice(-500);
+        }
+      });
+    }, STATE_EVENT_FLUSH_MS);
+    return () => clearInterval(flushInterval);
+  }, []);
+
+  // Ends the current posture_sessions row (if any) with final aggregates and
+  // flushes any state events still queued, bypassing the flush timer.
+  const finalizeSession = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+
+    const queue = stateEventQueueRef.current;
+    stateEventQueueRef.current = [];
+    if (queue.length > 0) postureSync.flushStateEvents(queue);
+
+    const tickCount = sessionShsTickCountRef.current;
+    postureSync.endSession(sid, {
+      avgShs: tickCount > 0 ? sessionShsSumRef.current / tickCount : null,
+      minShs: sessionMinShsRef.current,
+      maxCpl: sessionMaxCplRef.current,
+      avgInstantScore: upperSumMsRef.current > 0 ? upperSumScoreMsRef.current / upperSumMsRef.current : null,
+      totalDurationMs: sessionStartTimeRef.current ? Date.now() - sessionStartTimeRef.current : 0,
+    });
+    sessionIdRef.current = null;
+    activeInterventionIdRef.current = null;
+  }, []);
+
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -393,6 +471,19 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           upperSumScoreMsRef.current = 0;
           upperSumMsRef.current = 0;
           lastPacketTimestampRef.current = Date.now();
+
+          // reset posture-sync accumulators for new session
+          stateEventQueueRef.current = [];
+          statePitchSumRef.current = 0;
+          stateRollSumRef.current = 0;
+          stateSampleCountRef.current = 0;
+          activeInterventionIdRef.current = null;
+          sessionShsSumRef.current = 0;
+          sessionShsTickCountRef.current = 0;
+          sessionMinShsRef.current = 100;
+          sessionMaxCplRef.current = 0;
+          sessionIdRef.current = null;
+          postureSync.startSession(userIdRef.current).then((id) => { sessionIdRef.current = id; });
         }
 
         // EMA smoothing
@@ -450,6 +541,32 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         // State change detection — runs every packet at ~10Hz
         if (result.state !== lastPostureStateRef.current) {
+          // Flush the just-completed segment into the posture-sync queue
+          // (before overwriting lastPostureStateRef / stateSeverityRef below).
+          const prevState = lastPostureStateRef.current;
+          if (prevState !== null && sessionIdRef.current && userIdRef.current) {
+            const segmentEnd  = Date.now();
+            const sampleCount = stateSampleCountRef.current;
+            stateEventQueueRef.current.push({
+              sessionId:   sessionIdRef.current,
+              userId:      userIdRef.current,
+              state:       prevState as DeskPostureState,
+              severity:    stateSeverityRef.current,
+              enteredAt:   stateStartTimeRef.current,
+              exitedAt:    segmentEnd,
+              durationMs:  segmentEnd - stateStartTimeRef.current,
+              avgPitchDiff: sampleCount > 0 ? statePitchSumRef.current / sampleCount : null,
+              avgRollDiff:  sampleCount > 0 ? stateRollSumRef.current / sampleCount : null,
+            });
+            // Bound the queue in case the network is down for a long stretch.
+            if (stateEventQueueRef.current.length > 500) {
+              stateEventQueueRef.current.splice(0, stateEventQueueRef.current.length - 500);
+            }
+          }
+          statePitchSumRef.current    = 0;
+          stateRollSumRef.current     = 0;
+          stateSampleCountRef.current = 0;
+
           lastPostureStateRef.current  = result.state;
           stateStartTimeRef.current    = Date.now();
           staticStartTimeRef.current   = Date.now();
@@ -469,6 +586,13 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           // Force UI update on state change (bypass throttle)
           lastUIUpdateRef.current = 0;
         }
+
+        // Per-packet pitch/roll accumulation for the current state segment
+        // (used to compute avg_pitch_diff / avg_roll_diff on the next transition).
+        stateSeverityRef.current = result.severity;
+        statePitchSumRef.current += result.pitchDiff;
+        stateRollSumRef.current  += result.rollDiff;
+        stateSampleCountRef.current += 1;
 
         // UI throttle
         const now = Date.now();
@@ -490,7 +614,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            topLatestRef.current = null; 
+            finalizeSession();
+            topLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
@@ -505,7 +630,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            bottomLatestRef.current = null; 
+            finalizeSession();
+            bottomLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
@@ -635,6 +761,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       cplRef.current = Math.max(0, cplRef.current * 0.5);
       setCpl(Math.round(cplRef.current));
     }
+    postureSync.markInterventionDismissed(activeInterventionIdRef.current, Date.now(), moved);
+    activeInterventionIdRef.current = null;
     // Allow intervention to re-fire if CPL stays high
     interventionFiredRef.current = false;
     setActiveIntervention(null);

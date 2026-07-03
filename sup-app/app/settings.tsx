@@ -7,7 +7,6 @@ import {
   Switch,
   Modal,
   ActivityIndicator,
-  Alert, // for testing notifications
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -25,9 +24,6 @@ import {
   type BehaviorProfile,
 } from "../src/services/user/behaviorProfileService";
 
-import { sendLocalNotification } from "@/src/services/reminder/pushNotificationService"; // for testing notifications
-
-
 export default function SettingsScreen() {
   const { logout } = useAuth();
   const { showToast } = useToast();
@@ -35,8 +31,6 @@ export default function SettingsScreen() {
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
-  const [testingNotification, setTestingNotification] = useState(false); // for testing notifications
-  
   // Theme and Units state
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
@@ -71,27 +65,6 @@ export default function SettingsScreen() {
   const getUnitsLabel = () => {
     return settings.units === "metric" ? "Metric (cm, kg)" : "Imperial (in, lb)";
   };
-
-  // For testing notifications
-  const handleTestNotification = async () => {
-    setTestingNotification(true);
-    try {
-      await sendLocalNotification(
-        "Test Reminder",
-        "This is a test — tap one of the actions below to try it out!",
-      );
-      showToast("Test notification sent!", "success");
-    } catch (error) {
-      Alert.alert(
-        "Notification Failed",
-        "Could not send test notification. Make sure permissions are granted in your device settings.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setTestingNotification(false);
-    }
-  };
-
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -163,33 +136,6 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
-      </View>
-
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Test Notification</Text>
-            <Text style={styles.settingDescription}>
-              Send a reminder notification with all 4 action buttons
-            </Text>
-          </View>
-          <Pressable
-            style={[
-              styles.testButton,
-              testingNotification && styles.testButtonDisabled,
-            ]}
-            onPress={handleTestNotification}
-            disabled={testingNotification}
-          >
-            {testingNotification ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.testButtonText}>Send</Text>
-            )}
-          </Pressable>
-        </View>
       </View>
 
       {/* Data & Privacy Section */}
