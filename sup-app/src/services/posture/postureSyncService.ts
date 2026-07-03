@@ -224,8 +224,16 @@ export async function markInterventionDismissed(
 /**
  * Upserts today's posture_daily row. `stateTotals` is the same StateTimeMap
  * shape useSessionStats.ts already computes — total_desk_ms is derived from it.
- * `extras` fields are only written when provided, so omitting session/intervention
- * counts leaves those columns untouched on conflict rather than zeroing them.
+ *
+ * posture_daily predates this service (minutes-based columns, NOT NULL):
+ * good_posture_minutes / bad_posture_minutes / total_minutes / avg_score.
+ * We derive those from stateTotals the same way stats.tsx's todayStatsDisplay
+ * already does (good = time in "upright", bad = everything else) so both the
+ * legacy columns and the new state_totals breakdown stay consistent.
+ *
+ * `extras.sessionCount`/`extras.interventionCount` are only written when
+ * provided, so omitting them leaves those columns untouched on conflict
+ * rather than zeroing them.
  */
 export async function upsertDailyRollup(
   userId: string | null,
@@ -236,16 +244,23 @@ export async function upsertDailyRollup(
   if (!userId) return;
   try {
     const totalDeskMs = Object.values(stateTotals).reduce((sum, v) => sum + (v ?? 0), 0);
+    const goodMs = stateTotals.upright ?? 0;
+    const badMs = Math.max(0, totalDeskMs - goodMs);
+    const avgScore = totalDeskMs > 0 ? (goodMs / totalDeskMs) * 100 : 0;
+
     const payload: Record<string, unknown> = {
       user_id: userId,
       date: dateKey,
       state_totals: stateTotals,
       total_desk_ms: Math.round(totalDeskMs),
       updated_at: new Date().toISOString(),
+      avg_score: extras.avgScore ?? Math.round(avgScore),
+      good_posture_minutes: Math.round(goodMs / 60_000),
+      bad_posture_minutes: Math.round(badMs / 60_000),
+      total_minutes: Math.round(totalDeskMs / 60_000),
     };
     if (extras.sessionCount !== undefined) payload.session_count = extras.sessionCount;
     if (extras.interventionCount !== undefined) payload.intervention_count = extras.interventionCount;
-    if (extras.avgScore !== undefined) payload.avg_score = extras.avgScore;
 
     const { error } = await supabase
       .from("posture_daily")
