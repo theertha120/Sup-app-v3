@@ -242,7 +242,7 @@ export function classifySpinePosture(
   let severity: PostureSeverity;
 
   if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff) * 0.7) {
-    // Lateral bending is dominant (factor=1.0: lateral must exceed sagittal to win)
+    // Lateral bending is dominant (lateral must at least equal sagittal to win)
     state    = rollDiff > 0 ? "tilted_right" : "tilted_left";
     severity = absRoll > LATERAL_MAX * 2 ? "moderate" : "mild";
 
