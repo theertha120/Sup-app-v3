@@ -13,17 +13,28 @@ import {
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
 import { isLoading, useFonts } from "expo-font";
-import React, { useRef, useCallback, useState } from "react";
+import React, { useRef, useCallback, useState, useEffect } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStepCount } from "../../src/hooks/useStepCount";
 import BackgroundBlobs from "./backgroundBlobs";
+import HeaderBar from "@/src/components/ui/HeaderBar";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useToast } from "@/src/contexts/ToastContext";
+import { type User } from "../../constants/env";
+import {
+  fetchCurrentUserProfileWithStats,
+  subscribeToProfileUpdates,
+  userProfileToUser,
+  updateCurrentUserProfile,
+} from "../../src/services/user/profileService";
 
 // Static data — swap these out when connecting to real data
 const avg_SHS_today = 72;            // 0–100 spine health score average
 const tracked_any_session_today = true;
 const totalTrackedMs_today = (7 * 60 + 21) * 60 * 1000; // 7 h 21 m
 const streak_days = 4;
+const weekly = 420 // TO PULL FROM SUPABASE
 const PREV_SCORE      = 63;
 // const PREV_STEPS      = 6620;
 const PREV_SMOVE      = 3;          // completed moves yesterday
@@ -282,7 +293,7 @@ const modalStyles = StyleSheet.create({
     elevation: 10,
   },
   title: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 20,
     color: PRIMARY_TEXT,
     marginBottom: 12,
@@ -305,16 +316,57 @@ const modalStyles = StyleSheet.create({
     borderRadius: 20,
   },
   closeBtnText: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 14,
     color: "white",
   },
 });
 
 export default function DailyScreen() {
+  const { logout, isAuthenticated, userId } = useAuth();
+  const { showToast } = useToast();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  const loadProfile = () => {
+    fetchCurrentUserProfileWithStats()
+      .then((profile) => {
+        setCurrentUser(profile ? userProfileToUser(profile) : null);
+      })
+      .catch((err) => {
+        console.error("[DailyScreen] Failed to load user profile", err);
+      })
+      .finally(() => setIsLoadingProfile(false));
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setCurrentUser(null);
+      setIsLoadingProfile(true);
+      return;
+    }
+    loadProfile();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      if (!userId) return;
+      if (updatedProfile.id !== userId) return;
+      setCurrentUser(userProfileToUser(updatedProfile));
+    });
+    return unsubscribe;
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) return;
+      loadProfile();
+    }, [isAuthenticated])
+  );
+  
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-TextBold": require("../../assets/fonts/Agrandir-TextBold.otf"),
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -357,6 +409,28 @@ export default function DailyScreen() {
     }, [fadeAnim])
   );
 
+  const handleSettingsPress = () => {
+    router.push("/settings");
+  };
+
+  const handleUsernameChange = async (newName: string) => {
+    try {
+      const updatedProfile = await updateCurrentUserProfile({ name: newName });
+      if (updatedProfile) {
+        setCurrentUser(userProfileToUser(updatedProfile));
+      }
+      showToast("Username updated", "success");
+    } catch (err) {
+      console.error("[DailyScreen] Failed to update username", err);
+      showToast("Couldn't update username, try again", "error");
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.replace("/home");
+  };
+
   if (!fontsLoaded) return null;
 
   return (
@@ -367,22 +441,14 @@ export default function DailyScreen() {
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Top bar */}
-        <View style={styles.topBar}>
-          <Text style={styles.logo}>
-            s<Text style={styles.logoApostrophe}>'</Text>up
-          </Text>
-          <View style={styles.headerButtons}>
-            <Pressable style={styles.iconButton} onPress={() => router.push("/sensor-setup")}>
-              <Ionicons name="hardware-chip-outline" size={22} color={PRIMARY_TEXT} />
-            </Pressable>
-            <Pressable style={styles.iconButton}>
-              <Ionicons name="flame-outline" size={22} color={PRIMARY_TEXT} />
-            </Pressable>
-            <View style={styles.iconButton}>
-              <Ionicons name="person-circle-outline" size={22} color={PRIMARY_TEXT} />
-            </View>
-          </View>
-        </View>
+        <HeaderBar
+          onSettingsPress={handleSettingsPress}
+          streakDays={streak_days}
+          username={currentUser?.name ?? "you"}
+          onUsernameChange={handleUsernameChange}
+          onLogOut={() => handleLogout()} // or your signOut() call
+          weeklyPoints={weekly} // swap for real value when leaderboard is wired up
+        />
 
         {/* Section label with back arrow */}
         <View style={styles.sectionRow}>
@@ -463,7 +529,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 50,
   },
   logoApostrophe: {
@@ -498,7 +564,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sectionLabel: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 20,
     color: PRIMARY_TEXT,
   },
@@ -519,7 +585,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   cardTitle: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 16,
     color: PRIMARY_TEXT,
     textAlign: "center",
@@ -548,14 +614,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statLabel: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 14,
     color: PRIMARY_TEXT,
     opacity: 0.75,
     marginBottom: 4,
   },
   statValue: {
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-Regular",
     fontSize: 30,
     color: PRIMARY_TEXT,
     lineHeight: 36,

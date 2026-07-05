@@ -11,6 +11,7 @@ import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
+  updateCurrentUserProfile,
 } from "../../src/services/user/profileService";
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
@@ -18,13 +19,18 @@ import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 import BackgroundBlobs from "./backgroundBlobs";
+import HeaderBar from "@/src/components/ui/HeaderBar";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const weekly = 420 // TO PULL FROM SUPABASE
+const streak_days = 4;
 
 export default function HomeScreen() {
+  const { logout } = useAuth();
+
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-TextBold": require("../../assets/fonts/Agrandir-TextBold.otf"),
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -123,6 +129,24 @@ export default function HomeScreen() {
     router.push("/settings");
   };
 
+  const handleUsernameChange = async (newName: string) => {
+    try {
+      const updatedProfile = await updateCurrentUserProfile({ name: newName });
+      if (updatedProfile) {
+        setCurrentUser(userProfileToUser(updatedProfile));
+      }
+      showToast("Username updated", "success");
+    } catch (err) {
+      console.error("[HomeScreen] Failed to update username", err);
+      showToast("Couldn't update username, try again", "error");
+    }
+  };
+  
+  const handleLogout = () => {
+    logout();
+    router.replace("/home");
+  };
+
   if (!fontsLoaded) {
     return null;
   }
@@ -133,19 +157,14 @@ export default function HomeScreen() {
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Wordmark + icons */}
-        <View style={styles.topBar}>
-          <Text style={styles.logo}>
-            s<Text style={styles.logoApostrophe}>'</Text>up
-          </Text>
-          <View style={styles.headerButtons}>
-            <Pressable style={styles.iconButton} onPress={() => router.push("/sensor-setup")}>
-              <Ionicons name="hardware-chip-outline" size={22} color="#3F2483" />
-            </Pressable>
-            <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
-              <Ionicons name="settings-outline" size={22} color="#3F2483" />
-            </Pressable>
-          </View>
-        </View>
+        <HeaderBar
+          onSettingsPress={handleSettingsPress}
+          streakDays={streak_days}
+          username={currentUser?.name ?? "you"}
+          onUsernameChange={handleUsernameChange}
+          onLogOut={() => handleLogout()} // or your signOut() call
+          weeklyPoints={weekly} // swap for real value when leaderboard is wired up
+        />
 
         <View style={styles.bubblesContainer}>
           {/* Greeting bubble */}
@@ -202,7 +221,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-TextBold",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 50,
   },
   logoApostrophe: {
