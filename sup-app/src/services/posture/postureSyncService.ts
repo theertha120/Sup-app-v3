@@ -170,12 +170,16 @@ export async function rebuildDailyFromSessions(
   dateKey: string  // YYYY-MM-DD (UTC)
 ): Promise<void> {
   try {
+    const nextDay = new Date(dateKey);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const nextDayKey = nextDay.toISOString().slice(0, 10);
+
     const { data: sessions, error } = await supabase
       .from("posture_sessions")
-      .select("total_duration_ms, state_totals, avg_shs, min_shs")
+      .select("total_duration_ms, state_totals, avg_shs, min_shs, max_cpl")
       .eq("user_id", userId)
       .gte("started_at", `${dateKey}T00:00:00.000Z`)
-      .lt("started_at",  `${dateKey}T23:59:59.999Z`)
+      .lt("started_at",  `${nextDayKey}T00:00:00.000Z`)
       .not("ended_at", "is", null);
 
     if (error) { console.warn("[postureSync] rebuildDailyFromSessions query failed", error); return; }
@@ -184,14 +188,17 @@ export async function rebuildDailyFromSessions(
     // Aggregate across all sessions
     const stateTotals: StateTotals = {};
     let totalDeskMs  = 0;
-    let shsSum       = 0;
-    let shsCount     = 0;
-    let minShs       = 100;
+    let shsWeightedSum = 0;  // sum of (avg_shs × duration_ms) for weighted average
+    let shsDurationMs  = 0;  // total duration of sessions that have avg_shs
+    let minShs         = 100;
+    let maxCpl: number | null = null;
 
     for (const s of sessions) {
-      totalDeskMs += s.total_duration_ms ?? 0;
-      if (s.avg_shs != null) { shsSum += s.avg_shs; shsCount++; }
+      const dur = s.total_duration_ms ?? 0;
+      totalDeskMs += dur;
+      if (s.avg_shs != null) { shsWeightedSum += s.avg_shs * dur; shsDurationMs += dur; }
       if (s.min_shs != null && s.min_shs < minShs) minShs = s.min_shs;
+      if (s.max_cpl != null && (maxCpl === null || s.max_cpl > maxCpl)) maxCpl = s.max_cpl;
       if (s.state_totals) {
         for (const [k, v] of Object.entries(s.state_totals as StateTotals)) {
           const key = k as DeskPostureState;
@@ -200,15 +207,15 @@ export async function rebuildDailyFromSessions(
       }
     }
 
-    const avgShs  = shsCount > 0 ? shsSum / shsCount : null;
+    const avgShs = shsDurationMs > 0 ? shsWeightedSum / shsDurationMs : null;
     const goodMs  = stateTotals.upright ?? 0;
     const badMs   = Math.max(0, totalDeskMs - goodMs);
     const avgScore = totalDeskMs > 0 ? Math.round((goodMs / totalDeskMs) * 100) : 0;
 
-    // Preserve session_count and intervention_count (don't overwrite with DB aggregate)
+    // Preserve intervention_count if a row already exists (never overwrite with null)
     const { data: existing } = await supabase
       .from("posture_daily")
-      .select("session_count, intervention_count")
+      .select("intervention_count")
       .eq("user_id", userId)
       .eq("date", dateKey)
       .maybeSingle();
@@ -219,13 +226,14 @@ export async function rebuildDailyFromSessions(
       state_totals:         stateTotals,
       total_desk_ms:        Math.round(totalDeskMs),
       avg_score:            avgScore,
-      avg_shs:              avgShs != null ? Math.round(avgShs) : null,
-      min_shs:              minShs < 100 ? Math.round(minShs) : null,
+      avg_shs:              avgShs,
+      min_shs:              minShs < 100 ? minShs : null,
+      max_cpl:              maxCpl,
       good_posture_minutes: Math.round(goodMs / 60_000),
       bad_posture_minutes:  Math.round(badMs / 60_000),
       total_minutes:        Math.round(totalDeskMs / 60_000),
-      session_count:        existing?.session_count ?? sessions.length,
-      intervention_count:   existing?.intervention_count ?? null,
+      session_count:        sessions.length,
+      intervention_count:   existing?.intervention_count ?? 0,
       updated_at:           new Date().toISOString(),
     }, { onConflict: "user_id,date" });
 
