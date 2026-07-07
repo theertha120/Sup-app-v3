@@ -193,7 +193,7 @@ export default function HomeScreen() {
                   <Text style={styles.statBadgeText}>⚡ {currentUser?.currentStreak || 0} day streak</Text>
                 </View>
                 <View style={styles.statBadge}>
-                  <Text style={styles.statBadgeText}>🏆 {currentUser?.weeklyTotalPoints || 0} pts</Text>
+                  <Text style={styles.statBadgeText}>🏆 {currentUser?.weeklyAvgPoints || 0} pts</Text>
                 </View>
               </View>
             </View>

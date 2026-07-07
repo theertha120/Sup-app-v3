@@ -8,7 +8,7 @@ type ProfileRow = {
   avatar_url: string | null;
   current_streak: number;
   last_activity_date: string | null;
-  weekly_total_points: number;
+  weekly_avg_points: number;
 };
 
 // Fetch leaderboard ordered by current streak (descending)
@@ -16,7 +16,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_total_points")
+      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points")
       .order("current_streak", { ascending: false });
 
     if (error) {
@@ -35,7 +35,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
       avatar: row.avatar_url ?? undefined,
       currentStreak: row.current_streak,
       lastActivityDate: row.last_activity_date ?? "",
-      weeklyTotalPoints: row.weekly_total_points,
+      weeklyAvgPoints: row.weekly_avg_points,
     }));
 
     try {
@@ -64,8 +64,8 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_total_points")
-      .order("weekly_total_points", { ascending: false });
+      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points")
+      .order("weekly_avg_points", { ascending: false });
 
     if (error) {
       console.error("[leaderboard] Failed to fetch by weekly points:", error);
@@ -83,7 +83,7 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
       avatar: row.avatar_url ?? undefined,
       currentStreak: row.current_streak,
       lastActivityDate: row.last_activity_date ?? "",
-      weeklyTotalPoints: row.weekly_total_points,
+      weeklyAvgPoints: row.weekly_avg_points,
     }));
 
     try {

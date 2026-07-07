@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: displayName,
           avatar_url: null,
           current_streak: 0,
-          weekly_total_points: 0,
+          weekly_avg_points: 0,
         });
 
         const def = createDefaultBehaviorProfile();
