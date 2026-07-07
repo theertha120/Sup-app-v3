@@ -197,7 +197,7 @@ export default function HomeScreen() {
   );
 }
 
-const PRIMARY_TEXT = "#3F2483";
+const PRIMARY_TEXT = "#1D014A";
 
 const styles = StyleSheet.create({
   container: {
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
   },
   shadow: {
-    shadowColor: "#3F2483",
+    shadowColor: "#1D014A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.10,
     shadowRadius: 10,
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   },
   bubbleRight: {
     alignSelf: "flex-end",
-    backgroundColor: "rgba(143, 122, 230)",
+    backgroundColor: "#AB99FA",
   },
   bubbleText: {
     fontFamily: "Agrandir-Regular",

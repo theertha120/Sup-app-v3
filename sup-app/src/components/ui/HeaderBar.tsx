@@ -12,10 +12,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
  
-const PRIMARY_TEXT = "#3F2483";
+const PRIMARY_TEXT = "#1D014A";
 const DROPDOWN_BG = "#FFFFFF";
-const DIVIDER = "#EDE8F7";
-const STREAK_COLOUR = "#F97316";
+const DIVIDER = "#CBCBF7";
+const STREAK_COLOUR = "#EC555E";
  
 interface HeaderBarProps {
   onSettingsPress?: () => void;
@@ -110,10 +110,10 @@ export default function HeaderBar({
  
           {/* Streak badge — not pressable */}
           <View style={[styles.iconButton, styles.streakBadge]}>
+            <Ionicons name="flame" size={20} color={streakColor} />
             <Text style={[styles.streakCount, { color: streakColor }]}>
               {streakDays}
             </Text>
-            <Ionicons name="flame" size={20} color={streakColor} />
           </View>
  
           {/* Profile icon — measure position for dropdown */}
@@ -186,7 +186,7 @@ export default function HeaderBar({
                   autoFocus
                   selectTextOnFocus
                   placeholder="your name"
-                  placeholderTextColor="#A89CC8"
+                  placeholderTextColor="#CBCBF7"
                   maxLength={30}
                 />
                 <View style={styles.editActions}>
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.5)",
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
   },
 
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     backgroundColor: DROPDOWN_BG,
     borderRadius: 14,
     paddingVertical: 6,
-    shadowColor: "#3F2483",
+    shadowColor: "#1D014A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   dropdownLabel: {
     fontSize: 14,
-    color: "#6B5FA0",
+    color: "#1D014A",
     flex: 1,
   },
   dropdownPoints: {
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   dropdownLogout: {
     fontSize: 14,
-    color: "#C0392B",
+    color: "#CC0F55",
     fontWeight: "500",
   },
   divider: {
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 24,
     width: 300,
-    shadowColor: "#3F2483",
+    shadowColor: "#1D014A",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   },
   editInput: {
     borderWidth: 1.5,
-    borderColor: "#C4B5E8",
+    borderColor: "#1D014A",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
   editCancelText: {
     fontSize: 14,
-    color: "#9080BB",
+    color: "#1D014A",
   },
   editSave: {
     backgroundColor: PRIMARY_TEXT,

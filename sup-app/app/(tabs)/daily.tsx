@@ -104,7 +104,7 @@ const POSTURE_AVERAGES = (
 ) as Record<keyof typeof RAW_AVERAGES, number>;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-const PRIMARY_TEXT = "#3F2483";
+const PRIMARY_TEXT = "#1D014A";
 
 const METRIC_INFO: Record<string, { title: string; body: string }> = {
   snapshot: {
@@ -132,9 +132,9 @@ const METRIC_INFO: Record<string, { title: string; body: string }> = {
 
 const SEGMENT_COLORS: Record<keyof typeof POSTURE_AVERAGES, string> = {
   goodAlignment:  "#6DC96D",  // green
-  leaningForward: "#F5C842",  // yellow
+  leaningForward: "#FFD600",  // yellow
   spineRounding:  "#F5A623",  // orange
-  highSpinalLoad: "#E8706A",  // red
+  highSpinalLoad: "#EC555E",  // red
   shiftingLeft:   "#F5A623",  // orange
   shiftingRight:  "#F5A623",  // orange
 };
@@ -187,7 +187,7 @@ const scoreBarStyles = StyleSheet.create({
 function ChangeBadge({ value }: { value: number }) {
   const isUp = value >= 0;
   return (
-    <View style={[badgeStyles.pill, { backgroundColor: isUp ? "#6DC96D" : "#E8706A" }]}>
+    <View style={[badgeStyles.pill, { backgroundColor: isUp ? "#6DC96D" : "#EC555E" }]}>
       <Text style={badgeStyles.text}>
         {isUp ? "↑" : "↓"}{Math.abs(value)}%
       </Text>
@@ -310,7 +310,7 @@ const modalStyles = StyleSheet.create({
   closeBtn: {
     marginTop: 20,
     alignSelf: "center",
-    backgroundColor: "rgba(143, 122, 230, 0.55)",
+    backgroundColor: "#AB99FA",
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 20,
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   shadow: {
-    shadowColor: "#3F2483",
+    shadowColor: "#1D014A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.10,
     shadowRadius: 10,
