@@ -35,7 +35,7 @@ async function setLocalSupsona(userId: string, value: string | null): Promise<vo
  *   avatar_url text,
  *   current_streak integer not null default 0,
  *   last_activity_date date,
- *   weekly_total_points numeric(10,2) not null default 0,
+ *   weekly_avg_points numeric(10,2) not null default 0,
  *   created_at timestamptz not null default now()
  * );
  */
@@ -45,7 +45,7 @@ type ProfileRow = {
   avatar_url: string | null;
   current_streak: number | null;
   last_activity_date: string | null;
-  weekly_total_points: number | null;
+  weekly_avg_points: number | null;
   created_at?: string;
 };
 
@@ -71,10 +71,10 @@ export type UserProfile = {
    */
   lastActivityDate: string;
   /**
-   * Sum of daily avg_score from last 7 days (`profiles.weekly_total_points`).
+   * Sum of daily avg_score from last 7 days (`profiles.weekly_avg_points`).
    * Safe default of 0 when missing.
    */
-  weeklyTotalPoints: number;
+  weeklyAvgPoints: number;
   /**
    * Account creation timestamp from `profiles.created_at` (ISO 8601), optional.
    */
@@ -171,7 +171,7 @@ export interface ProfilePreviewStats {
   lastActivityDate: string;
   
   /** Sum of daily avg_score from last 7 days */
-  weeklyTotalPoints: number;
+  weeklyAvgPoints: number;
   
   /** Whether user has any activity recorded */
   hasActivity: boolean;
@@ -184,7 +184,7 @@ function mapRowToUserProfile(row: ProfileRow): UserProfile {
     avatar: row.avatar_url ?? undefined,
     currentStreak: row.current_streak ?? 0,
     lastActivityDate: row.last_activity_date ?? "",
-    weeklyTotalPoints: Number(row.weekly_total_points) || 0,
+    weeklyAvgPoints: Number(row.weekly_avg_points) || 0,
     createdAt: row.created_at,
   };
 }
@@ -196,7 +196,7 @@ function userToUserProfile(user: User): UserProfile {
     avatar: user.avatar,
     currentStreak: user.currentStreak,
     lastActivityDate: user.lastActivityDate,
-    weeklyTotalPoints: user.weeklyTotalPoints,
+    weeklyAvgPoints: user.weeklyAvgPoints,
     createdAt: undefined,
   };
 }
@@ -267,7 +267,7 @@ export async function fetchCurrentUserBasicProfile(): Promise<
         // Ensure stats fields have safe defaults even if omitted from select
         current_streak: null,
         last_activity_date: null,
-        weekly_total_points: null,
+        weekly_avg_points: null,
       });
 
       return {
@@ -290,12 +290,12 @@ export async function fetchCurrentUserBasicProfile(): Promise<
  *
  * Returned fields (UserProfile):
  * - `id`, `name`, `avatar`
- * - `currentStreak`, `lastActivityDate`, `weeklyTotalPoints`
+ * - `currentStreak`, `lastActivityDate`, `weeklyAvgPoints`
  * - `createdAt` (optional)
  *
  * Safe defaults:
  * - `currentStreak` → 0 when null
- * - `weeklyTotalPoints` → 0 when null
+ * - `weeklyAvgPoints` → 0 when null
  * - `lastActivityDate` → "" when null
  *
  * Throws when:
@@ -314,7 +314,7 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
       )
       .eq("id", userId)
       .single();
@@ -403,7 +403,7 @@ export async function updateCurrentUserProfile(
     .update(payload)
     .eq("id", userId)
     .select(
-      "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
+      "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
     )
     .single();
 
@@ -457,7 +457,7 @@ export async function updateCurrentUserProfile(
  * const stats = await fetchProfilePreviewStats("user-4");
  * if (stats) {
  *   console.log(`Streak: ${stats.currentStreak} days`);
- *   console.log(`Weekly points: ${stats.weeklyTotalPoints}`);
+ *   console.log(`Weekly points: ${stats.weeklyAvgPoints}`);
  * }
  * ```
  */
@@ -467,7 +467,7 @@ export async function fetchProfilePreviewStats(
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("current_streak, last_activity_date, weekly_total_points")
+      .select("current_streak, last_activity_date, weekly_avg_points")
       .eq("id", userId)
       .single();
 
@@ -483,13 +483,13 @@ export async function fetchProfilePreviewStats(
     } else if (data) {
       const row = data as Pick<
         ProfileRow,
-        "current_streak" | "last_activity_date" | "weekly_total_points"
+        "current_streak" | "last_activity_date" | "weekly_avg_points"
       >;
 
       return {
         currentStreak: row.current_streak ?? 0,
         lastActivityDate: row.last_activity_date ?? "",
-        weeklyTotalPoints: Number(row.weekly_total_points) || 0,
+        weeklyAvgPoints: Number(row.weekly_avg_points) || 0,
         hasActivity: Boolean(row.last_activity_date),
       };
     }
@@ -508,7 +508,7 @@ export async function fetchProfilePreviewStats(
   return {
     currentStreak: mock.currentStreak,
     lastActivityDate: mock.lastActivityDate,
-    weeklyTotalPoints: mock.weeklyTotalPoints,
+    weeklyAvgPoints: mock.weeklyAvgPoints,
     hasActivity: Boolean(mock.lastActivityDate),
   };
 }
@@ -533,7 +533,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at"
+        "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
       )
       .eq("id", userId)
       .single();
@@ -641,7 +641,7 @@ export async function updateUserProfile(
     .from("profiles")
     .update(updatePayload)
     .eq("id", userId)
-    .select("id, name, avatar_url, current_streak, last_activity_date, weekly_total_points, created_at")
+    .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at")
     .single();
 
   if (error) {
@@ -702,6 +702,6 @@ export function userProfileToUser(profile: UserProfile): User {
     avatar: profile.avatar,
     currentStreak: profile.currentStreak,
     lastActivityDate: profile.lastActivityDate,
-    weeklyTotalPoints: profile.weeklyTotalPoints,
+    weeklyAvgPoints: profile.weeklyAvgPoints,
   };
 }

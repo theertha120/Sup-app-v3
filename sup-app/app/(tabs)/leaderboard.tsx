@@ -207,7 +207,7 @@ export default function LeaderboardScreen() {
     if (sortMode === "streak") {
       return b.currentStreak - a.currentStreak;
     }
-    return b.weeklyTotalPoints - a.weeklyTotalPoints;
+    return b.weeklyAvgPoints - a.weeklyAvgPoints;
   });
 
   const [hasGoodPostureToday, setHasGoodPostureToday] = useState(false);
@@ -410,11 +410,11 @@ export default function LeaderboardScreen() {
           onPress={() => setShowInfo(!showInfo)}
         >
           <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>Weekly Total Points</Text>
+            <Text style={styles.statLabel}>Weekly Average Points</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <AnimatedNumber value={currentUser?.weeklyTotalPoints ?? 0} style={styles.statValue} />
+            <AnimatedNumber value={currentUser?.weeklyAvgPoints ?? 0} style={styles.statValue} />
             <Text style={styles.statValue}> pts</Text>
           </View>
         </Pressable>
@@ -433,7 +433,7 @@ export default function LeaderboardScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>📊</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Weekly Total Points:</Text> Sum of your daily average scores over the past week
+              <Text style={styles.infoBold}>Weekly Average Points:</Text> Average of your daily s'up scores over the past week
             </Text>
           </View>
         </View>
@@ -703,7 +703,7 @@ function LeaderboardRow({ rank, user, isCurrentUser, onPress }: LeaderboardRowPr
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={styles.stats}>
-          ⚡ {user.currentStreak} {user.currentStreak === 1 ? "day" : "days"} • Points: {user.weeklyTotalPoints} pts
+          ⚡ {user.currentStreak} {user.currentStreak === 1 ? "day" : "days"} • Points: {user.weeklyAvgPoints} pts
         </Text>
       </View>
     </Pressable>

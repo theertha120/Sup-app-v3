@@ -235,7 +235,7 @@ export default function ProfileModal({
                       </View>
 
                       <View style={styles.statBox}>
-                        <Text style={styles.statValue}>{profileData.weeklyTotalPoints ?? 0}</Text>
+                        <Text style={styles.statValue}>{profileData.weeklyAvgPoints ?? 0}</Text>
                         <Text style={styles.statLabel}>Weekly Points</Text>
                       </View>
                     </View>

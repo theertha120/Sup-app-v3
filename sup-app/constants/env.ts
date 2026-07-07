@@ -15,7 +15,7 @@ export interface User {
   avatar?: string;
   currentStreak: number;
   lastActivityDate: string; // ISO 8601 format
-  weeklyTotalPoints: number; // Sum of daily avg scores from last 7 days
+  weeklyAvgPoints: number; // Sum of daily avg scores from last 7 days
   previousWeekStreakRank?: number; // Last week's streak rank
   previousWeekWeeklyRank?: number; // Last week's weekly-points rank
 }
@@ -24,7 +24,7 @@ export interface User {
 export interface LeaderboardEntry {
   user: User;
   rank: number;
-  weeklyTotalPoints: number;
+  weeklyAvgPoints: number;
   currentStreak: number;
 }
 

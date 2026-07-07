@@ -249,6 +249,7 @@ export async function rebuildDailyFromSessions(
         .eq("user_id", userId)
         .eq("date", dateKey);
       console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
+      await updateWeeklyAvgPoints(userId);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -322,3 +323,40 @@ async function updateStreakAndActivity(userId: string): Promise<number> {
     return 1;
   }
 }
+
+/**
+ * Averages sup_score from the last 7 days of posture_daily for this user
+ * and writes the result to profiles.weekly_avg_points.
+ * Called after sup_score is written for today's session.
+ */
+async function updateWeeklyAvgPoints(userId: string): Promise<void> {
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+
+    const { data: rows, error } = await supabase
+      .from("posture_daily")
+      .select("sup_score")
+      .eq("user_id", userId)
+      .gte("date", sevenDaysAgo);
+
+    if (error) { console.warn("[postureSync] updateWeeklyAvgPoints fetch failed", error); return; }
+    if (!rows?.length) return;
+
+    const scored = rows.filter((r) => r.sup_score != null);
+    if (!scored.length) return;
+
+    const avg = scored.reduce((sum, r) => sum + Number(r.sup_score), 0) / scored.length;
+    const weeklyAvgPoints = Math.round(avg);
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ weekly_avg_points: weeklyAvgPoints })
+      .eq("id", userId);
+
+    if (updateError) console.warn("[postureSync] updateWeeklyAvgPoints update failed", updateError);
+    else console.log(`[postureSync] weekly_avg_points=${weeklyAvgPoints} (from ${scored.length} days)`);
+  } catch (e) {
+    console.warn("[postureSync] updateWeeklyAvgPoints threw", e);
+  }
+}
+
