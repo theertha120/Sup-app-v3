@@ -106,10 +106,18 @@ const POSTURE_AVERAGES = (
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
 
-const METRIC_INFO: Record<string, { title: string; body: string }> = {
+const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
   snapshot: {
     title: "s'napshot",
-    body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.\n\nAverage good alignment: ${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%\nAverage leaning forward: ${POSTURE_AVERAGES.leaningForward.toFixed(1)}%\nAverage spine rounding: ${POSTURE_AVERAGES.spineRounding.toFixed(1)}%\nAverage high spinal load: ${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%\nAverage shifting left: ${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%\nAverage shifting right: ${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,
+    body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today.\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.`,
+    stats: [
+      { label: "good alignment",  value: `${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%`,  color: "#6DC96D" },
+      { label: "leaning forward", value: `${POSTURE_AVERAGES.leaningForward.toFixed(1)}%`, color: "#F5C842" },
+      { label: "spine rounding",  value: `${POSTURE_AVERAGES.spineRounding.toFixed(1)}%`,  color: "#F5A623" },
+      { label: "high spinal load",value: `${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%`, color: "#E8706A" },
+      { label: "shifting left",   value: `${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%`,   color: "#F5A623" },
+      { label: "shifting right",  value: `${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,  color: "#F5A623" },
+    ],
   },
   session: {
     title: "s'ession",
@@ -262,6 +270,29 @@ function InfoModal({
             <View style={modalStyles.sheet}>
               <Text style={modalStyles.title}>{info.title}</Text>
               <Text style={modalStyles.body}>{info.body}</Text>
+              
+              {info.stats && (
+                <View style={modalStyles.statsContainer}>
+                  {info.stats.map((stat) => (
+                    <View
+                      key={stat.label}
+                      style={[
+                        modalStyles.statRow,
+                        info.stats && stat === info.stats[info.stats.length - 1] && { borderBottomWidth: 0 },
+                      ]}
+                    >
+                      <View style={modalStyles.statLabelRow}>
+                        {stat.color && (
+                          <View style={[modalStyles.dot, { backgroundColor: stat.color }]} />
+                        )}
+                        <Text style={modalStyles.statLabel}>{stat.label}</Text>
+                      </View>
+                      <Text style={modalStyles.statValue}>{stat.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <TouchableOpacity style={modalStyles.closeBtn} onPress={onClose}>
                 <Text style={modalStyles.closeBtnText}>got it</Text>
               </TouchableOpacity>
@@ -319,6 +350,43 @@ const modalStyles = StyleSheet.create({
     fontFamily: "Agrandir-GrandHeavy",
     fontSize: 14,
     color: "white",
+  },
+  statsContainer: {
+    marginTop: 16,
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: "rgba(63, 36, 131, 0.06)",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  statRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(63, 36, 131, 0.08)",
+  },
+  statLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statLabel: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: PRIMARY_TEXT,
+    opacity: 0.75,
+  },
+  statValue: {
+    fontFamily: "Agrandir-GrandHeavy",
+    fontSize: 13,
+    color: PRIMARY_TEXT,
   },
 });
 
