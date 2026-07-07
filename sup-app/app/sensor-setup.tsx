@@ -82,7 +82,7 @@ export default function SensorSetupScreen() {
     topSensor, bottomSensor,
     discoveredDevices, isScanning,
     calibration, clinicalBaseline,
-    scan, connect, disconnect,
+    scan, connect, disconnect, disconnectAll,
     bothConnected,
   } = useIMUContext();
 
@@ -169,6 +169,29 @@ export default function SensorSetupScreen() {
       ]
     );
   };
+
+  const handleDisconnectAll = useCallback(() => {
+    if (!topSensor.state.connected && !bottomSensor.state.connected) return;
+
+    Alert.alert(
+      "disconnect both s'pots?",
+      "this will end the current session and disconnect both sensors. your saved pairings stay intact.",
+      [
+        { text: "cancel", style: "cancel" },
+        {
+          text: "disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await disconnectAll();
+            } catch (e) {
+              console.warn("[Setup] Failed to disconnect all s'pots:", e);
+            }
+          },
+        },
+      ]
+    );
+  }, [bottomSensor.state.connected, disconnectAll, topSensor.state.connected]);
 
   // ── Auto-connect ──────────────────────────────────────────────────────────
 
@@ -331,6 +354,13 @@ export default function SensorSetupScreen() {
               : "connect both s'pots to start tracking"}
           </Text>
         </View>
+
+        {(topSensor.state.connected || bottomSensor.state.connected) && (
+          <Pressable style={styles.disconnectBtn} onPress={handleDisconnectAll}>
+            <Ionicons name="power-outline" size={18} color="#D32F2F" />
+            <Text style={styles.disconnectBtnText}>end session & disconnect</Text>
+          </Pressable>
+        )}
 
         {/* s'pot rows */}
         <View style={styles.card}>
@@ -508,6 +538,20 @@ const styles = StyleSheet.create({
 
   statusBanner:     { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, marginBottom: 16 },
   statusBannerText: { fontSize: 13, fontWeight: "600", flex: 1 },
+
+  disconnectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: "#E57373",
+    backgroundColor: "#FFF5F5",
+    borderRadius: 18,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  disconnectBtnText: { fontSize: 14, fontWeight: "700", color: "#D32F2F" },
 
   card: {
     backgroundColor: "#fff", borderRadius: 20, padding: 16, marginBottom: 16,

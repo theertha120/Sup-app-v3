@@ -59,6 +59,14 @@ class BLEService {
   // true = a reconnect is already in flight for that slot; ignore new attempts.
   private reconnecting: Record<SensorSlot, boolean> = { top: false, bottom: false };
   private reconnectingAny = false; // global lock — only one slot reconnects at a time
+
+  // Manual disconnect flag — set when the user explicitly disconnects a slot.
+  // Prevents auto-reconnect from firing after an intentional disconnection.
+  private manuallyDisconnected: Record<SensorSlot, boolean> = { top: false, bottom: false };
+
+  // onDeviceDisconnected subscriptions — one per slot, removed before re-registering
+  // so stale handlers from previous connections don't fire on the next disconnect.
+  private disconnectSubs: Record<SensorSlot, { remove: () => void } | null> = { top: null, bottom: null };
   private onData?:   DataCallback;
   private onStatus?: StatusCallback;
 
@@ -69,10 +77,12 @@ class BLEService {
     this.manager.onStateChange((state) => {
       if (state === "PoweredOff" || state === "Resetting") {
         console.log("[BLE] Bluetooth state changed:", state, "— clearing slot state");
-        this.devices       = { top: null, bottom: null };
-        this.subscriptions = { top: null, bottom: null };
-        this.reconnecting  = { top: false, bottom: false };
-        this.isScanning    = false;
+        this.devices               = { top: null, bottom: null };
+        this.subscriptions         = { top: null, bottom: null };
+        this.reconnecting          = { top: false, bottom: false };
+        this.manuallyDisconnected  = { top: false, bottom: false };
+        this.disconnectSubs        = { top: null, bottom: null };
+        this.isScanning            = false;
       }
     }, true);
   }
@@ -188,14 +198,24 @@ class BLEService {
       );
 
       // ── Disconnection handler with reconnect guard ──────────────────────
-      // Guard prevents multiple parallel reconnect attempts for the same slot,
-      // which caused the "Operation was cancelled" loop in the previous version.
-      this.manager.onDeviceDisconnected(connected.id, async () => {
+      // Remove any stale handler from a prior connection on this slot before
+      // registering a new one. Without this, both the old and new handlers fire
+      // on disconnect, which clears manuallyDisconnected before the second
+      // handler reads it and incorrectly triggers auto-reconnect.
+      this.disconnectSubs[slot]?.remove();
+      this.disconnectSubs[slot] = this.manager.onDeviceDisconnected(connected.id, async () => {
         console.log(`[BLE] ${slot} s'pot disconnected`);
         this.devices[slot] = null;
         this.onStatus?.(slot, {
           connected: false, deviceId: null, deviceName: null,
         });
+
+        // Skip reconnect if the user explicitly disconnected
+        if (this.manuallyDisconnected[slot]) {
+          console.log(`[BLE] ${slot} manually disconnected — skipping auto-reconnect`);
+          this.manuallyDisconnected[slot] = false;
+          return;
+        }
 
         // Only attempt reconnect if not already reconnecting this slot
         if (this.reconnecting[slot]) {
@@ -256,8 +276,13 @@ class BLEService {
   // ── Disconnection ─────────────────────────────────────────────────────────
 
   async disconnectSlot(slot: SensorSlot): Promise<void> {
-    // Cancel any in-flight reconnect for this slot before disconnecting
+    // Mark as intentional — prevents onDeviceDisconnected from auto-reconnecting
+    this.manuallyDisconnected[slot] = true;
     this.reconnecting[slot] = false;
+
+    // Remove the disconnect subscription so the stale handler can't fire
+    this.disconnectSubs[slot]?.remove();
+    this.disconnectSubs[slot] = null;
 
     this.subscriptions[slot]?.remove();
     this.subscriptions[slot] = null;
