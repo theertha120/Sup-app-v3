@@ -237,9 +237,88 @@ export async function rebuildDailyFromSessions(
       updated_at:           new Date().toISOString(),
     }, { onConflict: "user_id,date" });
 
-    if (upsertError) console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
-    else console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
+    if (upsertError) {
+      console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
+    } else {
+      console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
+      const newStreak = await updateStreakAndActivity(userId);
+      const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
+      await supabase
+        .from("posture_daily")
+        .update({ sup_score: supScore })
+        .eq("user_id", userId)
+        .eq("date", dateKey);
+      console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
+    }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
+  }
+}
+
+// ── Sup Score helpers ─────────────────────────────────────────────────────────
+
+function computeShowingUpScore(totalDeskMs: number): number {
+  if (totalDeskMs <= 0) return 0;
+  const base = 15;
+  let duration = 0;
+  if      (totalDeskMs >= 120 * 60_000) duration = 15;
+  else if (totalDeskMs >=  60 * 60_000) duration = 10;
+  else if (totalDeskMs >=  30 * 60_000) duration = 5;
+  return base + duration;
+}
+
+function computeSupScore(avgShs: number | null, totalDeskMs: number, streak: number): number {
+  const quality    = avgShs != null ? (avgShs / 100) * 50 : 0;
+  const showingUp  = computeShowingUpScore(totalDeskMs);
+  const streakPts  = Math.min(20, streak * 3);
+  return Math.round(quality + showingUp + streakPts);
+}
+
+/**
+ * Updates current_streak and last_activity_date in profiles.
+ * Returns the new streak value so the caller can compute sup_score.
+ *
+ * Uses existing profile values — no need to fetch all posture_daily dates:
+ *   last_activity == today     → streak unchanged (multiple sessions same day)
+ *   last_activity == yesterday → streak + 1 (extending run)
+ *   anything older             → streak resets to 1 (gap broke it)
+ */
+async function updateStreakAndActivity(userId: string): Promise<number> {
+  try {
+    const todayUTC     = new Date().toISOString().slice(0, 10);
+    const yesterdayUTC = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("current_streak, last_activity_date")
+      .eq("id", userId)
+      .single();
+
+    if (error) { console.warn("[postureSync] updateStreakAndActivity fetch failed", error); return 1; }
+
+    const prev       = profile?.last_activity_date as string | null;
+    const prevStreak = Number(profile?.current_streak ?? 0);
+
+    let streak: number;
+    if (prev === todayUTC) {
+      streak = prevStreak;      // second session today — no change
+    } else if (prev === yesterdayUTC) {
+      streak = prevStreak + 1;  // consecutive day — extend
+    } else {
+      streak = 1;               // gap or first ever session
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ current_streak: streak, last_activity_date: todayUTC })
+      .eq("id", userId);
+
+    if (profileError) console.warn("[postureSync] updateStreakAndActivity update failed", profileError);
+    else console.log(`[postureSync] streak=${streak} last_activity=${todayUTC}`);
+
+    return streak;
+  } catch (e) {
+    console.warn("[postureSync] updateStreakAndActivity threw", e);
+    return 1;
   }
 }
