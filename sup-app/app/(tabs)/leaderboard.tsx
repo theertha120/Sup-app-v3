@@ -207,7 +207,7 @@ export default function LeaderboardScreen() {
     if (sortMode === "streak") {
       return b.currentStreak - a.currentStreak;
     }
-    return b.weeklyTotalPoints - a.weeklyTotalPoints;
+    return b.weeklyAvgPoints - a.weeklyAvgPoints;
   });
 
   const [hasGoodPostureToday, setHasGoodPostureToday] = useState(false);
@@ -414,7 +414,7 @@ export default function LeaderboardScreen() {
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <AnimatedNumber value={currentUser?.weeklyTotalPoints ?? 0} style={styles.statValue} />
+            <AnimatedNumber value={currentUser?.weeklyAvgPoints ?? 0} style={styles.statValue} />
             <Text style={styles.statValue}> pts</Text>
           </View>
         </Pressable>
@@ -703,7 +703,7 @@ function LeaderboardRow({ rank, user, isCurrentUser, onPress }: LeaderboardRowPr
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={styles.stats}>
-          ⚡ {user.currentStreak} {user.currentStreak === 1 ? "day" : "days"} • Points: {user.weeklyTotalPoints} pts
+          ⚡ {user.currentStreak} {user.currentStreak === 1 ? "day" : "days"} • Points: {user.weeklyAvgPoints} pts
         </Text>
       </View>
     </Pressable>
