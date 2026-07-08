@@ -387,6 +387,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (!sessionId) return;
 
     const tickCount = sessionShsTickCountRef.current;
+    const todayDK   = new Date().toISOString().slice(0, 10);
+    const uid       = userIdRef.current;
+
     postureSync.endSession(sessionId, {
       avgShs: tickCount > 0 ? sessionShsSumRef.current / tickCount : null,
       minShs: sessionMinShsRef.current,
@@ -396,8 +399,13 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       stateTotals: sessionStateTotalsRef.current,
     });
 
-    sessionIdRef.current        = null;
+    sessionIdRef.current          = null;
     sessionStateTotalsRef.current = {};
+
+    // Rebuild posture_daily after a short delay to ensure endSession has written to DB
+    if (uid) {
+      setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
+    }
   }, []);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 import { useAuth } from "../contexts/AuthContext";
 import { useIMUContext } from "../contexts/IMUContext";
-import * as postureSync from "../services/posture/postureSyncService";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,18 +195,11 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   useEffect(() => {
     if (currentState === undefined) {
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
-      const todayDK    = new Date().toISOString().slice(0, 10);
-      const hadSessionData = totalMs(sessionRef.current) > 0;
+      const todayDK = new Date().toISOString().slice(0, 10);
       AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
       setSessionStats({});
-      if (userIdRef.current && hadSessionData) {
-        // Rebuild posture_daily from posture_sessions — wait 5s to ensure
-        // endSession (called from IMUContext on disconnect) has written to DB first
-        const uid = userIdRef.current;
-        setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
-      }
     }
   }, [currentState === undefined]);
 
