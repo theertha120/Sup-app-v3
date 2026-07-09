@@ -303,7 +303,7 @@ const modalStyles = StyleSheet.create({
 });
 
 export default function DailyScreen() {
-  const { logout, isAuthenticated, userId } = useAuth();
+  const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -351,10 +351,6 @@ export default function DailyScreen() {
       loadProfile();
     }, [isAuthenticated])
   );
-  
-  const handleSettingsPress = () => {
-    router.push("/settings");
-  };
 
   const handleUsernameChange = async (newName: string) => {
     try {
@@ -367,11 +363,6 @@ export default function DailyScreen() {
       console.error("[DailyScreen] Failed to update username", err);
       showToast("Couldn't update username, try again", "error");
     }
-  };
-
-  const handleLogout = () => {
-    logout();
-    router.replace("/home");
   };
   
   const [fontsLoaded] = useFonts({
@@ -476,7 +467,7 @@ export default function DailyScreen() {
   const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
     snapshot: {
       title: "s'napshot",
-      body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today.\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.`,
+      body: `a real-time summary of your posture health. the bar shows how your spine health score averaged across your sessions today.\ntips below are personalised to your current posture patterns.\n\ngo into Desk Mode to see the data from each session.`,
       stats: [
         { label: "good alignment",  value: `${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%`,  color: "#6DC96D" },
         { label: "leaning forward", value: `${POSTURE_AVERAGES.leaningForward.toFixed(1)}%`, color: "#F5C842" },
@@ -488,20 +479,20 @@ export default function DailyScreen() {
     },
     session: {
       title: "s'ession",
-      body: "Total time tracked in active posture sessions today. Longer sessions unlock more duration points toward your s'core.",
+      body: "total time tracked in active posture sessions today. longer sessions unlock more duration points toward your s'core.",
     },
     score: {
       title: "s'core",
       body:
-        "Your overall daily posture score out of 100, made up of three parts:\n\n• Quality (up to 50 pts) — based on your average spine health score.\n• Showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• Streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
+        "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average spine health score.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
     },
     smove: {
       title: "s'move",
-      body: "Movement breaks completed vs. your daily target. Each s'move is a short guided stretch or walk break. Hitting your target helps offset the effects of prolonged sitting.",
+      body: "movement breaks completed vs. your daily target. each s'move is a short guided stretch or walk break. hitting your target helps offset the effects of prolonged sitting.",
     },
     steps: {
       title: "s'teps",
-      body: "Total steps taken today, synced from your device. Regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
+      body: "total steps taken today, synced from your device. regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
     },
   };
 
@@ -526,14 +517,7 @@ export default function DailyScreen() {
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Top bar */}
-        <HeaderBar
-          onSettingsPress={handleSettingsPress}
-          streakDays={streakDays ?? 0}
-          username={currentUser?.name ?? "you"}
-          onUsernameChange={handleUsernameChange}
-          onLogOut={() => handleLogout()}
-          weeklyPoints={weeklyAvgPoints ?? 0}
-        />
+        <HeaderBar />
 
         {/* Section label with back arrow */}
         <View style={styles.sectionRow}>

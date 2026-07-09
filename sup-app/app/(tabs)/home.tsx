@@ -25,7 +25,6 @@ import { usePostureInsight } from "../../src/hooks/usePostureInsight";
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 export default function HomeScreen() {
-  const { logout } = useAuth();
 
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../../assets/fonts/Agrandir-Regular.otf"),
@@ -48,8 +47,6 @@ export default function HomeScreen() {
   );
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [streakDays, setStreakDays] = useState<number | null>(null);
-  const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -65,8 +62,6 @@ export default function HomeScreen() {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(profile ? userProfileToUser(profile) : null);
-        setStreakDays(profile?.currentStreak ?? null);
-        setWeeklyAvgPoints(profile?.weeklyAvgPoints ?? null);
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
@@ -122,21 +117,17 @@ export default function HomeScreen() {
 
   const handleSaveProfile = async (updatedUser: User) => {
     setCurrentUser(updatedUser);
-    showToast("Profile glow-up saved", "success");
+    showToast("profile glow-up saved", "success");
   };
 
   const handleCoachingSetupComplete = () => {
     setShowCoachingSetupModal(false);
-    showToast("Coaching setup saved", "success");
+    showToast("coaching setup saved", "success");
   };
 
   const handleCoachingSetupSkip = () => {
     setShowCoachingSetupModal(false);
-    showToast("Using default coaching setup", "success");
-  };
-
-  const handleSettingsPress = () => {
-    router.push("/settings");
+    showToast("using default coaching setup", "success");
   };
 
   const handleUsernameChange = async (newName: string) => {
@@ -145,16 +136,11 @@ export default function HomeScreen() {
       if (updatedProfile) {
         setCurrentUser(userProfileToUser(updatedProfile));
       }
-      showToast("Username updated", "success");
+      showToast("username updated", "success");
     } catch (err) {
       console.error("[HomeScreen] Failed to update username", err);
-      showToast("Couldn't update username, try again", "error");
+      showToast("couldn't update username, try again", "error");
     }
-  };
-  
-  const handleLogout = () => {
-    logout();
-    router.replace("/home");
   };
 
   if (!fontsLoaded) {
@@ -167,14 +153,7 @@ export default function HomeScreen() {
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Wordmark + icons */}
-        <HeaderBar
-          onSettingsPress={handleSettingsPress}
-          streakDays={streakDays ?? 0}
-          username={currentUser?.name ?? "you"}
-          onUsernameChange={handleUsernameChange}
-          onLogOut={() => handleLogout()}
-          weeklyPoints={weeklyAvgPoints ?? 0}
-        />
+        <HeaderBar />
 
         <View style={styles.bubblesContainer}>
           {/* Greeting bubble */}
@@ -187,7 +166,7 @@ export default function HomeScreen() {
           {/* Status bubble */}
           <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
             <Text style={styles.bubbleHeadline}>
-              Your posture coach says:
+              s'kipper says:
             </Text>
             <Text style={styles.bubbleSubtext}>
               {isLoading

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,79 +11,121 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
- 
+import { useAuth } from "../../../src/contexts/AuthContext";
+import {
+  fetchCurrentUserProfileWithStats,
+  subscribeToProfileUpdates,
+  userProfileToUser,
+  updateCurrentUserProfile,
+} from "../../../src/services/user/profileService";
+import { useToast } from "../../../src/contexts/ToastContext";
+
 const PRIMARY_TEXT = "#1D014A";
 const DROPDOWN_BG = "#FFFFFF";
 const DIVIDER = "#CBCBF7";
 const STREAK_COLOUR = "#EC555E";
- 
-interface HeaderBarProps {
-  onSettingsPress?: () => void;
-  /** Number of consecutive active days; drives streak badge colour */
-  streakDays?: number;
-  /** Username shown in the profile dropdown */
-  username?: string;
-  /** Called with the new username when the user saves an edit */
-  onUsernameChange?: (newName: string) => void;
-  /** Called when the user taps Log Out */
-  onLogOut?: () => void;
-  /** Weekly points total shown in the dropdown */
-  weeklyPoints?: number;
-}
- 
-export default function HeaderBar({
-  onSettingsPress,
-  streakDays = 0,
-  username = "you",
-  onUsernameChange,
-  onLogOut,
-  weeklyPoints = 0,
-}: HeaderBarProps) {
-  const router = useRouter();
 
-  const streakActive = streakDays > 1;
-  const streakColor = streakActive ? STREAK_COLOUR : PRIMARY_TEXT;
- 
+interface HeaderBarProps {}
+
+export default function HeaderBar() {
+  const router = useRouter();
+  const { isAuthenticated, userId } = useAuth();
+  const { showToast } = useToast();
+  const { logout } = useAuth();
+
+  const [streakDays, setStreakDays] = useState(0);
+  const [weeklyPoints, setWeeklyPoints] = useState(0);
+  const [username, setUsername] = useState("you");
+
   // Profile dropdown
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const profileButtonRef = useRef<View>(null);
   const [dropdownY, setDropdownY] = useState(0);
   const [dropdownX, setDropdownX] = useState(0);
- 
+
   // Username edit modal
   const [editingUsername, setEditingUsername] = useState(false);
   const [draftName, setDraftName] = useState(username);
- 
+
+  // Load profile data
+  const loadProfile = () => {
+    fetchCurrentUserProfileWithStats()
+      .then((profile: any) => {
+        if (!profile) return;
+        setUsername(profile.name ?? "you");
+        setStreakDays(profile.currentStreak ?? 0);
+        setWeeklyPoints(profile.weeklyAvgPoints ?? 0);
+      })
+      .catch((err: any) => {
+        console.error("[HeaderBar] Failed to load profile", err);
+      });
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setUsername("you");
+      setStreakDays(0);
+      setWeeklyPoints(0);
+      return;
+    }
+    loadProfile();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      if (!userId || updatedProfile.id !== userId) return;
+      const user = userProfileToUser(updatedProfile);
+      setUsername(user.name ?? "you");
+    });
+    return unsubscribe;
+  }, [userId]);
+
+  const streakActive = streakDays > 1;
+  const streakColor = streakActive ? STREAK_COLOUR : PRIMARY_TEXT;
+
   const openDropdown = () => {
     profileButtonRef.current?.measure((_fx, _fy, _w, _h, px, py) => {
-      // Anchor dropdown below and right-aligned to the icon
       setDropdownX(px);
       setDropdownY(py + _h + 4);
       setDropdownVisible(true);
     });
   };
- 
+
   const closeDropdown = () => setDropdownVisible(false);
- 
+
   const handleEditUsername = () => {
     setDraftName(username);
     setEditingUsername(true);
     closeDropdown();
   };
- 
-  const handleSaveUsername = () => {
+
+  const handleSaveUsername = async () => {
     const trimmed = draftName.trim();
     if (trimmed.length === 0) {
       Alert.alert("Username can't be empty");
       return;
     }
-    onUsernameChange?.(trimmed);
+    try {
+      const updatedProfile = await updateCurrentUserProfile({ name: trimmed });
+      if (updatedProfile) {
+        setUsername(userProfileToUser(updatedProfile).name ?? trimmed);
+      }
+      showToast("username updated", "success");
+    } catch (err) {
+      console.error("[HeaderBar] Failed to update username", err);
+      showToast("couldn't update username, try again", "error");
+    }
     setEditingUsername(false);
   };
- 
+
   const handleLogOut = () => {
     closeDropdown();
-    onLogOut?.();
+    logout();
+    router.replace("/home");
+  };
+
+  const handleSettingsPress = () => {
+    router.push("/settings");
   };
  
   return (
@@ -97,7 +139,7 @@ export default function HeaderBar({
         {/* Icon row */}
         <View style={styles.headerButtons}>
 
-          <Pressable style={styles.iconButton} onPress={onSettingsPress}>
+          <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
             <Ionicons name="settings-outline" size={22} color={PRIMARY_TEXT} />
           </Pressable>
 
@@ -151,7 +193,7 @@ export default function HeaderBar({
  
                 {/* Weekly points */}
                 <View style={styles.dropdownRow}>
-                  <Text style={styles.dropdownLabel}>weekly points</Text>
+                  <Text style={styles.dropdownLabel}>average weekly points</Text>
                   <Text style={styles.dropdownPoints}>{weeklyPoints}</Text>
                 </View>
  
