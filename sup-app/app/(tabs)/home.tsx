@@ -20,10 +20,9 @@ import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupMod
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
+import { usePostureInsight } from "../../src/hooks/usePostureInsight";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-const weekly = 420 // TO PULL FROM SUPABASE
-const streak_days = 4;
 
 export default function HomeScreen() {
   const { logout } = useAuth();
@@ -49,14 +48,25 @@ export default function HomeScreen() {
   );
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [streakDays, setStreakDays] = useState<number | null>(null);
+  const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const { insight, isLoading, isError, fallback } = usePostureInsight({
+    uprightMinutes: 0,
+    slouchedMinutes: 0,
+    leanedLeftMinutes: 0,
+    leanedRightMinutes: 0,
+    totalTrackedMinutes: 0,
+  });
 
   const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(profile ? userProfileToUser(profile) : null);
+        setStreakDays(profile?.currentStreak ?? null);
+        setWeeklyAvgPoints(profile?.weeklyAvgPoints ?? null);
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
@@ -159,11 +169,11 @@ export default function HomeScreen() {
         {/* Wordmark + icons */}
         <HeaderBar
           onSettingsPress={handleSettingsPress}
-          streakDays={streak_days}
+          streakDays={streakDays ?? 0}
           username={currentUser?.name ?? "you"}
           onUsernameChange={handleUsernameChange}
-          onLogOut={() => handleLogout()} // or your signOut() call
-          weeklyPoints={weekly} // swap for real value when leaderboard is wired up
+          onLogOut={() => handleLogout()}
+          weeklyPoints={weeklyAvgPoints ?? 0}
         />
 
         <View style={styles.bubblesContainer}>
@@ -177,10 +187,14 @@ export default function HomeScreen() {
           {/* Status bubble */}
           <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
             <Text style={styles.bubbleHeadline}>
-              Time to get back{"\n"}in the routine.
+              Your posture coach says:
             </Text>
             <Text style={styles.bubbleSubtext}>
-              Wear your s'pots for 30 minutes to get your new plan.
+              {isLoading
+                ? "Give me a hot second..."
+                : isError
+                ? fallback
+                : insight}
             </Text>
           </View>
 
