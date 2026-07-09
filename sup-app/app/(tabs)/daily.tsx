@@ -28,117 +28,30 @@ import {
   userProfileToUser,
   updateCurrentUserProfile,
 } from "../../src/services/user/profileService";
+import {
+  fetchDailyPosturePair,
+  type DailyPosturePair,
+  type DailyPostureRow,
+} from "../../src/services/posture/postureSyncService";
 
-// Static data — swap these out when connecting to real data
-const avg_SHS_today = 72;            // 0–100 spine health score average
-const tracked_any_session_today = true;
-const totalTrackedMs_today = (7 * 60 + 21) * 60 * 1000; // 7 h 21 m
-const streak_days = 4;
-const weekly = 420 // TO PULL FROM SUPABASE
-const PREV_SCORE      = 63;
-// const PREV_STEPS      = 6620;
-const PREV_SMOVE      = 3;          // completed moves yesterday
-const PREV_SESSION_MS = (6 * 60 + 45) * 60 * 1000;
-// const STATIC_STEPS           = 4640;
-const STATIC_SMOVE_COMPLETED = 2;
-const STATIC_SMOVE_TOTAL     = 5;
+// CHECK IF S'MOVE IS CORRECT LOGIC 
+// AND REMOVE STEPS? THEN JUST GREATEST CHANGE WILL HAVE CHANGE BADGE? OR ALL METRICS WILL HV CHANGE BADGE?
+// AND ask theertha UPDATE FOR 2 CONSEC DAYS
+// check abt snapshot message if also ai driven
+// SNAPSHOT COMPONENTS
+// SUP SCORE VS AVG SCORE
+// HOW IS STREAK UPDATED? SHLD 1 STREAK BE ORANGE OR JUST PURPLE/GREY
+// IF PRVS DAY or CURR DAY is null then change badge shld just show arrow but no number? OR just hide the badge entirely?
 const STATIC_SNAPSHOT_MESSAGE_1 =
   "you have been leaning forward for too long, take a stretch break immediately";
 const STATIC_SNAPSHOT_MESSAGE_2 =
   "stand up before 3:30 pm to stay ahead of posture dips and missed walking breaks";
-const SESSION_DATA = {
-  session1: {
-    goodAlignment:   18,
-    leaningForward:   2,
-    spineRounding:    2,
-    highSpinalLoad:   5,
-    shiftingLeft:     2,
-    shiftingRight:   72,
-  },
-  session2: {
-    goodAlignment:   20,
-    leaningForward:   3,
-    spineRounding:    3,
-    highSpinalLoad:   4,
-    shiftingLeft:     3,
-    shiftingRight:   68,
-  },
-};
-
-// Derived values 
-const quality_score   = (avg_SHS_today / 100) * 50;
-const base_points     = tracked_any_session_today ? 15 : 0;
-const totalMins       = totalTrackedMs_today / 60000;
-const duration_points = totalMins >= 120 ? 15 : totalMins >= 60 ? 10 : totalMins >= 30 ? 5 : 0;
-const showing_up_score = base_points + duration_points;
-const streak_score    = Math.min(20, streak_days * 3);
-const SCORE           = Math.round(quality_score + showing_up_score + streak_score);
-
-const sessionHours   = Math.floor(totalTrackedMs_today / 3_600_000);
-const sessionMinutes = Math.floor((totalTrackedMs_today % 3_600_000) / 60_000);
-const prevSessionMins = PREV_SESSION_MS / 60000;
-
-const sessions = Object.values(SESSION_DATA);
-
-function rawAvg(key: keyof typeof SESSION_DATA.session1): number {
-  return sessions.reduce((sum, s) => sum + s[key], 0) / sessions.length;
-}
-const RAW_AVERAGES = {
-  goodAlignment:  rawAvg("goodAlignment"),   // 19
-  leaningForward: rawAvg("leaningForward"),  // 2.5
-  spineRounding:  rawAvg("spineRounding"),   // 2.5
-  highSpinalLoad: rawAvg("highSpinalLoad"),  // 4.5
-  shiftingLeft:   rawAvg("shiftingLeft"),    // 2.5
-  shiftingRight:  rawAvg("shiftingRight"),   // 70
-};
-
-// normalise average scores to out of 100%
-const RAW_TOTAL = Object.values(RAW_AVERAGES).reduce((sum, v) => sum + v, 0); // 101
-const POSTURE_AVERAGES = (
-  Object.fromEntries(
-    Object.entries(RAW_AVERAGES).map(([key, val]) => [
-      key,
-      (val / RAW_TOTAL) * 100,  // e.g. 19/101*100 ≈ 18.81
-    ])
-  )
-) as Record<keyof typeof RAW_AVERAGES, number>;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
+const TODAY_KEY = new Date().toISOString().split("T")[0]; // TO USE FOR PRODUCTION, CURRENTLY HARDCODED FOR TESTING
 
-const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
-  snapshot: {
-    title: "s'napshot",
-    body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today.\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.`,
-    stats: [
-      { label: "good alignment",  value: `${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%`,  color: "#6DC96D" },
-      { label: "leaning forward", value: `${POSTURE_AVERAGES.leaningForward.toFixed(1)}%`, color: "#F5C842" },
-      { label: "spine rounding",  value: `${POSTURE_AVERAGES.spineRounding.toFixed(1)}%`,  color: "#F5A623" },
-      { label: "high spinal load",value: `${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%`, color: "#E8706A" },
-      { label: "shifting left",   value: `${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%`,   color: "#F5A623" },
-      { label: "shifting right",  value: `${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,  color: "#F5A623" },
-    ],
-  },
-  session: {
-    title: "s'ession",
-    body: "Total time tracked in active posture sessions today. Longer sessions unlock more duration points toward your s'core.",
-  },
-  score: {
-    title: "s'core",
-    body:
-      "Your overall daily posture score out of 100, made up of three parts:\n\n• Quality (up to 50 pts) — based on your average spine health score.\n• Showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• Streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
-  },
-  smove: {
-    title: "s'move",
-    body: "Movement breaks completed vs. your daily target. Each s'move is a short guided stretch or walk break. Hitting your target helps offset the effects of prolonged sitting.",
-  },
-  steps: {
-    title: "s'teps",
-    body: "Total steps taken today, synced from your device. Regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
-  },
-};
-
-const SEGMENT_COLORS: Record<keyof typeof POSTURE_AVERAGES, string> = {
+const SEGMENT_COLORS: Record<string, string> = {
   goodAlignment:  "#6DC96D",  // green
   leaningForward: "#FFD600",  // yellow
   spineRounding:  "#F5A623",  // orange
@@ -147,15 +60,12 @@ const SEGMENT_COLORS: Record<keyof typeof POSTURE_AVERAGES, string> = {
   shiftingRight:  "#F5A623",  // orange
 };
 
-type Segment = { pct: number; color: string };
-
-function ScoreBar() {
-  const segments: Segment[] = (
-    Object.keys(POSTURE_AVERAGES) as Array<keyof typeof POSTURE_AVERAGES>
-  ).map((key) => ({
-    pct:   POSTURE_AVERAGES[key],
-    color: SEGMENT_COLORS[key],
-  }));
+function ScoreBar({ postureAverages }: { postureAverages: Record<string, number> }) {
+  const segments = Object.entries(postureAverages).map(([key, pct]) => ({
+      pct,
+      color: SEGMENT_COLORS[key] ?? "#ccc",
+    })
+  );
 
   return (
     <View style={[scoreBarStyles.track, scoreBarStyles.shadow]}>
@@ -254,12 +164,14 @@ const infoStyles = StyleSheet.create({
 function InfoModal({
   metricKey,
   onClose,
+  metricInfo
 }: {
   metricKey: string | null;
   onClose: () => void;
+  metricInfo?: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }>;
 }) {
   if (!metricKey) return null;
-  const info = METRIC_INFO[metricKey];
+  const info = metricInfo?.[metricKey];
   if (!info) return null;
 
   return (
@@ -395,11 +307,19 @@ export default function DailyScreen() {
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [streakDays, setStreakDays] = useState<number | null>(null);
+  const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
+
+  const TODAY_KEY = "2026-07-07"; // UPDATE TO CURRENT DATE LATER!
+  const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
+  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
 
   const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(profile ? userProfileToUser(profile) : null);
+        setStreakDays(profile?.currentStreak ?? null);
+        setWeeklyAvgPoints(profile?.weeklyAvgPoints ?? null);
       })
       .catch((err) => {
         console.error("[DailyScreen] Failed to load user profile", err);
@@ -432,51 +352,6 @@ export default function DailyScreen() {
     }, [isAuthenticated])
   );
   
-  const [fontsLoaded] = useFonts({
-    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
-  });
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [activeInfo, setActiveInfo] = useState<string | null>(null);
-  const { todaySteps, yesterdaySteps, isLoading } = useStepCount();
-
-  const STATIC_STEPS = todaySteps;
-  const PREV_STEPS   = yesterdaySteps;
-
-  // % changes per metric (computed here so they use live step data)
-  const scoreChange   = Math.round(((SCORE - PREV_SCORE)                  / PREV_SCORE)      * 100);
-  const stepsChange   = PREV_STEPS > 0
-    ? Math.round(((STATIC_STEPS - PREV_STEPS) / PREV_STEPS) * 100)
-    : 0;
-  const smoveChange   = Math.round(((STATIC_SMOVE_COMPLETED - PREV_SMOVE) / PREV_SMOVE)      * 100);
-  const sessionChange = Math.round(((totalMins - prevSessionMins)          / prevSessionMins) * 100);
-
-  // Pick the 2 metrics with the largest absolute % change
-  const allChanges: { key: string; value: number }[] = [
-    { key: "session", value: sessionChange },
-    { key: "score",   value: scoreChange   },
-    { key: "smove",   value: smoveChange   },
-    { key: "steps",   value: stepsChange   },
-  ];
-  const topTwoKeys = new Set(
-    [...allChanges]
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-      .slice(0, 2)
-      .map((c) => c.key)
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
-  );
-
   const handleSettingsPress = () => {
     router.push("/settings");
   };
@@ -498,6 +373,148 @@ export default function DailyScreen() {
     logout();
     router.replace("/home");
   };
+  
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
+  const loadDailyPosture = useCallback(() => {
+    if (!userId) return;
+    setIsLoadingDaily(true);
+    fetchDailyPosturePair(userId, TODAY_KEY)
+      .then(setDailyPair)
+      .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
+      .finally(() => setIsLoadingDaily(false));
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDailyPair({ today: null, previous: null });
+      return;
+    }
+    loadDailyPosture();
+  }, [isAuthenticated, loadDailyPosture]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) return;
+      loadDailyPosture();
+    }, [isAuthenticated, loadDailyPosture])
+  );
+
+  const { today, previous } = dailyPair;
+
+  // Current day
+  const totalDeskMs = today?.totalDeskMs ?? 0;
+  const sessionCount = today?.sessionCount ?? 0;
+  const interventionCount = today?.interventionCount ?? 0;
+  const supScore = today?.supScore ?? 0;
+  const stateTotals = today?.stateTotals ?? {};
+  const goodPostureMins = today?.goodPostureMinutes ?? 0;
+  const badPostureMins = today?.badPostureMinutes ?? 0;
+
+  // Previous day
+  const prevSupScore = previous?.supScore ?? 0;
+  const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
+  const prevInterventionCount = previous?.interventionCount ?? 0;
+
+  console.log("[DailyScreen] dailyPair", dailyPair);
+
+  const sessionHours = Math.floor(totalDeskMs / 3_600_000);
+  const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
+  const prevSessionMins = prevTotalDeskMs / 60000;
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [activeInfo, setActiveInfo] = useState<string | null>(null);
+  const { todaySteps, yesterdaySteps, isLoading } = useStepCount();
+  const STATIC_STEPS = todaySteps;
+  const PREV_STEPS   = yesterdaySteps;
+
+  // % changes per metric (computed here so they use live step data)
+  const scoreChange   = Math.round(((supScore - prevSupScore)                  / prevSupScore)      * 100);
+  const stepsChange   = PREV_STEPS > 0
+    ? Math.round(((STATIC_STEPS - PREV_STEPS) / PREV_STEPS) * 100)
+    : 0;
+  const smoveChange   = Math.round(((interventionCount - prevInterventionCount) / prevInterventionCount) * 100);
+  const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
+
+  // Pick the 2 metrics with the largest absolute % change
+  const allChanges: { key: string; value: number }[] = [
+    { key: "session", value: sessionChange },
+    { key: "score",   value: scoreChange   },
+    { key: "smove",   value: smoveChange   },
+    { key: "steps",   value: stepsChange   },
+  ];
+  const topTwoKeys = new Set(
+    [...allChanges]
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 2)
+      .map((c) => c.key)
+  );
+
+  // TO UPDATE
+  const STATE_TOTALS = {
+    goodAlignment: stateTotals.upright ?? 0,
+    leaningForward: stateTotals.forward_lean ?? 0,
+    spineRounding: stateTotals.severe ?? 0,
+    highSpinalLoad: stateTotals.severe ?? 0,
+    shiftingLeft: stateTotals.tilted_left ?? 0,
+    shiftingRight: stateTotals.tilted_right ?? 0,
+  };
+  // normalise scores to out of 100%
+  const TOTAL = Object.values(STATE_TOTALS).reduce((sum, v) => sum + v, 0);
+  const POSTURE_AVERAGES = (
+    Object.fromEntries(
+      Object.entries(STATE_TOTALS).map(([key, val]) => [
+        key,
+        (val / TOTAL) * 100,
+      ])
+    )
+  ) as Record<keyof typeof STATE_TOTALS, number>;
+
+  const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
+    snapshot: {
+      title: "s'napshot",
+      body: `A real-time summary of your posture health. The bar shows how your spine health score averaged across your sessions today.\nTips below are personalised to your current posture patterns.\n\nGo into Desk Mode to see the data from each session.`,
+      stats: [
+        { label: "good alignment",  value: `${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%`,  color: "#6DC96D" },
+        { label: "leaning forward", value: `${POSTURE_AVERAGES.leaningForward.toFixed(1)}%`, color: "#F5C842" },
+        { label: "spine rounding",  value: `${POSTURE_AVERAGES.spineRounding.toFixed(1)}%`,  color: "#F5A623" },
+        { label: "high spinal load",value: `${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%`, color: "#E8706A" },
+        { label: "shifting left",   value: `${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%`,   color: "#F5A623" },
+        { label: "shifting right",  value: `${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,  color: "#F5A623" },
+      ],
+    },
+    session: {
+      title: "s'ession",
+      body: "Total time tracked in active posture sessions today. Longer sessions unlock more duration points toward your s'core.",
+    },
+    score: {
+      title: "s'core",
+      body:
+        "Your overall daily posture score out of 100, made up of three parts:\n\n• Quality (up to 50 pts) — based on your average spine health score.\n• Showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• Streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
+    },
+    smove: {
+      title: "s'move",
+      body: "Movement breaks completed vs. your daily target. Each s'move is a short guided stretch or walk break. Hitting your target helps offset the effects of prolonged sitting.",
+    },
+    steps: {
+      title: "s'teps",
+      body: "Total steps taken today, synced from your device. Regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
+    },
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim])
+  );
 
   if (!fontsLoaded) return null;
 
@@ -505,17 +522,17 @@ export default function DailyScreen() {
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <InfoModal metricKey={activeInfo} onClose={() => setActiveInfo(null)} />
+      <InfoModal metricKey={activeInfo} onClose={() => setActiveInfo(null)} metricInfo={METRIC_INFO} />
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Top bar */}
         <HeaderBar
           onSettingsPress={handleSettingsPress}
-          streakDays={streak_days}
+          streakDays={streakDays ?? 0}
           username={currentUser?.name ?? "you"}
           onUsernameChange={handleUsernameChange}
-          onLogOut={() => handleLogout()} // or your signOut() call
-          weeklyPoints={weekly} // swap for real value when leaderboard is wired up
+          onLogOut={() => handleLogout()}
+          weeklyPoints={weeklyAvgPoints ?? 0}
         />
 
         {/* Section label with back arrow */}
@@ -530,7 +547,7 @@ export default function DailyScreen() {
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveInfo("snapshot")} />
           <Text style={styles.cardTitle}>s'napshot</Text>
-          <ScoreBar />
+          <ScoreBar postureAverages={POSTURE_AVERAGES} />
           <Text style={styles.snapshotMessage}>{STATIC_SNAPSHOT_MESSAGE_1}</Text>
           <Text style={[styles.snapshotMessage, { marginTop: 8 }]}>
             {STATIC_SNAPSHOT_MESSAGE_2}
@@ -554,7 +571,7 @@ export default function DailyScreen() {
             <InfoButton onPress={() => setActiveInfo("score")} />
             {topTwoKeys.has("score") && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
-            <Text style={styles.statValue}>{SCORE}</Text>
+            <Text style={styles.statValue}>{supScore}</Text>
           </View>
 
           {/* S'move */}
@@ -563,7 +580,7 @@ export default function DailyScreen() {
             {topTwoKeys.has("smove") && <ChangeBadge value={smoveChange} />}
             <Text style={styles.statLabel}>s'move</Text>
             <Text style={styles.statValue}>
-              {STATIC_SMOVE_COMPLETED}/{STATIC_SMOVE_TOTAL}
+              {interventionCount}/{sessionCount}
             </Text>
           </View>
 
