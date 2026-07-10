@@ -12,19 +12,24 @@ export default function Index() {
         const user = session?.user;
 
         if (!user) {
+          console.log("[index] no user → home");
           setDestination("/(tabs)/home");
           return;
         }
 
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("profiles")
           .select("onboarding")
           .eq("id", user.id)
           .single();
 
+        console.log("[index] onboarding value:", data?.onboarding, "error:", error?.message);
+
         if (!data?.onboarding) {
+          console.log("[index] → onboarding/intro");
           setDestination("/onboarding/intro");
         } else {
+          console.log("[index] → home");
           setDestination("/(tabs)/home");
         }
       } catch (e) {
