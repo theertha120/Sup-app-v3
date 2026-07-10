@@ -38,6 +38,9 @@ export default function RootLayout() {
 
             {/* Sensor setup */}
             <Stack.Screen name="sensor-setup" />
+
+            {/* Onboarding */}
+            <Stack.Screen name="onboarding" />
           </Stack>
 
           {/* Global auth modal */}
