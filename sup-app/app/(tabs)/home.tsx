@@ -16,6 +16,7 @@ import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
+import { supabase } from "../../src/lib/supabase";
 
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import { useSessionStats } from "../../src/hooks/useSessionStats";
@@ -76,6 +77,17 @@ export default function HomeScreen() {
       setIsLoadingProfile(true);
       return;
     }
+
+    supabase
+      .from("profiles")
+      .select("onboarding")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        if (!data?.onboarding) {
+          router.replace("/onboarding/intro" as any);
+        }
+      });
 
     loadProfile();
 

@@ -1,10 +1,21 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useEffect } from "react";
 import { Animated, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import BackgroundBlobs from "../(tabs)/backgroundBlobs";
+import { supabase } from "../../src/lib/supabase";
 
 export default function IntroScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) return;
+      supabase
+        .from("profiles")
+        .update({ onboarding: true })
+        .eq("id", session.user.id);
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

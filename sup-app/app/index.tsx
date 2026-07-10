@@ -8,7 +8,8 @@ export default function Index() {
   useEffect(() => {
     const check = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
           setDestination("/(tabs)/home");
@@ -21,12 +22,13 @@ export default function Index() {
           .eq("id", user.id)
           .single();
 
-        if (data?.onboarding === false) {
+        if (!data?.onboarding) {
           setDestination("/onboarding/intro");
         } else {
           setDestination("/(tabs)/home");
         }
-      } catch {
+      } catch (e) {
+        console.warn("[index] check failed:", e);
         setDestination("/(tabs)/home");
       }
     };
