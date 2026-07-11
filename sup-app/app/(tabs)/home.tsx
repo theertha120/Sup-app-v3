@@ -109,7 +109,7 @@ export default function HomeScreen() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -173,9 +173,11 @@ export default function HomeScreen() {
   const handleUsernameChange = async (newName: string) => {
     try {
       const updatedProfile = await updateCurrentUserProfile({ name: newName });
-      if (updatedProfile) {
-        setCurrentUser(userProfileToUser(updatedProfile));
-      }
+      setCurrentUser(prev =>
+        updatedProfile
+          ? userProfileToUser(updatedProfile)
+          : prev ? { ...prev, name: newName } : null
+      );
       showToast("username updated", "success");
     } catch (err) {
       console.error("[HomeScreen] Failed to update username", err);
