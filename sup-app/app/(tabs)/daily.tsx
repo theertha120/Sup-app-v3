@@ -34,14 +34,6 @@ import {
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 
-// CHECK IF S'MOVE IS CORRECT LOGIC 
-// AND REMOVE STEPS? THEN JUST GREATEST CHANGE WILL HAVE CHANGE BADGE? OR ALL METRICS WILL HV CHANGE BADGE?
-// AND ask theertha UPDATE FOR 2 CONSEC DAYS
-// check abt snapshot message if also ai driven
-// SNAPSHOT COMPONENTS
-// SUP SCORE VS AVG SCORE
-// HOW IS STREAK UPDATED? SHLD 1 STREAK BE ORANGE OR JUST PURPLE/GREY
-// IF PRVS DAY or CURR DAY is null then change badge shld just show arrow but no number? OR just hide the badge entirely?
 const STATIC_SNAPSHOT_MESSAGE_1 =
   "you have been leaning forward for too long, take a stretch break immediately";
 const STATIC_SNAPSHOT_MESSAGE_2 =
@@ -398,17 +390,12 @@ export default function DailyScreen() {
 
   // Current day
   const totalDeskMs = today?.totalDeskMs ?? 0;
-  const sessionCount = today?.sessionCount ?? 0;
-  const interventionCount = today?.interventionCount ?? 0;
   const supScore = today?.supScore ?? 0;
   const stateTotals = today?.stateTotals ?? {};
-  const goodPostureMins = today?.goodPostureMinutes ?? 0;
-  const badPostureMins = today?.badPostureMinutes ?? 0;
 
   // Previous day
   const prevSupScore = previous?.supScore ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
-  const prevInterventionCount = previous?.interventionCount ?? 0;
 
   console.log("[DailyScreen] dailyPair", dailyPair);
 
@@ -418,24 +405,15 @@ export default function DailyScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
-  const { todaySteps, yesterdaySteps, isLoading } = useStepCount();
-  const STATIC_STEPS = todaySteps;
-  const PREV_STEPS   = yesterdaySteps;
 
   // % changes per metric (computed here so they use live step data)
   const scoreChange   = Math.round(((supScore - prevSupScore)                  / prevSupScore)      * 100);
-  const stepsChange   = PREV_STEPS > 0
-    ? Math.round(((STATIC_STEPS - PREV_STEPS) / PREV_STEPS) * 100)
-    : 0;
-  const smoveChange   = Math.round(((interventionCount - prevInterventionCount) / prevInterventionCount) * 100);
   const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
 
   // Pick the 2 metrics with the largest absolute % change
   const allChanges: { key: string; value: number }[] = [
     { key: "session", value: sessionChange },
     { key: "score",   value: scoreChange   },
-    { key: "smove",   value: smoveChange   },
-    { key: "steps",   value: stepsChange   },
   ];
   const topTwoKeys = new Set(
     [...allChanges]
@@ -485,14 +463,6 @@ export default function DailyScreen() {
       title: "s'core",
       body:
         "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average spine health score.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
-    },
-    smove: {
-      title: "s'move",
-      body: "movement breaks completed vs. your daily target. each s'move is a short guided stretch or walk break. hitting your target helps offset the effects of prolonged sitting.",
-    },
-    steps: {
-      title: "s'teps",
-      body: "total steps taken today, synced from your device. regular movement throughout the day supports spinal decompression and reduces postural fatigue.",
     },
   };
 
@@ -556,26 +526,6 @@ export default function DailyScreen() {
             {topTwoKeys.has("score") && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
             <Text style={styles.statValue}>{supScore}</Text>
-          </View>
-
-          {/* S'move */}
-          <View style={[styles.card, styles.gridCell, styles.shadow]}>
-            <InfoButton onPress={() => setActiveInfo("smove")} />
-            {topTwoKeys.has("smove") && <ChangeBadge value={smoveChange} />}
-            <Text style={styles.statLabel}>s'move</Text>
-            <Text style={styles.statValue}>
-              {interventionCount}/{sessionCount}
-            </Text>
-          </View>
-
-          {/* S'teps */}
-          <View style={[styles.card, styles.gridCell, styles.shadow]}>
-            <InfoButton onPress={() => setActiveInfo("steps")} />
-            {topTwoKeys.has("steps") && <ChangeBadge value={stepsChange} />}
-            <Text style={styles.statLabel}>s'teps</Text>
-            <Text style={styles.statValue}>
-                {isLoading ? "—" : STATIC_STEPS.toLocaleString()}
-            </Text>
           </View>
         </View>
 
