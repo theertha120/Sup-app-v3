@@ -34,6 +34,7 @@ import {
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 import { usePostureInsight } from "@/src/hooks/usePostureInsight";
+import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 
 // 2. update the hardcoded date
 
@@ -309,8 +310,37 @@ export default function DailyScreen() {
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
   const [isLoadingDaily, setIsLoadingDaily] = useState(true);
 
-  const loadProfile = () => {
-    fetchCurrentUserProfileWithStats()
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [activeInfo, setActiveInfo] = useState<string | null>(null);
+
+  const loadDailyPosture = useCallback(async (background = false) => {
+    if (!userId) return;
+    if (!background) setIsLoadingDaily(true);
+ 
+    // show cached data immediately so UI and AI prompt unblock right away
+    const cached = await getCachedDailyPair(userId, TODAY_KEY);
+    if (cached) {
+      setDailyPair(cached);
+      setIsLoadingDaily(false);
+    }
+ 
+    // fetch fresh in background regardless
+    fetchDailyPosturePair(userId, TODAY_KEY)
+      .then((fresh) => {
+        setDailyPair(fresh);
+        setCachedDailyPair(userId, TODAY_KEY, fresh);
+      })
+      .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
+      .finally(() => setIsLoadingDaily(false));
+  }, [userId]);
+ 
+  const loadProfile = useCallback(() => {
+    return fetchCurrentUserProfileWithStats()
       .then((profile) => {
         setCurrentUser(profile ? userProfileToUser(profile) : null);
         setStreakDays(profile?.currentStreak ?? null);
@@ -320,15 +350,21 @@ export default function DailyScreen() {
         console.error("[DailyScreen] Failed to load user profile", err);
       })
       .finally(() => setIsLoadingProfile(false));
-  };
-
+  }, []);
+ 
+  // initial load: run all fetches in parallel
   useEffect(() => {
     if (!isAuthenticated) {
       setCurrentUser(null);
       setIsLoadingProfile(true);
+      setDailyPair({ today: null, previous: null });
       return;
     }
-    loadProfile();
+ 
+    Promise.all([
+      loadProfile(),
+      loadDailyPosture(),
+    ]);
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -344,7 +380,19 @@ export default function DailyScreen() {
     useCallback(() => {
       if (!isAuthenticated) return;
       loadProfile();
-    }, [isAuthenticated])
+      loadDailyPosture(true);
+    }, [isAuthenticated, loadProfile, loadDailyPosture])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim])
   );
 
   const handleUsernameChange = async (newName: string) => {
@@ -359,35 +407,6 @@ export default function DailyScreen() {
       showToast("Couldn't update username, try again", "error");
     }
   };
-  
-  const [fontsLoaded] = useFonts({
-    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
-  });
-
-  const loadDailyPosture = useCallback(() => {
-    if (!userId) return;
-    setIsLoadingDaily(true);
-    fetchDailyPosturePair(userId, TODAY_KEY)
-      .then(setDailyPair)
-      .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
-      .finally(() => setIsLoadingDaily(false));
-  }, [userId]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setDailyPair({ today: null, previous: null });
-      return;
-    }
-    loadDailyPosture();
-  }, [isAuthenticated, loadDailyPosture]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!isAuthenticated) return;
-      loadDailyPosture();
-    }, [isAuthenticated, loadDailyPosture])
-  );
 
   const { today, previous } = dailyPair;
 
@@ -405,9 +424,6 @@ export default function DailyScreen() {
   const sessionHours = Math.floor(totalDeskMs / 3_600_000);
   const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
   const prevSessionMins = prevTotalDeskMs / 60000;
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
   // % changes per metric (computed here so they use live step data)
   const scoreChange   = Math.round(((supScore - prevSupScore) / prevSupScore) * 100);
@@ -478,17 +494,6 @@ export default function DailyScreen() {
     totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
-  );
-
   if (!fontsLoaded) return null;
 
   return (
@@ -516,7 +521,7 @@ export default function DailyScreen() {
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
           <Text style={styles.snapshotMessage}>
             {isLoading
-              ? "give me a hot second..."
+              ? "pop on your s'pot today and give me a hot second..."
               : isError
               ? fallback
               : response}
