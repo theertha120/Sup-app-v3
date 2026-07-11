@@ -435,6 +435,14 @@ export default function DailyScreen() {
     )
   ) as Record<keyof typeof STATE_TOTALS, number>;
 
+  // after normalising, if any of the posture averages are NaN (due to TOTAL being 0), set them to 0
+  for (const key in POSTURE_AVERAGES) {
+    const postureKey = key as keyof typeof POSTURE_AVERAGES;
+    if (isNaN(POSTURE_AVERAGES[postureKey])) {
+      POSTURE_AVERAGES[postureKey] = 0;
+    }
+  }
+
   const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
     snapshot: {
       title: "s'napshot",
