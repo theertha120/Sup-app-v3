@@ -1,11 +1,16 @@
+export type PromptType = "daily" | "home";
+
 export interface PostureData {
-  uprightMinutes: number;
-  slouchedMinutes: number;
-  leanedLeftMinutes: number;
-  leanedRightMinutes: number;
-  totalTrackedMinutes: number;
+  uprightMinutesDaily: number;
+  forwardLeanMinutesDaily: number;
+  slouchedMinutesDaily: number;
+  severeMinutesDaily: number;
+  tiltedLeftMinutesDaily: number;
+  tiltedRightMinutesDaily: number;
+  supScoreDaily: number;
+  totalTrackedMinutesDaily: number;
 }
 
 export interface AIProvider {
-  getPostureInsight(data: PostureData): Promise<string>;
+  getPostureInsight(data: PostureData, promptType: PromptType): Promise<string>;
 }

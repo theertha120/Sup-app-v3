@@ -20,7 +20,12 @@ import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupMod
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import { usePostureInsight } from "../../src/hooks/usePostureInsight";
+import {
+  fetchDailyPosturePair,
+  type DailyPosturePair,
+  type DailyPostureRow,
+} from "../../src/services/posture/postureSyncService";
+import { usePostureInsight } from "@/src/hooks/usePostureInsight";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -34,6 +39,38 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
+
+  const TODAY_KEY = "2026-07-07"; // UPDATE TO CURRENT DATE LATER!
+  const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
+  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
+
+  const loadDailyPosture = useCallback(() => {
+    if (!userId) return;
+    setIsLoadingDaily(true);
+    fetchDailyPosturePair(userId, TODAY_KEY)
+      .then(setDailyPair)
+      .catch((err) => console.error("[HomeScreen] fetchDailyPosturePair failed", err))
+      .finally(() => setIsLoadingDaily(false));
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDailyPair({ today: null, previous: null });
+      return;
+    }
+    loadDailyPosture();
+  }, [isAuthenticated, loadDailyPosture]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) return;
+      loadDailyPosture();
+    }, [isAuthenticated, loadDailyPosture])
+  );
+
+  const { today } = dailyPair;
+  const stateTotals = today?.stateTotals ?? {};
+  console.log("[HomeScreen] stateTotals:", stateTotals);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,12 +87,17 @@ export default function HomeScreen() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const { insight, isLoading, isError, fallback } = usePostureInsight({
-    uprightMinutes: 0,
-    slouchedMinutes: 0,
-    leanedLeftMinutes: 0,
-    leanedRightMinutes: 0,
-    totalTrackedMinutes: 0,
+  const { response, isLoading, isError, fallback } = usePostureInsight({
+    promptType: "home",
+    isDataReady: !isLoadingDaily,
+    uprightMinutesDaily:      Math.round((stateTotals?.upright ?? 0) / 60000),
+    slouchedMinutesDaily:     Math.round((stateTotals?.slouched ?? 0) / 60000),
+    severeMinutesDaily:       Math.round((stateTotals?.severe ?? 0) / 60000),
+    forwardLeanMinutesDaily:  Math.round((stateTotals?.forward_lean ?? 0) / 60000),
+    tiltedLeftMinutesDaily:   Math.round((stateTotals?.tilted_left ?? 0) / 60000),
+    tiltedRightMinutesDaily:  Math.round((stateTotals?.tilted_right ?? 0) / 60000),
+    supScoreDaily:            today?.supScore ?? 0,
+    totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
   });
 
   const loadProfile = () => {
@@ -170,10 +212,10 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.bubbleSubtext}>
               {isLoading
-                ? "Give me a hot second..."
+                ? "pop on your s'pot today and give me a hot second..."
                 : isError
                 ? fallback
-                : insight}
+                : response}
             </Text>
           </View>
 

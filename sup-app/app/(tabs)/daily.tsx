@@ -33,10 +33,9 @@ import {
   type DailyPosturePair,
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
+import { usePostureInsight } from "@/src/hooks/usePostureInsight";
 
 // 2. update the hardcoded date
-// 5. snapshot ai message can look at today's state_totals and generate a message to give them tips on improving
-// 6. home ai message can give them today's target based on session_minutes, score with logic of score so that ai knows what it means, and state-totals
 
 const STATIC_SNAPSHOT_MESSAGE_1 =
   "you have been leaning forward for too long, take a stretch break immediately";
@@ -415,7 +414,6 @@ export default function DailyScreen() {
   const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
   const showBadges = today != null && previous != null;
 
-  // TO UPDATE
   const STATE_TOTALS = {
     upright: stateTotals.upright ?? 0,
     forward_lean: stateTotals.forward_lean ?? 0,
@@ -467,6 +465,19 @@ export default function DailyScreen() {
     },
   };
 
+  const { response, isLoading, isError, fallback } = usePostureInsight({
+    promptType: "daily",
+    isDataReady: !isLoadingDaily,
+    uprightMinutesDaily:      Math.round((stateTotals?.upright ?? 0) / 60000),
+    slouchedMinutesDaily:     Math.round((stateTotals?.slouched ?? 0) / 60000),
+    severeMinutesDaily:       Math.round((stateTotals?.severe ?? 0) / 60000),
+    forwardLeanMinutesDaily:  Math.round((stateTotals?.forward_lean ?? 0) / 60000),
+    tiltedLeftMinutesDaily:   Math.round((stateTotals?.tilted_left ?? 0) / 60000),
+    tiltedRightMinutesDaily:  Math.round((stateTotals?.tilted_right ?? 0) / 60000),
+    supScoreDaily:            today?.supScore ?? 0,
+    totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
+  });
+
   useFocusEffect(
     useCallback(() => {
       fadeAnim.setValue(0);
@@ -503,9 +514,12 @@ export default function DailyScreen() {
           <InfoButton onPress={() => setActiveInfo("snapshot")} />
           <Text style={styles.cardTitle}>s'napshot</Text>
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
-          <Text style={styles.snapshotMessage}>{STATIC_SNAPSHOT_MESSAGE_1}</Text>
-          <Text style={[styles.snapshotMessage, { marginTop: 8 }]}>
-            {STATIC_SNAPSHOT_MESSAGE_2}
+          <Text style={styles.snapshotMessage}>
+            {isLoading
+              ? "give me a hot second..."
+              : isError
+              ? fallback
+              : response}
           </Text>
         </View>
 
