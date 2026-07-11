@@ -34,14 +34,7 @@ import {
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 
-// change badge will appear for both score and session, regardless of magnitude of improvement
-// change badge does not show if current or previous day is null data pulled
 // 2. update the hardcoded date
-// 3. sup score shld be sup score (not avg score)
-// 4. snapshot components: theertha to update supabase logic for posture_daily state_totals and repopulate table
-// severe is highspinaload
-// upright is goodalignment
-// xxx is spinerounding
 // 5. snapshot ai message can look at today's state_totals and generate a message to give them tips on improving
 // 6. home ai message can give them today's target based on session_minutes, score with logic of score so that ai knows what it means, and state-totals
 
@@ -55,12 +48,12 @@ const PRIMARY_TEXT = "#1D014A";
 const TODAY_KEY = new Date().toISOString().split("T")[0]; // TO USE FOR PRODUCTION, CURRENTLY HARDCODED FOR TESTING
 
 const SEGMENT_COLORS: Record<string, string> = {
-  goodAlignment:  "#6DC96D",  // green
-  leaningForward: "#FFD600",  // yellow
-  spineRounding:  "#F5A623",  // orange
-  highSpinalLoad: "#EC555E",  // red
-  shiftingLeft:   "#F5A623",  // orange
-  shiftingRight:  "#F5A623",  // orange
+  upright:  "#6DC96D",
+  forward_lean: "#FFD600",
+  slouched:  "#F5A623",
+  severe: "#EC555E",
+  tilted_left:   "#F5A623",
+  tilted_right:  "#F5A623",
 };
 
 function ScoreBar({ postureAverages }: { postureAverages: Record<string, number> }) {
@@ -424,12 +417,12 @@ export default function DailyScreen() {
 
   // TO UPDATE
   const STATE_TOTALS = {
-    goodAlignment: stateTotals.upright ?? 0,
-    leaningForward: stateTotals.forward_lean ?? 0,
-    spineRounding: stateTotals.severe ?? 0,
-    highSpinalLoad: stateTotals.severe ?? 0,
-    shiftingLeft: stateTotals.tilted_left ?? 0,
-    shiftingRight: stateTotals.tilted_right ?? 0,
+    upright: stateTotals.upright ?? 0,
+    forward_lean: stateTotals.forward_lean ?? 0,
+    slouched: stateTotals.slouched ?? 0,
+    severe: stateTotals.severe ?? 0,
+    tilted_left: stateTotals.tilted_left ?? 0,
+    tilted_right: stateTotals.tilted_right ?? 0,
   };
   // normalise scores to out of 100%
   const TOTAL = Object.values(STATE_TOTALS).reduce((sum, v) => sum + v, 0);
@@ -447,12 +440,12 @@ export default function DailyScreen() {
       title: "s'napshot",
       body: `a real-time summary of your posture health. the bar shows how your spine health score averaged across your sessions today.\ntips below are personalised to your current posture patterns.\n\ngo into Desk Mode to see the data from each session.`,
       stats: [
-        { label: "good alignment",  value: `${POSTURE_AVERAGES.goodAlignment.toFixed(1)}%`,  color: "#6DC96D" },
-        { label: "leaning forward", value: `${POSTURE_AVERAGES.leaningForward.toFixed(1)}%`, color: "#F5C842" },
-        { label: "spine rounding",  value: `${POSTURE_AVERAGES.spineRounding.toFixed(1)}%`,  color: "#F5A623" },
-        { label: "high spinal load",value: `${POSTURE_AVERAGES.highSpinalLoad.toFixed(1)}%`, color: "#E8706A" },
-        { label: "shifting left",   value: `${POSTURE_AVERAGES.shiftingLeft.toFixed(1)}%`,   color: "#F5A623" },
-        { label: "shifting right",  value: `${POSTURE_AVERAGES.shiftingRight.toFixed(1)}%`,  color: "#F5A623" },
+        { label: "Upright",  value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,  color: "#6DC96D" },
+        { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
+        { label: "Slouched",  value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,  color: "#F5A623" },
+        { label: "Severe",value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`, color: "#E8706A" },
+        { label: "Tilted Left",   value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,   color: "#F5A623" },
+        { label: "Tilted Right",  value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`,  color: "#F5A623" },
       ],
     },
     session: {
