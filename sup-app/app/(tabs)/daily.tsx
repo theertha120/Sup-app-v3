@@ -34,6 +34,17 @@ import {
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 
+// change badge will appear for both score and session, regardless of magnitude of improvement
+// change badge does not show if current or previous day is null data pulled
+// 2. update the hardcoded date
+// 3. sup score shld be sup score (not avg score)
+// 4. snapshot components: theertha to update supabase logic for posture_daily state_totals and repopulate table
+// severe is highspinaload
+// upright is goodalignment
+// xxx is spinerounding
+// 5. snapshot ai message can look at today's state_totals and generate a message to give them tips on improving
+// 6. home ai message can give them today's target based on session_minutes, score with logic of score so that ai knows what it means, and state-totals
+
 const STATIC_SNAPSHOT_MESSAGE_1 =
   "you have been leaning forward for too long, take a stretch break immediately";
 const STATIC_SNAPSHOT_MESSAGE_2 =
@@ -407,20 +418,9 @@ export default function DailyScreen() {
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
   // % changes per metric (computed here so they use live step data)
-  const scoreChange   = Math.round(((supScore - prevSupScore)                  / prevSupScore)      * 100);
+  const scoreChange   = Math.round(((supScore - prevSupScore) / prevSupScore) * 100);
   const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
-
-  // Pick the 2 metrics with the largest absolute % change
-  const allChanges: { key: string; value: number }[] = [
-    { key: "session", value: sessionChange },
-    { key: "score",   value: scoreChange   },
-  ];
-  const topTwoKeys = new Set(
-    [...allChanges]
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-      .slice(0, 2)
-      .map((c) => c.key)
-  );
+  const showBadges = today != null && previous != null;
 
   // TO UPDATE
   const STATE_TOTALS = {
@@ -513,7 +513,7 @@ export default function DailyScreen() {
           {/* S'ession */}
           <View style={[styles.card, styles.gridCell, styles.shadow]}>
             <InfoButton onPress={() => setActiveInfo("session")} />
-            {topTwoKeys.has("session") && <ChangeBadge value={sessionChange} />}
+            {showBadges && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
             <Text style={styles.statValue}>
               {sessionHours}h {sessionMinutes}m
@@ -523,7 +523,7 @@ export default function DailyScreen() {
           {/* S'core */}
           <View style={[styles.card, styles.gridCell, styles.shadow]}>
             <InfoButton onPress={() => setActiveInfo("score")} />
-            {topTwoKeys.has("score") && <ChangeBadge value={scoreChange} />}
+            {showBadges && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
             <Text style={styles.statValue}>{supScore}</Text>
           </View>
