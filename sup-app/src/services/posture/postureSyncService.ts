@@ -19,6 +19,16 @@ export interface DailyRollupExtras {
 
 const STALE_SESSION_MS = 30 * 60 * 1000;
 
+const ALL_STATES: DeskPostureState[] = [
+  "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
+];
+
+function fillStateTotals(totals: StateTotals): Record<DeskPostureState, number> {
+  const filled = {} as Record<DeskPostureState, number>;
+  for (const state of ALL_STATES) filled[state] = totals[state] ?? 0;
+  return filled;
+}
+
 function toIso(ms: number): string {
   return new Date(ms).toISOString();
 }
@@ -95,7 +105,7 @@ export async function endSession(
         max_cpl: aggregates.maxCpl ?? null,
         avg_instant_score: aggregates.avgInstantScore ?? null,
         total_duration_ms: Math.round(aggregates.totalDurationMs),
-        state_totals: aggregates.stateTotals ?? null,
+        state_totals: aggregates.stateTotals ? fillStateTotals(aggregates.stateTotals) : null,
       })
       .eq("id", sessionId);
 
@@ -138,7 +148,7 @@ export async function upsertDailyRollup(
     const payload: Record<string, unknown> = {
       user_id: userId,
       date: dateKey,
-      state_totals: stateTotals,
+      state_totals: fillStateTotals(stateTotals),
       total_desk_ms: Math.round(totalDeskMs),
       updated_at: new Date().toISOString(),
       avg_score: Math.round(avgScore),
@@ -223,7 +233,7 @@ export async function rebuildDailyFromSessions(
     const { error: upsertError } = await supabase.from("posture_daily").upsert({
       user_id:              userId,
       date:                 dateKey,
-      state_totals:         stateTotals,
+      state_totals:         fillStateTotals(stateTotals),
       total_desk_ms:        Math.round(totalDeskMs),
       avg_score:            avgScore,
       avg_shs:              avgShs,
