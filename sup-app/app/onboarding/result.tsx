@@ -3,9 +3,25 @@ import { StyleSheet, View, Text, Image, ScrollView, TouchableOpacity } from "rea
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { computeOnboardingResult, ARCHETYPE_DISPLAY, type Archetype } from "./archetypeScoring";
+
+const ARCHETYPE_IMAGE: Record<Archetype, any> = {
+  Compiler:   require("../../assets/images/compiler.png"),
+  Autonomist: require("../../assets/images/autonomist.png"),
+  Strategist: require("../../assets/images/strategist.png"),
+  Ritualist:  require("../../assets/images/ritualist.png"),
+};
 
 export default function ResultScreen() {
   const router = useRouter();
+  const { answers } = useOnboarding();
+
+  const result = computeOnboardingResult(
+    answers.q1, answers.q2, answers.q3, answers.q4, answers.q5, answers.q6,
+  );
+  const display = ARCHETYPE_DISPLAY[result.archetype];
+
   return (
     <LinearGradient
       colors={["#AB99FA", "#ffffff"]}
@@ -15,37 +31,45 @@ export default function ResultScreen() {
     >
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          {/* Header */}
           <Text style={styles.header}>~~RESULTS~~</Text>
 
-          {/* Shrimp image with oval bg */}
           <View style={styles.imageContainer}>
             <Image
-              source={require("../../assets/images/shrimp.png")}
+              source={ARCHETYPE_IMAGE[result.archetype]}
               style={styles.shrimpImage}
               resizeMode="contain"
             />
           </View>
 
-          {/* Cluster name pill */}
           <View style={styles.clusterPill}>
-            <Text style={styles.clusterName}>the shrimp</Text>
+            <Text style={styles.clusterName}>{display.label}</Text>
           </View>
 
-          {/* Description */}
-          <Text style={styles.description}>
-            you can lock in for hours, but your body pays the price
-          </Text>
+          <Text style={styles.description}>{display.description}</Text>
 
-          {/* Stats row */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>s'pine age</Text>
-              <Text style={styles.statValue}>47?!</Text>
-              <Text style={styles.statSub}>this ain't it fam...</Text>
+              <Text style={styles.statValue}>{display.spineAge}</Text>
+              <Text style={styles.statSub}>{display.spineSub}</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statQuote}>"i'll take a break later..."</Text>
+              <Text style={styles.statQuote}>{display.quote}</Text>
+            </View>
+          </View>
+
+          <View style={styles.tagsRow}>
+            <View style={styles.tag}>
+              <Text style={styles.tagLabel}>chronotype</Text>
+              <Text style={styles.tagValue}>{result.chronotype}</Text>
+            </View>
+            <View style={styles.tag}>
+              <Text style={styles.tagLabel}>elasticity</Text>
+              <Text style={styles.tagValue}>{result.elasticity}</Text>
+            </View>
+            <View style={styles.tag}>
+              <Text style={styles.tagLabel}>interoception</Text>
+              <Text style={styles.tagValue}>{result.interoception}</Text>
             </View>
           </View>
         </View>
@@ -55,7 +79,13 @@ export default function ResultScreen() {
           onPress={async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-              await supabase.from("profiles").update({ onboarding: true }).eq("id", user.id);
+              await supabase.from("profiles").update({
+                onboarding: true,
+                archetype: result.archetype,
+                chronotype: result.chronotype,
+                interoception: result.interoception,
+                elasticity: result.elasticity,
+              }).eq("id", user.id);
             }
             router.replace("/" as any);
           }}
@@ -129,6 +159,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     width: "100%",
+    marginBottom: 12,
   },
   statCard: {
     flex: 1,
@@ -162,6 +193,32 @@ const styles = StyleSheet.create({
     color: "#2D1A6E",
     lineHeight: 22,
     fontStyle: "italic",
+    textAlign: "center",
+  },
+  tagsRow: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+    marginTop: 4,
+  },
+  tag: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: "center",
+  },
+  tagLabel: {
+    fontSize: 10,
+    color: "#888",
+    marginBottom: 3,
+    textAlign: "center",
+  },
+  tagValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5222AE",
     textAlign: "center",
   },
   downloadBtn: {
