@@ -12,6 +12,7 @@ interface OnboardingAnswers {
 
 interface OnboardingContextType {
   answers: OnboardingAnswers;
+  age: number;
   setHowHeard: (v: string) => void;
   setQ1: (v: string) => void;
   setQ2: (v: string) => void;
@@ -19,6 +20,7 @@ interface OnboardingContextType {
   setQ4: (v: string) => void;
   setQ5: (v: string) => void;
   setQ6: (v: string) => void;
+  setAge: (v: number) => void;
   reset: () => void;
 }
 
@@ -30,6 +32,7 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(undef
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [answers, setAnswers] = useState<OnboardingAnswers>(defaultAnswers);
+  const [age, setAge] = useState(27);
 
   const set = (field: keyof OnboardingAnswers) => (v: string) =>
     setAnswers((prev) => ({ ...prev, [field]: v }));
@@ -37,6 +40,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   return (
     <OnboardingContext.Provider value={{
       answers,
+      age,
       setHowHeard: set("howHeard"),
       setQ1: set("q1"),
       setQ2: set("q2"),
@@ -44,7 +48,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       setQ4: set("q4"),
       setQ5: set("q5"),
       setQ6: set("q6"),
-      reset: () => setAnswers(defaultAnswers),
+      setAge,
+      reset: () => { setAnswers(defaultAnswers); setAge(27); },
     }}>
       {children}
     </OnboardingContext.Provider>

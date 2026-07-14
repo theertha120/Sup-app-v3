@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, PanResponder } from "react-na
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
 
 const GENDERS = ["male", "female", "other"];
 
@@ -11,6 +12,7 @@ const MAX_AGE = 100;
 
 export default function FinalScreen() {
   const router = useRouter();
+  const { setAge: saveAgeToContext } = useOnboarding();
   const [gender, setGender] = useState("male");
   const [age, setAge] = useState(27);
   const [accepted, setAccepted] = useState(false);
@@ -99,6 +101,7 @@ export default function FinalScreen() {
         style={[styles.nextBtn, !accepted && styles.nextBtnDisabled]}
         onPress={async () => {
           if (!accepted) return;
+          saveAgeToContext(age);
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
             await supabase.from("profiles").update({ gender, age }).eq("id", user.id);

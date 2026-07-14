@@ -90,7 +90,8 @@ export function computeOnboardingResult(
 export interface ArchetypeDisplay {
   label: string;
   description: string;
-  spineAge: string;
+  spineAgeOffset: number;
+  spineAgeSuffix: string;
   spineSub: string;
   quote: string;
 }
@@ -99,28 +100,32 @@ export const ARCHETYPE_DISPLAY: Record<Archetype, ArchetypeDisplay> = {
   Compiler: {
     label: "the compiler",
     description: "you can lock in for hours, but your body pays the price",
-    spineAge: "47?!",
+    spineAgeOffset: 8,
+    spineAgeSuffix: "?!",
     spineSub: "this ain't it fam...",
     quote: '"i\'ll take a break later..."',
   },
   Autonomist: {
     label: "the autonomist",
     description: "you move on your own terms — your spine didn't get the memo",
-    spineAge: "39?",
+    spineAgeOffset: 5,
+    spineAgeSuffix: "?",
     spineSub: "could be better, could be worse",
     quote: '"i\'ll do it when it feels right"',
   },
   Strategist: {
     label: "the strategist",
     description: "you plan everything — now add your posture to the system",
-    spineAge: "36?",
+    spineAgeOffset: 3,
+    spineAgeSuffix: "?",
     spineSub: "solid, with room to optimise",
     quote: '"if it\'s not in the plan, it won\'t happen"',
   },
   Ritualist: {
     label: "the ritualist",
     description: "your habits run your life — time to add this one to the stack",
-    spineAge: "41?",
+    spineAgeOffset: 6,
+    spineAgeSuffix: "?!",
     spineSub: "consistent, just not consistently good",
     quote: '"same time, every day, no excuses"',
   },

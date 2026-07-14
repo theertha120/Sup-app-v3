@@ -15,7 +15,7 @@ const ARCHETYPE_IMAGE: Record<Archetype, any> = {
 
 export default function ResultScreen() {
   const router = useRouter();
-  const { answers } = useOnboarding();
+  const { answers, age } = useOnboarding();
 
   const result = computeOnboardingResult(
     answers.q1, answers.q2, answers.q3, answers.q4, answers.q5, answers.q6,
@@ -50,7 +50,7 @@ export default function ResultScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>s'pine age</Text>
-              <Text style={styles.statValue}>{display.spineAge}</Text>
+              <Text style={styles.statValue}>{age + display.spineAgeOffset}{display.spineAgeSuffix}</Text>
               <Text style={styles.statSub}>{display.spineSub}</Text>
             </View>
             <View style={styles.statCard}>
