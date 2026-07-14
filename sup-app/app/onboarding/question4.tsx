@@ -2,17 +2,20 @@ import React, { useState } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, TextInput } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
 
-const TOTAL_QUESTIONS = 7;
+const TOTAL_QUESTIONS = 6;
 const CURRENT_QUESTION = 4;
 
 export default function Question4Screen() {
   const router = useRouter();
+  const { setQ4 } = useOnboarding();
   const [selected, setSelected] = useState<string | null>(null);
   const [otherText, setOtherText] = useState("");
 
   const handleSelect = (key: string) => {
     setSelected(key);
+    setQ4(key);
     if (key !== "C") router.push("/onboarding/question5" as any);
   };
 

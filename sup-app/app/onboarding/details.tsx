@@ -2,14 +2,62 @@ import React, { useState } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, TextInput } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { supabase } from "@/src/lib/supabase";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
 
 export default function DetailsScreen() {
   const router = useRouter();
+  const { register } = useAuth();
+  const { answers } = useOnboarding();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
+
+  const isValid =
+    !!firstName.trim() &&
+    !!lastName.trim() &&
+    emailValid &&
+    !!password.trim() &&
+    !!confirmPassword.trim();
+
+  const handleNext = async () => {
+    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim()) return;
+    if (!emailValid) {
+      setError("please enter a valid email");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("passwords don't match");
+      return;
+    }
+    setError("");
+    const res = await register(email.trim(), password);
+    if (!res.success) {
+      setError(res.error || "registration failed");
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("profiles").update({
+        name: firstName.trim(),
+        last_name: lastName.trim(),
+        how_heard: answers.howHeard,
+        q1: answers.q1,
+        q2: answers.q2,
+        q3: answers.q3,
+        q4: answers.q4,
+        q5: answers.q5,
+        q6: answers.q6,
+      }).eq("id", user.id);
+    }
+    router.push("/onboarding/final" as any);
+  };
 
   return (
     <LinearGradient
@@ -44,12 +92,13 @@ export default function DetailsScreen() {
             autoCapitalize="words"
           />
 
-          <Text style={styles.fieldLabel}>username</Text>
+          <Text style={styles.fieldLabel}>email</Text>
           <TextInput
             style={styles.input}
-            value={username}
-            onChangeText={setUsername}
+            value={email}
+            onChangeText={setEmail}
             autoCapitalize="none"
+            keyboardType="email-address"
           />
 
           <Text style={styles.fieldLabel}>password</Text>
@@ -69,7 +118,12 @@ export default function DetailsScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.nextBtn} onPress={() => router.push("/onboarding/final" as any)}>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.nextBtn, !isValid && styles.nextBtnDisabled]}
+          onPress={handleNext}
+        >
           <Text style={styles.nextBtnText}>next</Text>
         </TouchableOpacity>
       </View>
@@ -154,6 +208,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#ffffff",
+    textAlign: "center",
+  },
+  nextBtnDisabled: {
+    backgroundColor: "#ccc",
+  },
+  errorText: {
+    color: "#c0392b",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 8,
     textAlign: "center",
   },
 });

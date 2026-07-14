@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, PanResponder } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { supabase } from "@/src/lib/supabase";
 
 const GENDERS = ["male", "female", "other"];
 
@@ -94,7 +95,17 @@ export default function FinalScreen() {
         <Text style={styles.privacyLink}>click here to read our privacy policy</Text>
       </View>
 
-      <TouchableOpacity style={styles.nextBtn} onPress={() => router.push("/onboarding/result" as any)}>
+      <TouchableOpacity
+        style={[styles.nextBtn, !accepted && styles.nextBtnDisabled]}
+        onPress={async () => {
+          if (!accepted) return;
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from("profiles").update({ gender, age }).eq("id", user.id);
+          }
+          router.push("/onboarding/result" as any);
+        }}
+      >
         <Text style={styles.nextBtnText}>next</Text>
       </TouchableOpacity>
     </LinearGradient>
@@ -264,5 +275,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ffffff",
     textAlign: "center",
+  },
+  nextBtnDisabled: {
+    backgroundColor: "#ccc",
   },
 });

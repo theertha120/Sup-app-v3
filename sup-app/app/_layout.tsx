@@ -4,6 +4,7 @@ import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
+import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 
 export default function RootLayout() {
   // Initialize reminder notifications
@@ -11,6 +12,7 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+      <OnboardingProvider>
       <ToastProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
@@ -47,6 +49,7 @@ export default function RootLayout() {
           <SignInModal />
         </IMUProvider>
       </ToastProvider>
+      </OnboardingProvider>
     </AuthProvider>
   );
 }

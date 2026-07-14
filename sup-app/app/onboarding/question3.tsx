@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
 
 const OPTIONS = [
   { key: "A", text: "Same time as always, I'll rearrange everything else around it." },
@@ -9,11 +10,12 @@ const OPTIONS = [
   { key: "C", text: "No reminder, I'll just do it whenever it feels right." },
   { key: "D", text: "I'll do the 2 minute version just to keep the streak alive." },
 ];
-const TOTAL_QUESTIONS = 7;
+const TOTAL_QUESTIONS = 6;
 const CURRENT_QUESTION = 3;
 
 export default function Question3Screen() {
   const router = useRouter();
+  const { setQ3 } = useOnboarding();
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
@@ -47,7 +49,7 @@ export default function Question3Screen() {
           <TouchableOpacity
             key={key}
             style={[styles.option, selected === key && styles.optionSelected]}
-            onPress={() => { setSelected(key); router.push("/onboarding/question4" as any); }}
+            onPress={() => { setSelected(key); setQ3(key); router.push("/onboarding/question4" as any); }}
           >
             <Text style={[styles.optionText, selected === key && styles.optionTextSelected]}>
               {key}) {text}

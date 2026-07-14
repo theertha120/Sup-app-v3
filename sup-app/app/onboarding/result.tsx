@@ -1,8 +1,11 @@
 import React from "react";
-import { StyleSheet, View, Text, Image, ScrollView, TouchableOpacity, Linking } from "react-native";
+import { StyleSheet, View, Text, Image, ScrollView, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { supabase } from "@/src/lib/supabase";
 
 export default function ResultScreen() {
+  const router = useRouter();
   return (
     <LinearGradient
       colors={["#AB99FA", "#ffffff"]}
@@ -49,9 +52,15 @@ export default function ResultScreen() {
 
         <TouchableOpacity
           style={styles.downloadBtn}
-          onPress={() => Linking.openURL("https://play.google.com/store/apps/details?id=com.supapp.app")}
+          onPress={async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from("profiles").update({ onboarding: true }).eq("id", user.id);
+            }
+            router.replace("/" as any);
+          }}
         >
-          <Text style={styles.downloadBtnText}>download the app now</Text>
+          <Text style={styles.downloadBtnText}>start your posture health journey</Text>
         </TouchableOpacity>
       </ScrollView>
     </LinearGradient>
