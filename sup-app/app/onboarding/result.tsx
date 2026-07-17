@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   shrimpImage: {
-    width: 120,
-    height: 100,
+    width: 200,
+    height: 180,
   },
   clusterPill: {
     backgroundColor: "#AB99FA",
