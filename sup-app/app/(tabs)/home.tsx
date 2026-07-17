@@ -30,6 +30,14 @@ import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/d
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
+// ─── Animation timing constants ──────────────────────────────────────────────
+const BUBBLE_POP_DURATION_MS   = 600;  // how long each bubble takes to pop in
+const GREETING_DELAY_MS        = 400;  // delay before greeting bubble starts
+const TYPEWRITER_CHAR_DELAY_MS = 150;   // delay between each typed character
+const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before status bubble
+const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function HomeScreen() {
 
   const [fontsLoaded] = useFonts({
@@ -49,18 +57,107 @@ export default function HomeScreen() {
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
+  // ─── Bubble entrance animations ────────────────────────────────────────────
+  const greetingBubbleAnim = useRef(new Animated.Value(0)).current;
+  const statusBubbleAnim   = useRef(new Animated.Value(0)).current;
+  const actionBubbleAnim   = useRef(new Animated.Value(0)).current;
+
+  // Typewriter state
+  const [typedName, setTypedName] = useState("");
+  const [nameFullyTyped, setNameFullyTyped] = useState(false);
+  const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sequenceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAnimatedRef = useRef(false);
+
+  const popIn = (anim: Animated.Value) =>
+    Animated.spring(anim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 9,
+    });
+
+  const runEntrySequence = useCallback((name: string) => {
+    // Reset
+    greetingBubbleAnim.setValue(0);
+    statusBubbleAnim.setValue(0);
+    actionBubbleAnim.setValue(0);
+    setTypedName("");
+    setNameFullyTyped(false);
+
+    // 1. Greeting bubble pops in
+    sequenceRef.current = setTimeout(() => {
+      popIn(greetingBubbleAnim).start(() => {
+
+        // 2. Type out the name character by character
+        const chars = name ? `${name}!` : "hey!";
+        let i = 0;
+        const typeNext = () => {
+          if (i <= chars.length) {
+            setTypedName(chars.slice(0, i));
+            i++;
+            typewriterRef.current = setTimeout(typeNext, TYPEWRITER_CHAR_DELAY_MS);
+          } else {
+            setNameFullyTyped(true);
+
+            // 3. Status bubble pops in after typewriter finishes
+            sequenceRef.current = setTimeout(() => {
+              popIn(statusBubbleAnim).start(() => {
+
+                // 4. Action bubble pops in after status bubble
+                sequenceRef.current = setTimeout(() => {
+                  popIn(actionBubbleAnim).start();
+                }, ACTION_BUBBLE_DELAY_MS);
+              });
+            }, STATUS_BUBBLE_DELAY_MS);
+          }
+        };
+        typeNext();
+      });
+    }, GREETING_DELAY_MS);
+  }, [greetingBubbleAnim, statusBubbleAnim, actionBubbleAnim]);
+
+  // ── Run sequence once on screen focus when profile is loaded ───────────────
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+
+      hasAnimatedRef.current = false;
+
+      return () => {
+        // clean up timers when leaving screen
+        if (typewriterRef.current) clearTimeout(typewriterRef.current);
+        if (sequenceRef.current)  clearTimeout(sequenceRef.current);
+      };
+    }, [fadeAnim])
+  );
+
+  // Trigger entry sequence once profile is known (could be null = no user)
+  useEffect(() => {
+    if (isLoadingProfile) return;
+    if (hasAnimatedRef.current) return;
+    hasAnimatedRef.current = true;
+
+    const name = currentUser?.name ?? "";
+    runEntrySequence(name);
+  }, [isLoadingProfile, currentUser, runEntrySequence]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const loadDailyPosture = useCallback(async (background = false) => {
     if (!userId) return;
     if (!background) setIsLoadingDaily(true);
 
-    // show cached data immediately
     const cached = await getCachedDailyPair(userId, TODAY_KEY);
     if (cached) {
       setDailyPair(cached);
-      setIsLoadingDaily(false); // unblock the AI prompt right away
+      setIsLoadingDaily(false);
     }
 
-    // fetch fresh in background
     fetchDailyPosturePair(userId, TODAY_KEY)
       .then((fresh) => {
         setDailyPair(fresh);
@@ -117,17 +214,6 @@ export default function HomeScreen() {
       loadProfile();
       loadDailyPosture(true);
     }, [isAuthenticated, loadProfile, loadDailyPosture])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
   );
 
   const { today } = dailyPair;
@@ -189,6 +275,25 @@ export default function HomeScreen() {
     return null;
   }
 
+  // Bubble animated styles
+  const bubbleAnimStyle = (anim: Animated.Value) => ({
+    opacity: anim,
+    transform: [
+      {
+        scale: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.85, 1],
+        }),
+      },
+      {
+        translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [12, 0],
+        }),
+      },
+    ],
+  });
+
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
@@ -199,14 +304,18 @@ export default function HomeScreen() {
 
         <View style={styles.bubblesContainer}>
           {/* Greeting bubble */}
-          <View style={[styles.bubble, styles.bubbleLeft, styles.shadow]}>
+          <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, bubbleAnimStyle(greetingBubbleAnim)]}>
             <Text style={styles.bubbleText}>
-              {currentUser?.name ? `${currentUser.name}!` : "hey!"}{"\n"}you're back :)
+              {nameFullyTyped
+                ? (currentUser?.name ? `${currentUser.name}!\nyou're back :)` : "hey!\nyou're back :)")
+                : (typedName
+                  ? `${typedName}\nyou're back :)`
+                  : "hey!\nyou're back :)")}
             </Text>
-          </View>
+          </Animated.View>
 
           {/* Status bubble */}
-          <View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow]}>
+          <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
             <Text style={styles.bubbleHeadline}>
               s'kipper says:
             </Text>
@@ -217,15 +326,17 @@ export default function HomeScreen() {
                 ? fallback
                 : response}
             </Text>
-          </View>
+          </Animated.View>
 
           {/* Action bubble — navigate to daily summary */}
-          <Pressable
-            style={[styles.bubble, styles.bubbleRight, styles.shadow]}
-            onPress={() => router.push("/daily")}
-          >
-            <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
-          </Pressable>
+          <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
+            <Pressable
+              style={[styles.bubble, styles.bubbleRight, styles.shadow]}
+              onPress={() => router.push("/daily")}
+            >
+              <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
+            </Pressable>
+          </Animated.View>
         </View>
       </ScrollView>
     </Animated.View>
