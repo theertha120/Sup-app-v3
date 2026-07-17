@@ -1,3 +1,4 @@
+import React from "react";
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/contexts/AuthContext";
 import { IMUProvider } from "@/src/contexts/IMUContext";

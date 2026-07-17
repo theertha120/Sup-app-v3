@@ -17,6 +17,26 @@ export interface DailyRollupExtras {
   interventionCountDelta?: number;
 }
 
+export interface DailyPostureRow {
+  avgScore: number | null;
+  goodPostureMinutes: number | null;
+  badPostureMinutes: number | null;
+  totalMinutes: number | null;
+  totalDeskMs: number | null;
+  sessionCount: number | null;
+  interventionCount: number | null;
+  avgShs: number | null;
+  minShs: number | null;
+  maxCpl: number | null;
+  supScore: number | null;
+  stateTotals: StateTotals | null;
+}
+
+export interface DailyPosturePair {
+  today: DailyPostureRow | null;
+  previous: DailyPostureRow | null;
+}
+
 const STALE_SESSION_MS = 30 * 60 * 1000;
 
 const ALL_STATES: DeskPostureState[] = [
@@ -259,7 +279,6 @@ export async function rebuildDailyFromSessions(
         .eq("user_id", userId)
         .eq("date", dateKey);
       console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
-      await updateWeeklyAvgPoints(userId);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -334,39 +353,104 @@ async function updateStreakAndActivity(userId: string): Promise<number> {
   }
 }
 
-/**
- * Averages sup_score from the last 7 days of posture_daily for this user
- * and writes the result to profiles.weekly_avg_points.
- * Called after sup_score is written for today's session.
- */
-async function updateWeeklyAvgPoints(userId: string): Promise<void> {
-  try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+const DAILY_COLUMNS = [
+  "date",
+  "avg_score",
+  "good_posture_minutes",
+  "bad_posture_minutes",
+  "total_minutes",
+  "total_desk_ms",
+  "session_count",
+  "intervention_count",
+  "avg_shs",
+  "min_shs",
+  "max_cpl",
+  "sup_score",
+  "state_totals",
+].join(", ");
 
-    const { data: rows, error } = await supabase
-      .from("posture_daily")
-      .select("sup_score")
-      .eq("user_id", userId)
-      .gte("date", sevenDaysAgo);
+function mapRowToDailyPostureRow(row: Record<string, unknown> | null): DailyPostureRow | null {
+  if (!row) return null;
 
-    if (error) { console.warn("[postureSync] updateWeeklyAvgPoints fetch failed", error); return; }
-    if (!rows?.length) return;
-
-    const scored = rows.filter((r) => r.sup_score != null);
-    if (!scored.length) return;
-
-    const avg = scored.reduce((sum, r) => sum + Number(r.sup_score), 0) / scored.length;
-    const weeklyAvgPoints = Math.round(avg);
-
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ weekly_avg_points: weeklyAvgPoints })
-      .eq("id", userId);
-
-    if (updateError) console.warn("[postureSync] updateWeeklyAvgPoints update failed", updateError);
-    else console.log(`[postureSync] weekly_avg_points=${weeklyAvgPoints} (from ${scored.length} days)`);
-  } catch (e) {
-    console.warn("[postureSync] updateWeeklyAvgPoints threw", e);
-  }
+  return {
+    avgScore: row.avg_score != null ? Number(row.avg_score) : null,
+    goodPostureMinutes: row.good_posture_minutes != null ? Number(row.good_posture_minutes) : null,
+    badPostureMinutes: row.bad_posture_minutes != null ? Number(row.bad_posture_minutes) : null,
+    totalMinutes: row.total_minutes != null ? Number(row.total_minutes) : null,
+    totalDeskMs: row.total_desk_ms != null ? Number(row.total_desk_ms) : null,
+    sessionCount: row.session_count != null ? Number(row.session_count) : null,
+    interventionCount: row.intervention_count != null ? Number(row.intervention_count) : null,
+    avgShs: row.avg_shs != null ? Number(row.avg_shs) : null,
+    minShs: row.min_shs != null ? Number(row.min_shs) : null,
+    maxCpl: row.max_cpl != null ? Number(row.max_cpl) : null,
+    supScore: row.sup_score != null ? Number(row.sup_score) : null,
+    stateTotals: isStateTotals(row.state_totals) ? row.state_totals : null,
+  };
 }
 
+function isStateTotals(value: unknown): value is StateTotals {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value as object).every((v) => v == null || typeof v === "number")
+  );
+}
+
+/**
+ * Fetches posture_daily rows for a given date and the day before it.
+ * Returns { today, previous } — either can be null if no row exists yet.
+ *
+ * @param userId  Auth user ID
+ * @param dateKey Target date in YYYY-MM-DD format (e.g. "2026-07-07")
+ */
+export async function fetchDailyPosturePair(
+  userId: string | null,
+  dateKey: string  // YYYY-MM-DD
+): Promise<DailyPosturePair> {
+  const empty: DailyPosturePair = { today: null, previous: null };
+
+  if (!userId) {
+    console.warn("[postureSync] fetchDailyPosturePair: no userId");
+    return empty;
+  }
+
+  // Derive the previous day
+  const targetDate = new Date(`${dateKey}T00:00:00.000Z`);
+  if (isNaN(targetDate.getTime())) {
+    console.warn("[postureSync] fetchDailyPosturePair: invalid dateKey", dateKey);
+    return empty;
+  }
+  const prevDate = new Date(targetDate);
+  prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+  const prevDateKey = prevDate.toISOString().slice(0, 10);
+
+  try {
+    const { data, error } = await supabase
+      .from("posture_daily")
+      .select(DAILY_COLUMNS)
+      .eq("user_id", userId)
+      .in("date", [dateKey, prevDateKey]);
+
+    // console.log("[postureSync] fetchDailyPosturePair query", { userId, dateKey, prevDateKey, data, error });
+
+    if (error) {
+      console.warn("[postureSync] fetchDailyPosturePair query failed", error);
+      return empty;
+    }
+
+    if (!data?.length) return empty;
+
+    const rows = data as unknown as Array<Record<string, unknown> & { date: string }>; //MIGHT BE PROBLEM
+    const todayRow = rows.find((r) => r.date === dateKey) ?? null;
+    const previousRow = rows.find((r) => r.date === prevDateKey) ?? null;
+
+    return {
+      today: mapRowToDailyPostureRow(todayRow),
+      previous: mapRowToDailyPostureRow(previousRow),
+    };
+  } catch (e) {
+    console.warn("[postureSync] fetchDailyPosturePair threw", e);
+    return empty;
+  }
+}
