@@ -412,7 +412,7 @@ export default function StatsScreen() {
   }, [weekDays]);
 
   const hasData = sessionStats != null && displayTotalMs > 0;
-  const hasHistoricalData = false; // historical/mock data removed
+  const hasHistoricalData = dateRange === "today" ? todayTotalMs > 0 : weekTotalMs > 0;
 
   const MIN_MS = 5 * 60_000; // 5 minutes in ms
   const hasEnoughData = sessionStats != null && displayTotalMs >= MIN_MS;

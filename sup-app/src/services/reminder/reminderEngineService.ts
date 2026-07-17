@@ -65,13 +65,13 @@ const FREQUENCY_CONFIG: Record<
   ReminderFrequency,
   { cooldown_minutes: number; max_per_day: number }
 > = {
-  light: { cooldown_minutes: 180, max_per_day: 3 },
-  medium: { cooldown_minutes: 90, max_per_day: 6 },
-  active: { cooldown_minutes: 1, max_per_day: 10 }, // FOR TESTING ONLY
+  light: { cooldown_minutes: 5, max_per_day: 3 },
+  medium: { cooldown_minutes: 5, max_per_day: 6 },
+  active: { cooldown_minutes: 5, max_per_day: 10 }, // FOR TESTING ONLY
   // active: { cooldown_minutes: 45, max_per_day: 10 }, // ORIGINAL ACTIVE SETTINGS
 };
 
-const GLOBAL_MIN_COOLDOWN_MINUTES = 1; // TO DO CHANGE BACK 15 MIN & MIN TO MAX
+const GLOBAL_MIN_COOLDOWN_MINUTES = 5; // TO DO CHANGE BACK 15 MIN & MIN TO MAX
 
 // RULE GROUP 3: PRIMARY GOAL -> REMINDER DISTRIBUTION
 // probability distribution of reminder types for each primary goal.
@@ -485,13 +485,17 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
   const userId = await getCurrentUserId();
   console.log("Generating reminder for user:", userId);
 
+  if (userId === "guest") {
+    return null;
+  }
+  
   try {
     // Fetch user profile
     const { data: profileData, error: profileError } = await supabase
       .from("user_profile")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profileData) {
       console.error("Failed to fetch user profile:", profileError);

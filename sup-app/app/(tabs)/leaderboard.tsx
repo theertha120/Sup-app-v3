@@ -410,7 +410,7 @@ export default function LeaderboardScreen() {
           onPress={() => setShowInfo(!showInfo)}
         >
           <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>Weekly Total Points</Text>
+            <Text style={styles.statLabel}>Weekly Average Points</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -433,7 +433,7 @@ export default function LeaderboardScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>📊</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Weekly Total Points:</Text> Sum of your daily average scores over the past week
+              <Text style={styles.infoBold}>Weekly Average Points:</Text> Average of your daily s'up scores over the past week
             </Text>
           </View>
         </View>

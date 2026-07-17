@@ -12,6 +12,9 @@
 import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
+import { useAuth } from "../contexts/AuthContext";
+import { useIMUContext } from "../contexts/IMUContext";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +87,8 @@ function totalMs(map: StateTimeMap): number {
 const TICK_MS = 5_000;
 
 export function useSessionStats(currentState: DeskPostureState | undefined) {
+  const { userId } = useAuth();
+  const { setSessionStateTotals } = useIMUContext();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
   const [weekDays,     setWeekDays]     = useState<DayData[]>([]);
@@ -94,7 +99,9 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   const lastTickRef        = useRef<number>(Date.now());
   const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
   const sessionRef         = useRef<StateTimeMap>({});
+  const userIdRef          = useRef<string | null>(userId);
 
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
 
   // ── Load persisted data on mount ──────────────────────────────────────────
@@ -165,6 +172,9 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
         JSON.stringify(todayLive)
       ).catch(() => {});
 
+      // Keep IMUContext's state totals ref in sync so endSession can write them
+      setSessionStateTotals(sessionRef.current);
+
       // Update weekDays — just patch today's entry
       setWeekDays((prev) =>
         prev.map((d) =>
@@ -185,7 +195,7 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   useEffect(() => {
     if (currentState === undefined) {
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
-      const todayDK    = new Date().toISOString().slice(0, 10);
+      const todayDK = new Date().toISOString().slice(0, 10);
       AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
