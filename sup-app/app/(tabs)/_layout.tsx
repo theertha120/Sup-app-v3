@@ -1,3 +1,4 @@
+import React from "react";
 import { Tabs } from "expo-router";
 import { colours } from "@/theme/colours";
 import { Ionicons } from "@expo/vector-icons";
