@@ -314,7 +314,7 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
+        "id, name, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
       )
       .eq("id", userId)
       .single();
@@ -326,13 +326,16 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
       console.warn("[profile] Failed to fetch profile with stats", error);
       return null;
     } else if (data) {
+      console.log("[profile] Fetched profile with stats:", data);
       const profile = mapRowToUserProfile(data as ProfileRow);
+      console.log("[profile] Mapped profile with stats:", profile);
       // If there's a locally stored supsona for this user, prefer it for avatar
       try {
         const local = await getLocalSupsona(userId);
         if (local != null) profile.avatar = local;
       } catch {}
       return profile;
+      console.log("[profile] Fetched profile with stats:", profile);
     }
   } catch (err) {
     console.warn("[profile] Supabase profile-with-stats fetch threw", err);
@@ -403,7 +406,7 @@ export async function updateCurrentUserProfile(
     .update(payload)
     .eq("id", userId)
     .select(
-      "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
+      "id, name, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
     )
     .single();
 
