@@ -7,6 +7,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   userId: string | null;
+  registrationMode: boolean;
+  startRegistration: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (
     email: string,
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [registrationMode, setRegistrationMode] = useState(false);
 
   // Listen for auth state changes so UI stays in sync
   useEffect(() => {
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session?.user);
       setUserId(session?.user?.id ?? null);
+      if (session?.user) setRegistrationMode(false);
     });
 
     return () => {
@@ -54,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listener?.subscription.unsubscribe();
     };
   }, []);
+
+  function startRegistration() {
+    setRegistrationMode(true);
+  }
 
   async function login(
     email: string,
@@ -164,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

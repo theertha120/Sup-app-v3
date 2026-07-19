@@ -10,17 +10,16 @@ import {
 import { useState, useEffect } from "react";
 import { colours } from "@/theme/colours";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useRouter } from "expo-router";
 
 export default function SignInModal() {
-  const { isAuthenticated, login, register } = useAuth();
+  const { isAuthenticated, registrationMode, startRegistration, login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // Clear fields when modal becomes visible (after logout)
   useEffect(() => {
     if (!isAuthenticated) {
       setEmail("");
@@ -33,10 +32,6 @@ export default function SignInModal() {
     return re.test(value.toLowerCase());
   }
 
-  function validatePassword(value: string): boolean {
-    return value.length >= 8;
-  }
-
   const handleSignIn = async () => {
     setEmailError(null);
     setPasswordError(null);
@@ -46,7 +41,7 @@ export default function SignInModal() {
       return;
     }
 
-    if (!validatePassword(password)) {
+    if (password.length < 8) {
       setPasswordError("Password must be at least 8 characters");
       return;
     }
@@ -54,32 +49,14 @@ export default function SignInModal() {
     const res = await login(email, password);
     if (!res.success) {
       Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please try again.");
-    }
-  };
-
-  const handleRegister = async () => {
-    setEmailError(null);
-    setPasswordError(null);
-
-    if (!validateEmail(email)) {
-      setEmailError("Please enter a valid email address");
-      return;
-    }
-
-    if (!validatePassword(password)) {
-      setPasswordError("Password must be at least 8 characters");
-      return;
-    }
-
-    const res = await register(email, password, name || undefined);
-    if (!res.success) {
-      Alert.alert("Registration Failed", res.error || "Could not create account. Try again.");
+    } else {
+      router.replace("/(tabs)/home" as any);
     }
   };
 
   return (
     <Modal
-      visible={!isAuthenticated}
+      visible={!isAuthenticated && !registrationMode}
       animationType="fade"
       transparent={true}
       statusBarTranslucent
@@ -102,19 +79,6 @@ export default function SignInModal() {
             />
             {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-            {isRegister && (
-              <>
-                <Text style={styles.label}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Your name"
-                  placeholderTextColor="#A0A0A0"
-                  value={name}
-                  onChangeText={setName}
-                />
-              </>
-            )}
-
             <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
@@ -124,23 +88,20 @@ export default function SignInModal() {
               onChangeText={setPassword}
               secureTextEntry
             />
-            {passwordError ? (
-              <Text style={[styles.errorText]}>{passwordError}</Text>
-            ) : null}
-            <Pressable
-              style={styles.button}
-              onPress={isRegister ? handleRegister : handleSignIn}
-            >
-              <Text style={styles.buttonText}>{isRegister ? "Register" : "Sign In"}</Text>
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+
+            <Pressable style={styles.button} onPress={handleSignIn}>
+              <Text style={styles.buttonText}>Sign In</Text>
             </Pressable>
 
             <Pressable
               style={[styles.button, styles.secondaryButton]}
-              onPress={() => setIsRegister((s) => !s)}
+              onPress={() => {
+                startRegistration();
+                router.replace("/onboarding/intro" as any);
+              }}
             >
-              <Text style={[styles.buttonText, styles.secondaryText]}>
-                {isRegister ? "Have an account? Sign In" : "Create account"}
-              </Text>
+              <Text style={[styles.buttonText, styles.secondaryText]}>Create account</Text>
             </Pressable>
           </View>
         </View>
