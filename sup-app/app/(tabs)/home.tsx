@@ -38,6 +38,8 @@ const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
 // ─────────────────────────────────────────────────────────────────────────────
 
+const TODAY_KEY = "2026-07-15";
+
 export default function HomeScreen() {
 
   const [fontsLoaded] = useFonts({
@@ -49,7 +51,6 @@ export default function HomeScreen() {
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
 
-  const TODAY_KEY = "2026-07-07"; // UPDATE TO CURRENT DATE LATER!
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
   const [isLoadingDaily, setIsLoadingDaily] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -316,7 +317,7 @@ export default function HomeScreen() {
 
           {/* Status bubble */}
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
-            <Text style={styles.bubbleHeadline}>
+            <Text style={styles.bubbleText}>
               s'kipper says:
             </Text>
             <Text style={styles.bubbleSubtext}>
