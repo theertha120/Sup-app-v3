@@ -2,18 +2,17 @@ import { Tabs } from "expo-router";
 import { colours } from "@/theme/colours";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
+import LiquidGlass from "@/src/components/ui/LiquidGlass";
 
 export default function TabsLayout() {
   return (
     <Tabs
+      tabBar={(props) => <LiquidGlass {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colours.primary,
         tabBarInactiveTintColor: "#9E9E9E",
-        tabBarStyle: {
-          borderTopColor: colours.border,
-        },
-        // Add smooth transition animation
+        tabBarStyle: { display: "none" },
         ...Platform.select({
           ios: {
             animation: "shift",
@@ -66,6 +65,10 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      {/* Hide non-tab files that Expo Router auto-discovers */}
+      <Tabs.Screen name="backgroundBlobs" options={{ href: null }} />
+      <Tabs.Screen name="daily" options={{ href: null }} />
     </Tabs>
   );
 }
