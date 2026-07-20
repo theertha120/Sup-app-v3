@@ -3,6 +3,7 @@ import { View, Pressable, Dimensions, StyleSheet } from "react-native";
 import { BlurView } from "expo-blur";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Animated, {
   useAnimatedStyle,
@@ -19,6 +20,7 @@ export default function LiquidGlass({
 }: BottomTabBarProps) {
   const activeIndex = state.index;
   const TAB_WIDTH = TAB_BAR_WIDTH / state.routes.length;
+  const { bottom: bottomInset } = useSafeAreaInsets();
 
   const animatedBubbleStyle = useAnimatedStyle(() => {
     return {
@@ -56,7 +58,7 @@ export default function LiquidGlass({
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { bottom: 25 + bottomInset }]}>
       <BlurView intensity={100} tint="light" style={styles.container}>
         <View style={styles.shine} />
         <View style={styles.shineBottom} />
