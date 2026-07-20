@@ -15,11 +15,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, Platform, Modal,
+  Pressable, Platform, Modal, Dimensions, Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
+import { useFonts } from "expo-font";
+import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
+import HeaderBar from "@/src/components/ui/HeaderBar";
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
 import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
@@ -61,15 +65,6 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
   tilted_right: { label: "shifting right",        icon: "arrow-forward-circle" },
 };
 
-const POSTURE_TIPS: Record<DeskPostureState, string> = {
-  upright:      "keep your feet flat, shoulders relaxed, and eyes level with the screen.",
-  transition:   "you're starting to drift. try a gentle chest lift to reset.",
-  forward_lean: "try moving your screen closer rather than leaning in.",
-  slouched:     "engage your core and roll your shoulders back and down.",
-  tilted_left:  "centre your weight evenly across both sit bones.",
-  tilted_right: "centre your weight evenly across both sit bones.",
-  severe:       "adjust your position now — even a small shift reduces disc pressure significantly.",
-};
 
 const STATE_ORDER: DeskPostureState[] = [
   "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
@@ -250,15 +245,32 @@ function MovementNudgeModal() {
 }
 
 export default function DeskScreen() {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
   // ── Use the global context — NOT a local hook ──────────────────────────────
   const {
     topSensor, bottomSensor,
-    posture, calibration, clinicalBaseline,
+    posture,
     bothConnected, timeInCurrentStateMs,
     sessionDurationMs, cpl,
     isNeutralCalibrated, shs,
     sessionStartTimeMs,
+    disconnectAll,
   } = useIMUContext();
+
+  const handleDisconnectAll = useCallback(() => {
+    if (!topSensor.state.connected && !bottomSensor.state.connected) return;
+    Alert.alert(
+      "disconnect both s'pots?",
+      "this will end the current session and disconnect both sensors. your saved pairings stay intact.",
+      [
+        { text: "cancel", style: "cancel" },
+        { text: "disconnect", style: "destructive", onPress: async () => { try { await disconnectAll(); } catch (e) { console.warn("[Desk] Failed to disconnect:", e); } } },
+      ]
+    );
+  }, [topSensor.state.connected, bottomSensor.state.connected, disconnectAll]);
 
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
   const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
@@ -307,35 +319,32 @@ export default function DeskScreen() {
 
   const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
+  if (!fontsLoaded) return null;
+
   return (
-    <SafeAreaView style={s.safe}>
+    <View style={s.safe}>
+      <Svg width={SCREEN_W} height={SCREEN_H} style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="d1" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%"   stopColor="rgba(179, 163, 225, 1)" stopOpacity="1" />
+            <Stop offset="100%" stopColor="rgba(179, 163, 225, 0)" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="d2" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%"   stopColor="rgba(163, 218, 225, 1)" stopOpacity="1" />
+            <Stop offset="100%" stopColor="rgba(163, 218, 225, 0)" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx={SCREEN_W * 0.05} cy={SCREEN_H * 0.05} rx={320} ry={320} fill="url(#d1)" />
+        <Ellipse cx={SCREEN_W * 0.95} cy={SCREEN_H * 0.95} rx={320} ry={320} fill="url(#d2)" />
+      </Svg>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
       {/*<InterventionModal />*/}
       {/*<MovementNudgeModal />*/}
 
-      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <HeaderBar suffix="it up" logoSize={28} />
 
-        {/* Header */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.headerTitle}>Desk Mode</Text>
-            <Text style={s.headerSub}>
-              {!bothConnected
-                ? "connect s'pots via s'pot setup"
-                : !isNeutralCalibrated
-                  ? "calibrate to start tracking"
-                  : "live posture analysis"}
-            </Text>
-          </View>
-          {/* Quick link to sensor setup */}
-          {!bothConnected && (
-            <Pressable style={s.setupLink} onPress={() => router.push("/sensor-setup")}>
-              <Ionicons name="hardware-chip-outline" size={16} color={colours.primary} />
-              <Text style={s.setupLinkText}>setup</Text>
-            </Pressable>
-          )}
-        </View>
-
+        <View style={s.container}>
         {/* Connection pills */}
         <View style={s.pillRow}>
           {(["top", "bottom"] as const).map((slot) => {
@@ -394,6 +403,18 @@ export default function DeskScreen() {
           </View>
         </View>
 
+        {/* Action buttons */}
+        {(topSensor.state.connected || bottomSensor.state.connected) && (
+          <View style={s.actionRow}>
+            <Pressable style={s.updateBtn} onPress={() => setShowCalibModal(true)}>
+              <Text style={s.updateBtnText}>s'update</Text>
+            </Pressable>
+            <Pressable style={s.disconnectBtn} onPress={handleDisconnectAll}>
+              <Text style={s.disconnectBtnText}>end s'ession</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Session stats — only when tracking */}
         {isTracking && (
           <SessionStatsRow
@@ -403,32 +424,6 @@ export default function DeskScreen() {
             cpl={cpl}
           />
         )}
-
-        {/* Calibrate button */}
-        {bothConnected && (
-          <Pressable style={s.calibrateBtn} onPress={() => setShowCalibModal(true)}>
-            <Ionicons name="sync-outline" size={16} color={colours.primary} />
-            <Text style={s.calibrateBtnText}>
-              {calibration.isComplete ? "re-calibrate posture"
-                : isNeutralCalibrated ? "continue calibration"
-                : "calibrate posture"}
-            </Text>
-            {calibration.isComplete && (
-              <View style={s.calibratedBadge}>
-                <Text style={s.calibratedBadgeText}>✓</Text>
-              </View>
-            )}
-          </Pressable>
-        )}
-
-        {/* Tip */}
-        <View style={s.tipCard}>
-          <View style={s.tipHeader}>
-            <Ionicons name="bulb-outline" size={16} color={colours.primary} />
-            <Text style={s.tipTitle}>tip</Text>
-          </View>
-          <Text style={s.tipText}>{POSTURE_TIPS[currentState]}</Text>
-        </View>
 
         {/* Session posture breakdown */}
         <SessionBreakdown
@@ -461,8 +456,9 @@ export default function DeskScreen() {
         )}
 
         <View style={{ height: 32 }} />
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -545,14 +541,8 @@ const mv = StyleSheet.create({
 // ── Screen styles ─────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe:      { flex: 1, backgroundColor: colours.background },
+  safe:      { flex: 1, backgroundColor: "#fff" },
   container: { paddingHorizontal: 20, paddingTop: 8, alignItems: "center" },
-
-  header:     { alignSelf: "stretch", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  headerTitle: { fontSize: 26, fontWeight: "700", color: colours.textPrimary },
-  headerSub:   { fontSize: 14, color: colours.textSecondary, marginTop: 2 },
-  setupLink:   { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
-  setupLinkText: { fontSize: 13, fontWeight: "600", color: colours.primary },
 
   pillRow: { alignSelf: "stretch", flexDirection: "row", gap: 8, marginBottom: 16 },
   pill:    { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 10 },
@@ -594,6 +584,14 @@ const s = StyleSheet.create({
   sensorDetailCard:  { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colours.border },
   sensorDetailTitle: { fontSize: 12, fontWeight: "700", color: colours.primary, marginBottom: 6 },
   sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18 },
+
+  actionRow:         { alignSelf: "stretch", flexDirection: "row", gap: 12, marginBottom: 24 },
+
+  updateBtn:         { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, backgroundColor: "#AB99FA" },
+  updateBtnText:     { fontSize: 15, fontWeight: "700", color: "#fff" },
+
+  disconnectBtn:     { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: "#D32F2F", backgroundColor: "#fff" },
+  disconnectBtnText: { fontSize: 15, fontWeight: "700", color: "#D32F2F" },
 });
 
 const dbg = StyleSheet.create({

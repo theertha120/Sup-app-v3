@@ -82,7 +82,7 @@ export default function SensorSetupScreen() {
     topSensor, bottomSensor,
     discoveredDevices, isScanning,
     calibration, clinicalBaseline,
-    scan, connect, disconnect, disconnectAll,
+    scan, connect, disconnect,
     bothConnected,
   } = useIMUContext();
 
@@ -170,28 +170,6 @@ export default function SensorSetupScreen() {
     );
   };
 
-  const handleDisconnectAll = useCallback(() => {
-    if (!topSensor.state.connected && !bottomSensor.state.connected) return;
-
-    Alert.alert(
-      "disconnect both s'pots?",
-      "this will end the current session and disconnect both sensors. your saved pairings stay intact.",
-      [
-        { text: "cancel", style: "cancel" },
-        {
-          text: "disconnect",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await disconnectAll();
-            } catch (e) {
-              console.warn("[Setup] Failed to disconnect all s'pots:", e);
-            }
-          },
-        },
-      ]
-    );
-  }, [bottomSensor.state.connected, disconnectAll, topSensor.state.connected]);
 
   // ── Auto-connect ──────────────────────────────────────────────────────────
 
@@ -354,13 +332,6 @@ export default function SensorSetupScreen() {
               : "connect both s'pots to start tracking"}
           </Text>
         </View>
-
-        {(topSensor.state.connected || bottomSensor.state.connected) && (
-          <Pressable style={styles.disconnectBtn} onPress={handleDisconnectAll}>
-            <Ionicons name="power-outline" size={18} color="#D32F2F" />
-            <Text style={styles.disconnectBtnText}>end session & disconnect</Text>
-          </Pressable>
-        )}
 
         {/* s'pot rows */}
         <View style={styles.card}>
