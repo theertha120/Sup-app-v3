@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, Platform, Modal, Dimensions, Alert,
+  Pressable, Platform, Modal, Dimensions, Alert, Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
@@ -295,6 +295,16 @@ export default function DeskScreen() {
   }, []);
 
   const [showCalibModal, setShowCalibModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateHistory, setUpdateHistory] = useState<{ text: string; time: Date }[]>([]);
+
+  const handleCloseUpdateModal = () => {
+    setUpdateHistory(prev => [{
+      text: "the last hour has been more consistent, but you are tilting forward. try taking a more neutral position...\n\naim to take 3 walking breaks and 1 stretch break within the next hour.",
+      time: new Date(),
+    }, ...prev]);
+    setShowUpdateModal(false);
+  };
 
   // use the throttled posture for the figure/label to avoid flicker
   const currentState   = (displayPosture?.state ?? posture?.state ?? "upright") as DeskPostureState;
@@ -338,6 +348,26 @@ export default function DeskScreen() {
         <Ellipse cx={SCREEN_W * 0.95} cy={SCREEN_H * 0.95} rx={320} ry={320} fill="url(#d2)" />
       </Svg>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
+
+      {/* s'update modal */}
+      <Modal visible={showUpdateModal} transparent animationType="fade" onRequestClose={handleCloseUpdateModal}>
+        <View style={su.overlay}>
+          <View style={su.card}>
+            <Pressable style={su.closeBtn} onPress={handleCloseUpdateModal}>
+              <Text style={su.closeText}>×</Text>
+            </Pressable>
+            <Text style={su.title}>s'update!</Text>
+            <Image source={require("../../assets/images/mascot.png")} style={su.mascot} resizeMode="contain" />
+            <Text style={su.body}>
+              the last hour has been more consistent, but you are tilting forward. try taking a more neutral position...
+            </Text>
+            <Text style={su.body}>
+              aim to take 3 walking breaks and 1 stretch break within the next hour.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/*<InterventionModal />*/}
       {/*<MovementNudgeModal />*/}
 
@@ -406,7 +436,7 @@ export default function DeskScreen() {
         {/* Action buttons */}
         {(topSensor.state.connected || bottomSensor.state.connected) && (
           <View style={s.actionRow}>
-            <Pressable style={s.updateBtn} onPress={() => setShowCalibModal(true)}>
+            <Pressable style={s.updateBtn} onPress={() => setShowUpdateModal(true)}>
               <Text style={s.updateBtnText}>s'update</Text>
             </Pressable>
             <Pressable style={s.disconnectBtn} onPress={handleDisconnectAll}>
@@ -455,7 +485,25 @@ export default function DeskScreen() {
           </View>
         )}
 
-        <View style={{ height: 32 }} />
+        {/* s'update history */}
+        {updateHistory.length > 0 && (
+          <View style={su.historySection}>
+            <Text style={su.historyHeading}>s<Text style={su.historyHeadingApostrophe}>'</Text>update history</Text>
+            {updateHistory.map((entry, i) => (
+              <View key={i} style={su.historyItem}>
+                <Image source={require("../../assets/images/mascot.png")} style={su.historyMascot} resizeMode="contain" />
+                <View style={su.historyBubble}>
+                  <Text style={su.historyText}>{entry.text}</Text>
+                  <Text style={su.historyTime}>
+                    today, {entry.time.getHours()}:{String(entry.time.getMinutes()).padStart(2, "0")}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={{ height: 120 }} />
         </View>
       </ScrollView>
     </View>
@@ -606,4 +654,45 @@ const dbg = StyleSheet.create({
     zIndex: 50,
   },
   line: { color: "#fff", fontSize: 11, fontWeight: "600" },
+});
+
+const su = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 28,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: "#F5C842",
+    padding: 24,
+    width: "100%",
+    alignItems: "center",
+  },
+  closeBtn: {
+    position: "absolute",
+    top: 12,
+    left: 14,
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeText:  { fontSize: 24, color: "#888", lineHeight: 28 },
+  title:      { fontSize: 22, fontWeight: "900", color: "#F5A623", marginBottom: 12 },
+  mascot:     { width: 260, height: 260, marginBottom: -36 },
+  body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12 },
+
+  historySection: { alignSelf: "stretch", marginTop: 24, marginBottom: 8 },
+  historyHeading: { fontSize: 28, fontFamily: "Agrandir-GrandHeavy", color: "#1D014A", marginBottom: 14 },
+  historyHeadingApostrophe: { fontFamily: "Arial" },
+  historyItem:    { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
+  historyMascot:  { width: 70, height: 70 },
+  historyBubble:  { flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  historyText:    { fontSize: 13, color: "#333", lineHeight: 19, marginBottom: 6 },
+  historyTime:    { fontSize: 11, color: "#AB99FA" },
 });
