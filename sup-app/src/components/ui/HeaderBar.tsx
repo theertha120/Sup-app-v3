@@ -25,9 +25,12 @@ const DROPDOWN_BG = "#FFFFFF";
 const DIVIDER = "#CBCBF7";
 const STREAK_COLOUR = "#EC555E";
 
-interface HeaderBarProps {}
+interface HeaderBarProps {
+  suffix?: string;
+  logoSize?: number;
+}
 
-export default function HeaderBar() {
+export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarProps) {
   const router = useRouter();
   const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
@@ -132,8 +135,8 @@ export default function HeaderBar() {
     <>
       <View style={styles.topBar}>
         {/* Wordmark */}
-        <Text style={styles.logo}>
-          s<Text style={styles.logoApostrophe}>'</Text>up
+        <Text style={[styles.logo, { fontSize: logoSize }]}>
+          s<Text style={styles.logoApostrophe}>'</Text>{suffix}
         </Text>
  
         {/* Icon row */}
