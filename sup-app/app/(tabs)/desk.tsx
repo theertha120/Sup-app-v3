@@ -32,6 +32,7 @@ import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
+import { aiProvider } from "../../src/services/ai";
 
 // ── Posture colour system ─────────────────────────────────────────────────────
 
@@ -69,6 +70,18 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
 const STATE_ORDER: DeskPostureState[] = [
   "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
 ];
+
+const INSIGHT_BORDER: Record<"green" | "yellow" | "red", string> = {
+  green:  "#4CAF50",
+  yellow: "#F5C842",
+  red:    "#EC555E",
+};
+
+const INSIGHT_MASCOT = {
+  green:  require("../../assets/images/green_mascot.png"),
+  yellow: require("../../assets/images/yellow_mascot.png"),
+  red:    require("../../assets/images/red_mascot.png"),
+};
 
 // ── Session stats row ─────────────────────────────────────────────────────────
 
@@ -296,14 +309,16 @@ export default function DeskScreen() {
 
   const [showCalibModal, setShowCalibModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateHistory, setUpdateHistory] = useState<{ text: string; time: Date }[]>([]);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateColor, setUpdateColor] = useState<"green" | "yellow" | "red">("yellow");
+  const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
+  const [updateHistory, setUpdateHistory] = useState<{ text: string; color: "green" | "yellow" | "red"; time: Date }[]>([]);
 
   const handleCloseUpdateModal = () => {
-    setUpdateHistory(prev => [{
-      text: "the last hour has been more consistent, but you are tilting forward. try taking a more neutral position...\n\naim to take 3 walking breaks and 1 stretch break within the next hour.",
-      time: new Date(),
-    }, ...prev]);
+    setUpdateHistory(prev => [{ text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() }, ...prev]);
     setShowUpdateModal(false);
+    setUpdateMessage(null);
+    setUpdateColor("yellow");
   };
 
   // use the throttled posture for the figure/label to avoid flicker
@@ -329,6 +344,32 @@ export default function DeskScreen() {
 
   const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
 
+  const blobColor = updateHistory.length > 0
+    ? INSIGHT_BORDER[updateHistory[0].color]
+    : "rgba(163, 218, 225, 1)";
+
+  const handleOpenUpdateModal = useCallback(async () => {
+    setUpdateMessage(null);
+    setIsLoadingUpdate(true);
+    setShowUpdateModal(true);
+    try {
+      const result = await aiProvider.getSessionInsight({
+        sessionDurationMs,
+        currentState,
+        timeInCurrentStateMs,
+        cpl,
+        sessionStats,
+      });
+      setUpdateMessage(result.message);
+      setUpdateColor(result.color);
+    } catch {
+      setUpdateMessage("couldn't reach s'kipper right now — try again in a moment!");
+      setUpdateColor("yellow");
+    } finally {
+      setIsLoadingUpdate(false);
+    }
+  }, [sessionDurationMs, currentState, timeInCurrentStateMs, cpl, sessionStats]);
+
   if (!fontsLoaded) return null;
 
   return (
@@ -340,8 +381,8 @@ export default function DeskScreen() {
             <Stop offset="100%" stopColor="rgba(179, 163, 225, 0)" stopOpacity="0" />
           </RadialGradient>
           <RadialGradient id="d2" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%"   stopColor="rgba(163, 218, 225, 1)" stopOpacity="1" />
-            <Stop offset="100%" stopColor="rgba(163, 218, 225, 0)" stopOpacity="0" />
+            <Stop offset="0%"   stopColor={blobColor} stopOpacity="1" />
+            <Stop offset="100%" stopColor={blobColor} stopOpacity="0" />
           </RadialGradient>
         </Defs>
         <Ellipse cx={SCREEN_W * 0.05} cy={SCREEN_H * 0.05} rx={320} ry={320} fill="url(#d1)" />
@@ -352,17 +393,16 @@ export default function DeskScreen() {
       {/* s'update modal */}
       <Modal visible={showUpdateModal} transparent animationType="fade" onRequestClose={handleCloseUpdateModal}>
         <View style={su.overlay}>
-          <View style={su.card}>
+          <View style={[su.card, { borderColor: INSIGHT_BORDER[updateColor] }]}>
             <Pressable style={su.closeBtn} onPress={handleCloseUpdateModal}>
               <Text style={su.closeText}>×</Text>
             </Pressable>
             <Text style={su.title}>s'update!</Text>
-            <Image source={require("../../assets/images/mascot.png")} style={su.mascot} resizeMode="contain" />
+            <Image source={INSIGHT_MASCOT[updateColor]} style={su.mascot} resizeMode="contain" />
             <Text style={su.body}>
-              the last hour has been more consistent, but you are tilting forward. try taking a more neutral position...
-            </Text>
-            <Text style={su.body}>
-              aim to take 3 walking breaks and 1 stretch break within the next hour.
+              {isLoadingUpdate
+                ? "s'kipper is thinking..."
+                : updateMessage ?? ""}
             </Text>
           </View>
         </View>
@@ -436,7 +476,7 @@ export default function DeskScreen() {
         {/* Action buttons */}
         {(topSensor.state.connected || bottomSensor.state.connected) && (
           <View style={s.actionRow}>
-            <Pressable style={s.updateBtn} onPress={() => setShowUpdateModal(true)}>
+            <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
               <Text style={s.updateBtnText}>s'update</Text>
             </Pressable>
             <Pressable style={s.disconnectBtn} onPress={handleDisconnectAll}>
@@ -491,8 +531,8 @@ export default function DeskScreen() {
             <Text style={su.historyHeading}>s<Text style={su.historyHeadingApostrophe}>'</Text>update history</Text>
             {updateHistory.map((entry, i) => (
               <View key={i} style={su.historyItem}>
-                <Image source={require("../../assets/images/mascot.png")} style={su.historyMascot} resizeMode="contain" />
-                <View style={su.historyBubble}>
+                <Image source={INSIGHT_MASCOT[entry.color]} style={su.historyMascot} resizeMode="contain" />
+                <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[entry.color] }]}>
                   <Text style={su.historyText}>{entry.text}</Text>
                   <Text style={su.historyTime}>
                     today, {entry.time.getHours()}:{String(entry.time.getMinutes()).padStart(2, "0")}
@@ -684,7 +724,7 @@ const su = StyleSheet.create({
   },
   closeText:  { fontSize: 24, color: "#888", lineHeight: 28 },
   title:      { fontSize: 22, fontWeight: "900", color: "#F5A623", marginBottom: 12 },
-  mascot:     { width: 260, height: 260, marginBottom: -36 },
+  mascot:     { width: 160, height: 160, marginBottom: 8 },
   body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12 },
 
   historySection: { alignSelf: "stretch", marginTop: 24, marginBottom: 8 },

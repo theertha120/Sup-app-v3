@@ -1,4 +1,4 @@
-import { AIProvider, PostureData, PromptType } from "./aiProvider";
+import { AIProvider, InsightColor, PostureData, PromptType, SessionInsightData, SessionInsightResult } from "./aiProvider";
 
 function buildPromptDaily(data: PostureData): string {
   return `
@@ -28,32 +28,85 @@ Keep the tone warm and motivating, not clinical. Be creative and highlight a rea
   `.trim();
 }
 
+function buildPromptSupdate(data: SessionInsightData): string {
+  const toMin = (ms: number) => Math.round((ms ?? 0) / 60000);
+  const cplLabel = data.cpl < 600 ? "low" : data.cpl < 1000 ? "building up" : "high";
+  const stateLabel: Record<string, string> = {
+    upright:      "good alignment",
+    transition:   "slight forward shift",
+    forward_lean: "forward lean",
+    slouched:     "slouched",
+    severe:       "severe slouch",
+    tilted_left:  "tilting left",
+    tilted_right: "tilting right",
+  };
+
+  const breakdown = Object.entries(data.sessionStats)
+    .filter(([, ms]) => (ms ?? 0) > 0)
+    .map(([state, ms]) => `  - ${stateLabel[state] ?? state}: ${toMin(ms!)} min`)
+    .join("\n");
+
+  return `
+You are s'kipper, the friendly posture coach in the s'up posture tracking app. The user has just asked for a mid-session update.
+
+Session data so far:
+- Total session time: ${toMin(data.sessionDurationMs)} minutes
+- Currently in: ${stateLabel[data.currentState] ?? data.currentState} for ${toMin(data.timeInCurrentStateMs)} minutes
+- Cumulative spinal load: ${data.cpl} (${cplLabel})
+- Session breakdown:
+${breakdown || "  - no posture data recorded yet"}
+
+Write a warm, conversational 2-3 sentence mid-session update. Comment on the most notable aspect of their session so far. Give one clear actionable suggestion they can act on right now. Lowercase only unless for proper nouns. No bullet points or headers.
+
+Rate the session color based strictly on the data — ignore the friendly tone of the message:
+- "green": upright time > 60% of session OR cpl < 400
+- "yellow": upright time 30–60% OR cpl 400–900 OR some slouching
+- "red": upright time < 30% OR cpl > 900 OR severe slouch present OR no data recorded
+
+Respond with ONLY a JSON object, no other text:
+{"color": "yellow", "message": "your message here"}
+  `.trim();
+}
+
 // To update if changing AI provider
 const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? "";
 
+async function callClaude(prompt: string): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5",
+      max_tokens: 200,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
+  const json = await response.json();
+  return json.content?.[0]?.text ?? "";
+}
+
 export const claudeProvider: AIProvider = {
   async getPostureInsight(data: PostureData, promptType: PromptType): Promise<string> {
-    const buildPrompt = promptType === "daily" ? buildPromptDaily(data) : buildPromptHome(data);
+    const prompt = promptType === "daily" ? buildPromptDaily(data) : buildPromptHome(data);
+    return callClaude(prompt);
+  },
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5",
-        max_tokens: 200,
-        messages: [{ role: "user", content: buildPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
+  async getSessionInsight(data: SessionInsightData): Promise<SessionInsightResult> {
+    const raw = await callClaude(buildPromptSupdate(data));
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[0] ?? raw);
+      const validColors: InsightColor[] = ["green", "yellow", "red"];
+      const color: InsightColor = validColors.includes(parsed.color) ? parsed.color : "yellow";
+      return { color, message: parsed.message ?? raw };
+    } catch {
+      return { color: "yellow", message: raw };
     }
-
-    const json = await response.json();
-    return json.content?.[0]?.text ?? "";
   },
 };
