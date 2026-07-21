@@ -1,8 +1,7 @@
 import React from "react";
-import { View, Pressable, Dimensions, StyleSheet } from "react-native";
+import { View, Pressable, Dimensions, StyleSheet, Image } from "react-native";
 import { BlurView } from "expo-blur";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Animated, {
@@ -38,23 +37,11 @@ export default function LiquidGlass({
     };
   });
 
-  const getIcon = (routeName: string) => {
-    switch (routeName) {
-      case "home":
-        return "home-outline";
-
-      case "stats":
-        return "bar-chart-outline";
-    
-      case "leaderboard":
-        return "trophy-outline";
-
-      case "desk":
-        return "desktop-outline";
-
-      default:
-        return "ellipse";
-    }
+  const NAV_IMAGES: Record<string, any> = {
+    home:        require("../../../assets/images/nav_home.png"),
+    stats:       require("../../../assets/images/nav_stats.png"),
+    leaderboard: require("../../../assets/images/nav_community.png"),
+    desk:        require("../../../assets/images/nav_desk.png"),
   };
 
   return (
@@ -97,10 +84,10 @@ export default function LiquidGlass({
               style={styles.tab}
             >
               <Animated.View style={scaleStyle}>
-                <Ionicons
-                  name={getIcon(route.name)}
-                  size={24}
-                  color={isFocused ? "#111" : "#888"}
+                <Image
+                  source={NAV_IMAGES[route.name]}
+                  style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
+                  resizeMode="contain"
                 />
               </Animated.View>
             </Pressable>
