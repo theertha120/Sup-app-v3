@@ -260,6 +260,7 @@ function MovementNudgeModal() {
 export default function DeskScreen() {
   const [fontsLoaded] = useFonts({
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
   });
 
   // ── Use the global context — NOT a local hook ──────────────────────────────
@@ -560,16 +561,16 @@ const ss = StyleSheet.create({
   },
   timeRow:     { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   timeBlock:   { flex: 1, alignItems: "center" },
-  timeValue:   { fontSize: 22, fontWeight: "800", color: colours.textPrimary },
-  timeLabel:   { fontSize: 11, color: colours.textSecondary, marginTop: 2 },
+  timeValue:   { fontSize: 22, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
+  timeLabel:   { fontSize: 11, color: colours.textSecondary, marginTop: 2, fontFamily: "Agrandir-Regular" },
   timeDivider: { width: 1, height: 36, backgroundColor: "#E0E0E0" },
   cplSection:  { gap: 6 },
   cplHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cplLabel:    { fontSize: 12, color: colours.textSecondary },
-  cplValue:    { fontSize: 12, fontWeight: "700" },
+  cplLabel:    { fontSize: 12, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
+  cplValue:    { fontSize: 12, fontFamily: "Agrandir-Regular" },
   cplBarBg:    { height: 8, backgroundColor: "#F0F0F0", borderRadius: 4, overflow: "hidden" },
   cplBarFill:  { height: 8, borderRadius: 4 },
-  cplHint:     { fontSize: 11, color: "#bbb" },
+  cplHint:     { fontSize: 11, color: "#bbb", fontFamily: "Agrandir-Regular" },
 });
 
 // ── Session breakdown styles ──────────────────────────────────────────────────
@@ -581,15 +582,15 @@ const sb = StyleSheet.create({
     ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
   },
   header:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  title:     { fontSize: 15, fontWeight: "700", color: colours.textPrimary },
-  goodPct:   { fontSize: 15, fontWeight: "800" },
+  title:     { fontSize: 15, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
+  goodPct:   { fontSize: 15, fontFamily: "Agrandir-Regular" },
   stackedBar:{ height: 10, borderRadius: 5, overflow: "hidden", flexDirection: "row", marginBottom: 14, backgroundColor: "#F0F0F0" },
   rows:      { gap: 10 },
   row:       { flexDirection: "row", alignItems: "center", gap: 8 },
   dot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  stateLabel:{ flex: 1, fontSize: 13, color: colours.textPrimary },
-  statePct:  { fontSize: 13, fontWeight: "700", minWidth: 36, textAlign: "right" },
-  stateTime: { fontSize: 12, color: colours.textSecondary, minWidth: 40, textAlign: "right" },
+  stateLabel:{ flex: 1, fontSize: 13, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
+  statePct:  { fontSize: 13, minWidth: 36, textAlign: "right", fontFamily: "Agrandir-Regular" },
+  stateTime: { fontSize: 12, color: colours.textSecondary, minWidth: 40, textAlign: "right", fontFamily: "Agrandir-Regular" },
 });
 
 // ── Intervention modal styles ─────────────────────────────────────────────────
@@ -599,16 +600,16 @@ const iv = StyleSheet.create({
   sheet:     { backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 44 },
   iconRow:   { alignItems: "center", marginBottom: 16 },
   iconBg:    { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F0EDFF", alignItems: "center", justifyContent: "center" },
-  title:     { fontSize: 18, fontWeight: "700", color: colours.textPrimary, marginBottom: 12, textAlign: "center" },
-  body:      { fontSize: 13, color: colours.textSecondary, lineHeight: 20, marginBottom: 16, textAlign: "center" },
+  title:     { fontSize: 18, color: colours.textPrimary, marginBottom: 12, textAlign: "center", fontFamily: "Agrandir-Regular" },
+  body:      { fontSize: 13, color: colours.textSecondary, lineHeight: 20, marginBottom: 16, textAlign: "center", fontFamily: "Agrandir-Regular" },
   cueCard:   { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#F5F3FF", borderRadius: 12, padding: 14, marginBottom: 20 },
-  cueText:   { fontSize: 13, color: colours.primary, flex: 1, lineHeight: 19, fontWeight: "500" },
-  question:  { fontSize: 14, fontWeight: "600", color: colours.textPrimary, textAlign: "center", marginBottom: 14 },
+  cueText:   { fontSize: 13, color: colours.primary, flex: 1, lineHeight: 19, fontFamily: "Agrandir-Regular" },
+  question:  { fontSize: 14, color: colours.textPrimary, textAlign: "center", marginBottom: 14, fontFamily: "Agrandir-Regular" },
   buttonRow: { flexDirection: "row", gap: 10 },
   notYetBtn: { flex: 1, paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center" },
-  notYetText:{ fontSize: 14, fontWeight: "600", color: colours.textSecondary },
+  notYetText:{ fontSize: 14, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
   movedBtn:  { flex: 2, paddingVertical: 14, borderRadius: 30, backgroundColor: "#4CAF50", alignItems: "center" },
-  movedText: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  movedText: { fontSize: 14, color: "#fff", fontFamily: "Agrandir-Regular" },
 });
 
 // ── Movement nudge styles ─────────────────────────────────────────────────────
@@ -617,13 +618,13 @@ const mv = StyleSheet.create({
   overlay:  { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center", padding: 24 },
   card:     { backgroundColor: "#fff", borderRadius: 24, padding: 24, width: "100%", alignItems: "center" },
   emoji:    { fontSize: 40, marginBottom: 12 },
-  title:    { fontSize: 20, fontWeight: "700", color: colours.textPrimary, marginBottom: 10 },
-  body:     { fontSize: 13, color: colours.textSecondary, textAlign: "center", lineHeight: 19, marginBottom: 12 },
-  cue:      { fontSize: 13, fontWeight: "500", color: colours.primary, textAlign: "center", marginBottom: 20 },
+  title:    { fontSize: 20, color: colours.textPrimary, marginBottom: 10, fontFamily: "Agrandir-Regular" },
+  body:     { fontSize: 13, color: colours.textSecondary, textAlign: "center", lineHeight: 19, marginBottom: 12, fontFamily: "Agrandir-Regular" },
+  cue:      { fontSize: 13, color: colours.primary, textAlign: "center", marginBottom: 20, fontFamily: "Agrandir-Regular" },
   btn:      { backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, paddingHorizontal: 32, marginBottom: 10 },
-  btnText:  { fontSize: 14, fontWeight: "700", color: "#fff" },
+  btnText:  { fontSize: 14, color: "#fff", fontFamily: "Agrandir-Regular" },
   skipBtn:  { paddingVertical: 8 },
-  skipText: { fontSize: 13, color: colours.textSecondary },
+  skipText: { fontSize: 13, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 });
 
 // ── Screen styles ─────────────────────────────────────────────────────────────
@@ -635,11 +636,11 @@ const s = StyleSheet.create({
   pillRow: { alignSelf: "stretch", flexDirection: "row", gap: 8, marginBottom: 16 },
   pill:    { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 10 },
   pillDot: { width: 7, height: 7, borderRadius: 4 },
-  pillText:{ fontSize: 12, fontWeight: "600" },
+  pillText:{ fontSize: 12, fontFamily: "Agrandir-Regular" },
 
   calibrateBanner:      { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF3E0", borderRadius: 14, padding: 14, marginBottom: 14 },
-  calibrateBannerTitle: { fontSize: 13, fontWeight: "700", color: "#E65100" },
-  calibrateBannerSub:   { fontSize: 12, color: "#BF360C", marginTop: 2, lineHeight: 17 },
+  calibrateBannerTitle: { fontSize: 13, color: "#E65100", fontFamily: "Agrandir-Regular" },
+  calibrateBannerSub:   { fontSize: 12, color: "#BF360C", marginTop: 2, lineHeight: 17, fontFamily: "Agrandir-Regular" },
 
   figureCard: {
     backgroundColor: "#fff", borderRadius: 20, alignSelf: "stretch",
@@ -647,10 +648,10 @@ const s = StyleSheet.create({
     ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
   },
   stateLabelStrip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
-  stateLabelText:  { fontSize: 14, fontWeight: "700", flex: 1 },
+  stateLabelText:  { fontSize: 14, flex: 1, fontFamily: "Agrandir-Regular" },
   figureWrapper:   { alignItems: "center", paddingVertical: 8 },
   stateInfo:       { paddingHorizontal: 16, paddingBottom: 16, alignItems: "center" },
-  stateDescription:{ fontSize: 14, color: colours.textSecondary, textAlign: "center", lineHeight: 20 },
+  stateDescription:{ fontSize: 14, color: colours.textSecondary, textAlign: "center", lineHeight: 20, fontFamily: "Agrandir-Regular" },
   debugText:       { fontSize: 10, color: "#ccc", marginTop: 6, fontFamily: "monospace" },
 
   calibrateBtn: {
@@ -659,27 +660,27 @@ const s = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 22, backgroundColor: "#fff",
     justifyContent: "center", marginBottom: 14,
   },
-  calibrateBtnText:    { fontSize: 14, fontWeight: "600", color: colours.primary },
+  calibrateBtnText:    { fontSize: 14, color: colours.primary, fontFamily: "Agrandir-Regular" },
   calibratedBadge:     { backgroundColor: "#4CAF50", borderRadius: 10, width: 20, height: 20, alignItems: "center", justifyContent: "center" },
-  calibratedBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  calibratedBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Agrandir-Regular" },
 
   tipCard:   { backgroundColor: colours.primarySoft, borderRadius: 14, padding: 14, alignSelf: "stretch", marginBottom: 16 },
   tipHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  tipTitle:  { fontSize: 13, fontWeight: "700", color: colours.primary },
-  tipText:   { fontSize: 13, color: colours.textPrimary, lineHeight: 19 },
+  tipTitle:  { fontSize: 13, color: colours.primary, fontFamily: "Agrandir-Regular" },
+  tipText:   { fontSize: 13, color: colours.textPrimary, lineHeight: 19, fontFamily: "Agrandir-Regular" },
 
   sensorDetailRow:   { alignSelf: "stretch", flexDirection: "row", gap: 10, marginBottom: 16 },
   sensorDetailCard:  { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colours.border },
-  sensorDetailTitle: { fontSize: 12, fontWeight: "700", color: colours.primary, marginBottom: 6 },
-  sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18 },
+  sensorDetailTitle: { fontSize: 12, color: colours.primary, marginBottom: 6, fontFamily: "Agrandir-GrandHeavy" },
+  sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18, fontFamily: "Agrandir-Regular" },
 
   actionRow:         { alignSelf: "stretch", flexDirection: "row", gap: 12, marginBottom: 24 },
 
   updateBtn:         { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, backgroundColor: "#AB99FA" },
-  updateBtnText:     { fontSize: 15, fontWeight: "700", color: "#fff" },
+  updateBtnText:     { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },
 
   disconnectBtn:     { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: "#D32F2F", backgroundColor: "#fff" },
-  disconnectBtnText: { fontSize: 15, fontWeight: "700", color: "#D32F2F" },
+  disconnectBtnText: { fontSize: 15, color: "#D32F2F", fontFamily: "Agrandir-Regular" },
 });
 
 const dbg = StyleSheet.create({
@@ -722,10 +723,10 @@ const su = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  closeText:  { fontSize: 24, color: "#888", lineHeight: 28 },
-  title:      { fontSize: 22, fontWeight: "900", color: "#F5A623", marginBottom: 12 },
+  closeText:  { fontSize: 24, color: "#888", lineHeight: 28, fontFamily: "Agrandir-Regular" },
+  title:      { fontSize: 22, color: "#F5A623", marginBottom: 12, fontFamily: "Agrandir-GrandHeavy" },
   mascot:     { width: 160, height: 160, marginBottom: 8 },
-  body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12 },
+  body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12, fontFamily: "Agrandir-Regular" },
 
   historySection: { alignSelf: "stretch", marginTop: 24, marginBottom: 8 },
   historyHeading: { fontSize: 28, fontFamily: "Agrandir-GrandHeavy", color: "#1D014A", marginBottom: 14 },
@@ -733,6 +734,6 @@ const su = StyleSheet.create({
   historyItem:    { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
   historyMascot:  { width: 70, height: 70 },
   historyBubble:  { flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  historyText:    { fontSize: 13, color: "#333", lineHeight: 19, marginBottom: 6 },
-  historyTime:    { fontSize: 11, color: "#AB99FA" },
+  historyText:    { fontSize: 13, color: "#333", lineHeight: 19, marginBottom: 6, fontFamily: "Agrandir-Regular" },
+  historyTime:    { fontSize: 11, color: "#AB99FA", fontFamily: "Agrandir-Regular" },
 });

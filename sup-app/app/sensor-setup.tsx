@@ -17,6 +17,7 @@ import {
   View, Text, StyleSheet, ScrollView,
   Pressable, ActivityIndicator, Alert,
 } from "react-native";
+import { useFonts } from "expo-font";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -87,6 +88,11 @@ export default function SensorSetupScreen() {
   } = useIMUContext();
 
   const { userId } = useAuth();
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../assets/fonts/Agrandir-Regular.otf"),
+  });
 
   const [assigningSlot,    setAssigningSlot]    = useState<SensorSlot | null>(null);
   const [showCalibModal,   setShowCalibModal]   = useState(false);
@@ -296,6 +302,8 @@ export default function SensorSetupScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  if (!fontsLoaded) return null;
+
   return (
     <SafeAreaView style={styles.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
@@ -504,11 +512,11 @@ const styles = StyleSheet.create({
 
   header:      { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   backBtn:     { padding: 4 },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: colours.textPrimary },
-  headerSub:   { fontSize: 13, color: colours.textSecondary },
+  headerTitle: { fontSize: 22, color: colours.textPrimary, fontFamily: "Agrandir-GrandHeavy" },
+  headerSub:   { fontSize: 13, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 
   statusBanner:     { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, marginBottom: 16 },
-  statusBannerText: { fontSize: 13, fontWeight: "600", flex: 1 },
+  statusBannerText: { fontSize: 13, fontWeight: "600", flex: 1, fontFamily: "Agrandir-Regular" },
 
   disconnectBtn: {
     flexDirection: "row",
@@ -522,60 +530,60 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 16,
   },
-  disconnectBtnText: { fontSize: 14, fontWeight: "700", color: "#D32F2F" },
+  disconnectBtnText: { fontSize: 14, fontWeight: "700", color: "#D32F2F", fontFamily: "Agrandir-Regular" },
 
   card: {
     backgroundColor: "#fff", borderRadius: 20, padding: 16, marginBottom: 16,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8,
   },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: colours.textPrimary, marginBottom: 12 },
-  cardDesc:  { fontSize: 13, color: colours.textSecondary, lineHeight: 19, marginBottom: 16 },
+  cardTitle: { fontSize: 16, color: colours.textPrimary, marginBottom: 12, fontFamily: "Agrandir-GrandHeavy" },
+  cardDesc:  { fontSize: 13, color: colours.textSecondary, lineHeight: 19, marginBottom: 16, fontFamily: "Agrandir-Regular" },
 
   sensorRow:       { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
   sensorIcon:      { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   sensorInfo:      { flex: 1 },
-  sensorLabel:     { fontSize: 14, fontWeight: "700", color: colours.textPrimary },
-  sensorPosition:  { fontSize: 11, color: colours.textSecondary, marginTop: 1 },
+  sensorLabel:     { fontSize: 14, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
+  sensorPosition:  { fontSize: 11, color: colours.textSecondary, marginTop: 1, fontFamily: "Agrandir-Regular" },
   sensorStatusRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   statusDot:       { width: 7, height: 7, borderRadius: 4 },
-  sensorName:      { fontSize: 12, color: colours.textSecondary },
-  hardwareName:    { fontSize: 10, color: "#bbb", marginTop: 2 },
-  savedHint:       { fontSize: 11, color: colours.primary, marginTop: 3 },
+  sensorName:      { fontSize: 12, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
+  hardwareName:    { fontSize: 10, color: "#bbb", marginTop: 2, fontFamily: "Agrandir-Regular" },
+  savedHint:       { fontSize: 11, color: colours.primary, marginTop: 3, fontFamily: "Agrandir-Regular" },
   sensorActions:   { alignItems: "flex-end", gap: 6 },
 
   actionBtn:           { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
-  actionBtnText:       { fontSize: 12, fontWeight: "600", color: colours.primary },
+  actionBtnText:       { fontSize: 12, fontWeight: "600", color: colours.primary, fontFamily: "Agrandir-Regular" },
   actionBtnDanger:     { borderWidth: 1.5, borderColor: "#F44336", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
-  actionBtnDangerText: { fontSize: 12, fontWeight: "600", color: "#F44336" },
+  actionBtnDangerText: { fontSize: 12, fontWeight: "600", color: "#F44336", fontFamily: "Agrandir-Regular" },
 
   divider: { height: 1, backgroundColor: "#F0F0F0", marginVertical: 8 },
 
   primaryBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, marginBottom: 16 },
-  primaryBtnText: { fontSize: 15, fontWeight: "700", color: "#fff" },
+  primaryBtnText: { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },
 
   deviceRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
-  deviceName: { fontSize: 14, fontWeight: "600", color: colours.textPrimary },
-  deviceId:   { fontSize: 11, color: colours.textSecondary, marginTop: 2 },
-  emptyText:  { fontSize: 13, color: colours.textSecondary, marginVertical: 12, textAlign: "center" },
+  deviceName: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
+  deviceId:   { fontSize: 11, color: colours.textSecondary, marginTop: 2, fontFamily: "Agrandir-Regular" },
+  emptyText:  { fontSize: 13, color: colours.textSecondary, marginVertical: 12, textAlign: "center", fontFamily: "Agrandir-Regular" },
   cancelRow:  { alignItems: "center", marginTop: 12 },
-  cancelText: { fontSize: 14, color: colours.textSecondary },
+  cancelText: { fontSize: 14, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 
   calibrateContent:  { flexDirection: "row", alignItems: "center", gap: 16 },
   calibrateRight:    { flex: 1, gap: 12 },
   checklistSmall:    { gap: 6 },
   checkRowSmall:     { flexDirection: "row", alignItems: "center", gap: 6 },
-  checkTextSmall:    { fontSize: 12, color: colours.textPrimary },
+  checkTextSmall:    { fontSize: 12, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
   calibrateBtn:      { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, justifyContent: "center" },
-  calibrateBtnText:  { fontSize: 13, fontWeight: "600", color: colours.primary },
-  calibratedNote:    { fontSize: 11, color: "#4CAF50", fontWeight: "600" },
-  disabledNote:      { fontSize: 11, color: colours.textSecondary },
+  calibrateBtnText:  { fontSize: 13, fontWeight: "600", color: colours.primary, fontFamily: "Agrandir-Regular" },
+  calibratedNote:    { fontSize: 11, color: "#4CAF50", fontWeight: "600", fontFamily: "Agrandir-Regular" },
+  disabledNote:      { fontSize: 11, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 
   romSummary: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
   romRow:     { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#F5F3FF", borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10 },
-  romLabel:   { fontSize: 12, color: colours.textSecondary },
-  romValue:   { fontSize: 12, fontWeight: "700", color: colours.primary },
+  romLabel:   { fontSize: 12, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
+  romValue:   { fontSize: 12, fontWeight: "700", color: colours.primary, fontFamily: "Agrandir-Regular" },
 
   guideRow:   { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
-  guideTitle: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, marginBottom: 2 },
-  guideDesc:  { fontSize: 12, color: colours.textSecondary, lineHeight: 18 },
+  guideTitle: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, marginBottom: 2, fontFamily: "Agrandir-Regular" },
+  guideDesc:  { fontSize: 12, color: colours.textSecondary, lineHeight: 18, fontFamily: "Agrandir-Regular" },
 });

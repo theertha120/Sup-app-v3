@@ -8,6 +8,8 @@ import {
   Alert,
 } from "react-native";
 import { useState, useEffect } from "react";
+import React from "react";
+import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "expo-router";
@@ -15,6 +17,12 @@ import { useRouter } from "expo-router";
 export default function SignInModal() {
   const { isAuthenticated, registrationMode, startRegistration, login } = useAuth();
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -54,6 +62,8 @@ export default function SignInModal() {
     }
   };
 
+  if (!fontsLoaded) return null;
+
   return (
     <Modal
       visible={!isAuthenticated && !registrationMode}
@@ -63,7 +73,7 @@ export default function SignInModal() {
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          <Text style={styles.title}>Welcome to S&apos;Up</Text>
+          <Text style={styles.title}>Welcome to s'up</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
           <View style={styles.form}>
@@ -127,11 +137,12 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "600",
     color: colours.textPrimary,
     textAlign: "center",
     marginBottom: 8,
+    fontFamily: "Agrandir-GrandHeavy",
   },
 
   subtitle: {
@@ -139,6 +150,7 @@ const styles = StyleSheet.create({
     color: colours.textSecondary,
     textAlign: "center",
     marginBottom: 32,
+    fontFamily: "Agrandir-Regular",
   },
 
   form: {
@@ -150,6 +162,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colours.textPrimary,
     marginBottom: 8,
+    fontFamily: "Agrandir-Regular",
   },
 
   input: {
@@ -162,6 +175,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colours.textPrimary,
     marginBottom: 20,
+    fontFamily: "Agrandir-Regular",
   },
 
   button: {
@@ -176,6 +190,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
   },
 
   hint: {
@@ -183,11 +198,13 @@ const styles = StyleSheet.create({
     color: colours.textSecondary,
     textAlign: "center",
     marginTop: 16,
+    fontFamily: "Agrandir-Regular",
   },
   errorText: {
     color: "#FF4D4F",
     marginBottom: 12,
     fontSize: 12,
+    fontFamily: "Agrandir-Regular",
   },
   secondaryButton: {
     backgroundColor: colours.card,
