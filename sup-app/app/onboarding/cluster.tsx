@@ -2,9 +2,18 @@ import React from "react";
 import { StyleSheet, View, Image, Text, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useFonts } from "expo-font";
 
 export default function ClusterScreen() {
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <LinearGradient
       colors={["#AB99FA", "#ffffff"]}
@@ -60,7 +69,7 @@ const styles = StyleSheet.create({
   },
   speechText: {
     fontSize: 19,
-    fontWeight: "700",
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     textAlign: "center",
   },
@@ -68,8 +77,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 280,
     alignSelf: "center",
-    fontSize: 100,
-    fontWeight: "900",
+    fontSize: 70,
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#333",
     textAlign: "center",
     lineHeight: 120,
@@ -85,7 +94,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 18,
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#ffffff",
     textAlign: "center",
   },
@@ -94,6 +103,7 @@ const styles = StyleSheet.create({
     top: 610,
     alignSelf: "center",
     fontSize: 16,
+    fontFamily: "Agrandir-Regular",
     color: "#666",
     textAlign: "center",
   },

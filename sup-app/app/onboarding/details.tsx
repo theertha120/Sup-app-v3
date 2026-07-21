@@ -5,11 +5,19 @@ import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { useFonts } from "expo-font";
 
 export default function DetailsScreen() {
   const router = useRouter();
   const { register } = useAuth();
   const { answers } = useOnboarding();
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -152,7 +160,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   content: {
     flex: 1,
@@ -161,14 +169,14 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 36,
-    fontWeight: "900",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     marginBottom: 8,
     textAlign: "center",
   },
   subheading: {
     fontSize: 20,
-    fontWeight: "500",
+    fontFamily: "Agrandir-Regular",
     color: "#111",
     lineHeight: 28,
     textAlign: "center",
@@ -182,7 +190,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     marginBottom: 6,
     marginLeft: 4,
@@ -193,6 +201,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
     fontSize: 15,
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     marginBottom: 16,
   },
@@ -206,7 +215,7 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#ffffff",
     textAlign: "center",
   },
@@ -216,7 +225,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#c0392b",
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
     marginTop: 8,
     textAlign: "center",
   },

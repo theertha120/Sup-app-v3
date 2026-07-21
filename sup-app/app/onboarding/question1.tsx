@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { useFonts } from "expo-font";
 
 const OPTIONS = [
   { key: "A", text: "Ngl the book just wasn't hitting." },
@@ -17,6 +18,13 @@ export default function Question1Screen() {
   const router = useRouter();
   const { setQ1 } = useOnboarding();
   const [selected, setSelected] = useState<string | null>(null);
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
 
   return (
     <LinearGradient
@@ -91,12 +99,12 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   questionCounter: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   progressTrack: {
     height: 4,
@@ -118,14 +126,14 @@ const styles = StyleSheet.create({
   },
   questionLabel: {
     fontSize: 26,
-    fontWeight: "900",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     marginBottom: 6,
     textAlign: "center",
   },
   questionBody: {
     fontSize: 22,
-    fontWeight: "500",
+    fontFamily: "Agrandir-Regular",
     color: "#111",
     marginBottom: 10,
     textAlign: "center",
@@ -152,7 +160,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
   },
   optionTextSelected: {
