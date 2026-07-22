@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
-import { isLoading, useFonts } from "expo-font";
+import { useFonts } from "expo-font";
 import React, { useRef, useCallback, useState, useEffect } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -33,7 +33,6 @@ import {
   type DailyPosturePair,
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
-import { usePostureInsight } from "@/src/hooks/usePostureInsight";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 
 // ─── Animation timing constants (mirrors home.tsx) ───────────────────────────
@@ -534,19 +533,6 @@ export default function DailyScreen() {
     },
   };
 
-  const { response, isLoading, isError, fallback } = usePostureInsight({
-    promptType: "daily",
-    isDataReady: !isLoadingDaily,
-    uprightMinutesDaily:      Math.round((stateTotals?.upright      ?? 0) / 60000),
-    slouchedMinutesDaily:     Math.round((stateTotals?.slouched     ?? 0) / 60000),
-    severeMinutesDaily:       Math.round((stateTotals?.severe       ?? 0) / 60000),
-    forwardLeanMinutesDaily:  Math.round((stateTotals?.forward_lean ?? 0) / 60000),
-    tiltedLeftMinutesDaily:   Math.round((stateTotals?.tilted_left  ?? 0) / 60000),
-    tiltedRightMinutesDaily:  Math.round((stateTotals?.tilted_right ?? 0) / 60000),
-    supScoreDaily:            today?.supScore ?? 0,
-    totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
-  });
-
   if (!fontsLoaded) return null;
 
   return (
@@ -593,13 +579,6 @@ export default function DailyScreen() {
           <InfoButton onPress={() => setActiveInfo("snapshot")} />
           <Text style={styles.cardTitle}>s'napshot</Text>
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
-          <Text style={styles.snapshotMessage}>
-            {isLoading
-              ? "pop on your s'pot today and give me a hot second..."
-              : isError
-              ? fallback
-              : response}
-          </Text>
         </Animated.View>
 
       </ScrollView>

@@ -25,7 +25,6 @@ import {
   type DailyPosturePair,
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
-import { usePostureInsight } from "@/src/hooks/usePostureInsight";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
@@ -220,19 +219,6 @@ export default function HomeScreen() {
   const stateTotals = today?.stateTotals ?? {};
   console.log("[HomeScreen] stateTotals:", stateTotals);
 
-  const { response, isLoading, isError, fallback } = usePostureInsight({
-    promptType: "home",
-    isDataReady: !isLoadingDaily,
-    uprightMinutesDaily:      Math.round((stateTotals?.upright ?? 0) / 60000),
-    slouchedMinutesDaily:     Math.round((stateTotals?.slouched ?? 0) / 60000),
-    severeMinutesDaily:       Math.round((stateTotals?.severe ?? 0) / 60000),
-    forwardLeanMinutesDaily:  Math.round((stateTotals?.forward_lean ?? 0) / 60000),
-    tiltedLeftMinutesDaily:   Math.round((stateTotals?.tilted_left ?? 0) / 60000),
-    tiltedRightMinutesDaily:  Math.round((stateTotals?.tilted_right ?? 0) / 60000),
-    supScoreDaily:            today?.supScore ?? 0,
-    totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
-  });
-
   const handleProfilePress = () => {
     setShowProfileModal(true);
   };
@@ -318,13 +304,6 @@ export default function HomeScreen() {
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
             <Text style={styles.bubbleHeadline}>
               s'kipper says:
-            </Text>
-            <Text style={styles.bubbleSubtext}>
-              {isLoading
-                ? "pop on your s'pot today and give me a hot second..."
-                : isError
-                ? fallback
-                : response}
             </Text>
           </Animated.View>
 

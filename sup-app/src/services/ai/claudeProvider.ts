@@ -1,32 +1,4 @@
-import { AIProvider, InsightColor, PostureData, PromptType, SessionInsightData, SessionInsightResult, SessionSummaryData, SessionSummaryResult } from "./aiProvider";
-
-function buildPromptDaily(data: PostureData): string {
-  return `
-You are a friendly posture coach. Based on today's tracking data, write a short 2-3 sentence tip for the user.
-Today's data:
-- Upright: ${data.uprightMinutesDaily} minutes
-- Forward lean: ${data.forwardLeanMinutesDaily} minutes
-- Slouched: ${data.slouchedMinutesDaily} minutes
-- Tilted left: ${data.tiltedLeftMinutesDaily} minutes
-- Tilted right: ${data.tiltedRightMinutesDaily} minutes
-Keep the tone warm and motivating, not clinical. Be creative and highlight a gentle suggestion for improvement. Do not use bullet points, just flowing sentences. Your response should only use lowercase letters reasonably with the exception of proper nouns and abbreviations.
-  `.trim();
-}
-
-function buildPromptHome(data: PostureData): string {
-  return `
-You are a friendly posture coach. Based on today's tracking data, write a short 2-3 sentence daily target for the user.
-Today's data:
-- Upright: ${data.uprightMinutesDaily} minutes
-- Forward lean: ${data.forwardLeanMinutesDaily} minutes
-- Slouched: ${data.slouchedMinutesDaily} minutes
-- Tilted left: ${data.tiltedLeftMinutesDaily} minutes
-- Tilted right: ${data.tiltedRightMinutesDaily} minutes
-- Sup score: ${data.supScoreDaily} (Sup score is a measure of your posture quality. This score is composed of 50% spine health score, 30% using the posture tracker score and 20% using the app score.)
-- Total tracked minutes: ${data.totalTrackedMinutesDaily}
-Keep the tone warm and motivating, not clinical. Be creative and highlight a reasonable target for the user to work towards. Do not use bullet points, just flowing sentences. Your response should only use lowercase letters reasonably with the exception of proper nouns and abbreviations.
-  `.trim();
-}
+import { AIProvider, InsightColor, SessionInsightData, SessionInsightResult, SessionSummaryData, SessionSummaryResult } from "./aiProvider";
 
 function buildPromptSupdate(data: SessionInsightData): string {
   const toMin = (ms: number) => Math.round((ms ?? 0) / 60000);
@@ -140,11 +112,6 @@ Respond with ONLY a JSON object, no other text:
 }
 
 export const claudeProvider: AIProvider = {
-  async getPostureInsight(data: PostureData, promptType: PromptType): Promise<string> {
-    const prompt = promptType === "daily" ? buildPromptDaily(data) : buildPromptHome(data);
-    return callClaude(prompt);
-  },
-
   async getSessionInsight(data: SessionInsightData): Promise<SessionInsightResult> {
     const raw = await callClaude(buildPromptSupdate(data));
     try {
