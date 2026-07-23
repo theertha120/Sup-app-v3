@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, Platform, Modal, Dimensions, Alert, Image,
+  Pressable, Platform, Modal, Dimensions, Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
@@ -33,6 +33,7 @@ import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/u
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
+import { supabase } from "../../src/lib/supabase";
 
 // ── Posture colour system ─────────────────────────────────────────────────────
 
@@ -274,18 +275,6 @@ export default function DeskScreen() {
     disconnectAll,
   } = useIMUContext();
 
-  const handleDisconnectAll = useCallback(() => {
-    if (!topSensor.state.connected && !bottomSensor.state.connected) return;
-    Alert.alert(
-      "disconnect both s'pots?",
-      "this will end the current session and disconnect both sensors. your saved pairings stay intact.",
-      [
-        { text: "cancel", style: "cancel" },
-        { text: "disconnect", style: "destructive", onPress: async () => { try { await disconnectAll(); } catch (e) { console.warn("[Desk] Failed to disconnect:", e); } } },
-      ]
-    );
-  }, [topSensor.state.connected, bottomSensor.state.connected, disconnectAll]);
-
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
   const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
   const livePostureRef = useRef(posture);
@@ -314,6 +303,11 @@ export default function DeskScreen() {
   const [updateColor, setUpdateColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
   const [updateHistory, setUpdateHistory] = useState<{ text: string; color: "green" | "yellow" | "red"; time: Date }[]>([]);
+
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+  const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
   const handleCloseUpdateModal = () => {
     setUpdateHistory(prev => [{ text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() }, ...prev]);
@@ -354,12 +348,31 @@ export default function DeskScreen() {
     setIsLoadingUpdate(true);
     setShowUpdateModal(true);
     try {
+      // Fetch today's goal summary from Supabase
+      let dailySummary: string | null = null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const d = new Date();
+        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        console.log("[s'update] querying daily goal for user:", user.id, "date:", today);
+        const { data, error } = await supabase
+          .from("daily_ai_summary")
+          .select("concised_summary")
+          .eq("user_id", user.id)
+          .eq("date", today)
+          .maybeSingle();
+        console.log("[s'update] daily goal result:", data?.concised_summary ?? "none", "error:", error?.message ?? "none");
+        dailySummary = data?.concised_summary ?? null;
+      }
+
       const result = await aiProvider.getSessionInsight({
         sessionDurationMs,
         currentState,
         timeInCurrentStateMs,
         cpl,
         sessionStats,
+        previousUpdates: updateHistory.map(h => h.text),
+        dailySummary,
       });
       setUpdateMessage(result.message);
       setUpdateColor(result.color);
@@ -369,7 +382,36 @@ export default function DeskScreen() {
     } finally {
       setIsLoadingUpdate(false);
     }
-  }, [sessionDurationMs, currentState, timeInCurrentStateMs, cpl, sessionStats]);
+  }, [sessionDurationMs, currentState, timeInCurrentStateMs, cpl, sessionStats, updateHistory]);
+
+  const handleEndSession = useCallback(async () => {
+    if (!topSensor.state.connected && !bottomSensor.state.connected) return;
+    setSummaryMessage(null);
+    setIsLoadingSummary(true);
+    setShowSummaryModal(true);
+    try {
+      const result = await aiProvider.getSessionSummary({
+        sessionDurationMs,
+        cpl,
+        sessionStats,
+        previousUpdates: updateHistory.map(h => h.text),
+      });
+      setSummaryMessage(result.message);
+      setSummaryColor(result.color);
+    } catch {
+      setSummaryMessage("great session! keep up the good work — every minute of good posture counts.");
+      setSummaryColor("yellow");
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, [topSensor.state.connected, bottomSensor.state.connected, sessionDurationMs, cpl, sessionStats, updateHistory]);
+
+  const handleCloseSummaryModal = useCallback(async () => {
+    setShowSummaryModal(false);
+    setSummaryMessage(null);
+    setSummaryColor("yellow");
+    try { await disconnectAll(); } catch (e) { console.warn("[Desk] Failed to disconnect:", e); }
+  }, [disconnectAll]);
 
   if (!fontsLoaded) return null;
 
@@ -404,6 +446,24 @@ export default function DeskScreen() {
               {isLoadingUpdate
                 ? "s'kipper is thinking..."
                 : updateMessage ?? ""}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* session end summary modal */}
+      <Modal visible={showSummaryModal} transparent animationType="fade" onRequestClose={handleCloseSummaryModal}>
+        <View style={su.overlay}>
+          <View style={[su.card, { borderColor: INSIGHT_BORDER[summaryColor] }]}>
+            <Pressable style={su.closeBtn} onPress={handleCloseSummaryModal}>
+              <Text style={su.closeText}>×</Text>
+            </Pressable>
+            <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
+            <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
+            <Text style={su.body}>
+              {isLoadingSummary
+                ? "s'kipper is reviewing your session..."
+                : summaryMessage ?? ""}
             </Text>
           </View>
         </View>
@@ -480,7 +540,7 @@ export default function DeskScreen() {
             <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
               <Text style={s.updateBtnText}>s'update</Text>
             </Pressable>
-            <Pressable style={s.disconnectBtn} onPress={handleDisconnectAll}>
+            <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
               <Text style={s.disconnectBtnText}>end s'ession</Text>
             </Pressable>
           </View>
@@ -724,7 +784,7 @@ const su = StyleSheet.create({
     justifyContent: "center",
   },
   closeText:  { fontSize: 24, color: "#888", lineHeight: 28, fontFamily: "Agrandir-Regular" },
-  title:      { fontSize: 22, color: "#F5A623", marginBottom: 12, fontFamily: "Agrandir-GrandHeavy" },
+  title:      { fontSize: 22, color: "#AB99FA", marginBottom: 12, fontFamily: "Agrandir-GrandHeavy", textAlign: "center" },
   mascot:     { width: 160, height: 160, marginBottom: 8 },
   body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12, fontFamily: "Agrandir-Regular" },
 
