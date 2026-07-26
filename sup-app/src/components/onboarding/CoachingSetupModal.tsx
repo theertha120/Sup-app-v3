@@ -4,12 +4,12 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useFonts } from "expo-font";
-import { colours } from "@/theme/colours";
 import ActiveHoursStep from "./ActiveHoursStep";
 import GoalSelectionStep from "./GoalSelectionStep";
 import ReminderPreferencesStep from "./ReminderPreferencesStep";
@@ -28,24 +28,22 @@ import {
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type StepId = 0 | 1 | 2 | 3 | 4;
-
-// ─── Main Modal ───────────────────────────────────────────────────────────────
 
 export default function CoachingSetupModal({
   visible,
   onComplete,
+  onCancel,
   initialProfile,
 }: {
   visible: boolean;
   onComplete: () => void;
+  onCancel: () => void;
   initialProfile?: BehaviorProfile | null;
 }) {
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf")
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
   const defaults = useMemo(() => createDefaultBehaviorProfile(), []);
@@ -70,17 +68,30 @@ export default function CoachingSetupModal({
   const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoalId[]>(
     initial ? initial.weeklyGoals : defaults.weeklyGoals
   );
-  // Default daily run to 9 AM (hour 9)
   const [dailyRunHour, setDailyRunHour] = useState<number>(
-    initial && typeof (initial as any).dailyRun === "number"
-      ? (initial as any).dailyRun
-      : 8
+    initial ? initial.dailyRun : defaults.dailyRun
   );
 
   if (!visible || !fontsLoaded) return null;
 
   const canGoBack = step > 0;
   const isLastStep = step === 4;
+
+  const resetToInitial = () => {
+    setPrimaryGoals(initial ? initial.primaryGoals : defaults.primaryGoals);
+    setActiveTimePresets(initial ? initial.activeTimePresets : defaults.activeTimePresets);
+    setPreferredTones(initial ? initial.preferredTones : defaults.preferredTones);
+    setReminderFrequency(initial ? initial.reminderFrequency : defaults.reminderFrequency);
+    setWeeklyGoals(initial ? initial.weeklyGoals : defaults.weeklyGoals);
+    setDailyRunHour(initial ? initial.dailyRun : defaults.dailyRun);
+    setStep(0);
+    setError("");
+  };
+
+  const handleCancel = () => {
+    resetToInitial();
+    onCancel();
+  };
 
   const buildProfileInput = (): BehaviorProfileInput => {
     const { start, end } = resolveTimeRangeFromPresets(activeTimePresets);
@@ -92,6 +103,7 @@ export default function CoachingSetupModal({
       activeTimeStart: start,
       activeTimeEnd: end,
       weeklyGoals,
+      dailyRun: dailyRunHour,
     };
   };
 
@@ -125,7 +137,6 @@ export default function CoachingSetupModal({
     setSaving(true);
     try {
       await saveCurrentBehaviorProfile(profile);
-      // TODO: also persist `dailyRunHour` to `user_profile.daily_run` via Supabase here
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your setup.");
@@ -140,10 +151,18 @@ export default function CoachingSetupModal({
         <View style={styles.card}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
+            <View style={styles.headerText}>
               <Text style={styles.kicker}>Coaching setup</Text>
               <Text style={styles.title}>Set up your behaviour engine</Text>
             </View>
+            <Pressable
+              onPress={handleCancel}
+              disabled={saving}
+              style={styles.cancelButton}
+              hitSlop={8}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
           </View>
 
           {/* Progress */}
@@ -159,8 +178,13 @@ export default function CoachingSetupModal({
             ))}
           </View>
 
-          {/* Step content */}
-          <View style={styles.body}>
+          {/* Body */}
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {step === 0 && (
               <GoalSelectionStep value={primaryGoals} onChange={setPrimaryGoals} />
             )}
@@ -186,7 +210,7 @@ export default function CoachingSetupModal({
             )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
-          </View>
+          </ScrollView>
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -222,8 +246,6 @@ export default function CoachingSetupModal({
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -246,6 +268,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 16,
   },
+  headerText: {
+    flex: 1,
+  },
   kicker: {
     fontFamily: "Agrandir-GrandHeavy",
     color: "#AB99FA",
@@ -259,6 +284,14 @@ const styles = StyleSheet.create({
     color: "#1D014A",
     fontSize: 24,
     lineHeight: 30,
+  },
+  cancelButton: {
+    paddingTop: 2,
+  },
+  cancelButtonText: {
+    fontFamily: "Agrandir-Regular",
+    color: "#AB99FA",
+    fontSize: 14,
   },
   progressRow: {
     flexDirection: "row",
@@ -274,7 +307,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#AB99FA",
   },
   body: {
+    maxHeight: 420,
+  },
+  bodyContent: {
     gap: 16,
+    paddingBottom: 4,
   },
   error: {
     fontFamily: "Agrandir-Regular",
@@ -299,7 +336,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   backButtonText: {
-    fontFamily: "Agrandir-GrandHeavy",
+    fontFamily: "Agrandir-Regular",
     color: "#AB99FA",
     fontSize: 15,
     lineHeight: 20,
@@ -316,7 +353,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   primaryButtonText: {
-    fontFamily: "Agrandir-GrandHeavy",
+    fontFamily: "Agrandir-Regular",
     color: "#FFFFFF",
     fontSize: 15,
     lineHeight: 20,
