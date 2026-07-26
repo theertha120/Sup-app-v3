@@ -20,13 +20,7 @@ import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupMod
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import {
-  fetchDailyPosturePair,
-  type DailyPosturePair,
-  type DailyPostureRow,
-} from "../../src/services/posture/postureSyncService";
-import { usePostureInsight } from "@/src/hooks/usePostureInsight";
-import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
+import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -38,7 +32,7 @@ const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TODAY_KEY = "2026-07-15";
+const TODAY_KEY = "2026-07-20";
 
 export default function HomeScreen() {
 
@@ -51,8 +45,6 @@ export default function HomeScreen() {
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
 
-  const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
-  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
@@ -149,25 +141,6 @@ export default function HomeScreen() {
   }, [isLoadingProfile, currentUser, runEntrySequence]);
   // ─────────────────────────────────────────────────────────────────────────
 
-  const loadDailyPosture = useCallback(async (background = false) => {
-    if (!userId) return;
-    if (!background) setIsLoadingDaily(true);
-
-    const cached = await getCachedDailyPair(userId, TODAY_KEY);
-    if (cached) {
-      setDailyPair(cached);
-      setIsLoadingDaily(false);
-    }
-
-    fetchDailyPosturePair(userId, TODAY_KEY)
-      .then((fresh) => {
-        setDailyPair(fresh);
-        setCachedDailyPair(userId, TODAY_KEY, fresh);
-      })
-      .catch((err) => console.error("[HomeScreen] fetchDailyPosturePair failed", err))
-      .finally(() => setIsLoadingDaily(false));
-  }, [userId]);
-
   const loadProfile = useCallback(() => {
     return fetchCurrentUserProfileWithStats()
       .then((profile) => {
@@ -185,13 +158,11 @@ export default function HomeScreen() {
       setShowProfileModal(false);
       setShowCoachingSetupModal(false);
       setIsLoadingProfile(true);
-      setDailyPair({ today: null, previous: null });
       return;
     }
 
     Promise.all([
       loadProfile(),
-      loadDailyPosture(),
       fetchCurrentBehaviorProfile()
         .then((profile) => setShowCoachingSetupModal(profile == null))
         .catch(() => setShowCoachingSetupModal(false)),
@@ -213,26 +184,19 @@ export default function HomeScreen() {
     useCallback(() => {
       if (!isAuthenticated) return;
       loadProfile();
-      loadDailyPosture(true);
-    }, [isAuthenticated, loadProfile, loadDailyPosture])
+    }, [isAuthenticated, loadProfile])
   );
 
-  const { today } = dailyPair;
-  const stateTotals = today?.stateTotals ?? {};
-  console.log("[HomeScreen] stateTotals:", stateTotals);
+  const [aiSummary, setAiSummary] = useState<{ insight: string; concised_summary: string } | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
 
-  const { response, isLoading, isError, fallback } = usePostureInsight({
-    promptType: "home",
-    isDataReady: !isLoadingDaily,
-    uprightMinutesDaily:      Math.round((stateTotals?.upright ?? 0) / 60000),
-    slouchedMinutesDaily:     Math.round((stateTotals?.slouched ?? 0) / 60000),
-    severeMinutesDaily:       Math.round((stateTotals?.severe ?? 0) / 60000),
-    forwardLeanMinutesDaily:  Math.round((stateTotals?.forward_lean ?? 0) / 60000),
-    tiltedLeftMinutesDaily:   Math.round((stateTotals?.tilted_left ?? 0) / 60000),
-    tiltedRightMinutesDaily:  Math.round((stateTotals?.tilted_right ?? 0) / 60000),
-    supScoreDaily:            today?.supScore ?? 0,
-    totalTrackedMinutesDaily: Math.round((today?.totalDeskMs ?? 0) / 60000),
-  });
+  useEffect(() => {
+    if (!userId) return;
+    fetchDailyAiSummary(userId, TODAY_KEY)
+      .then(setAiSummary)
+      .catch(() => setAiSummary(null))
+      .finally(() => setIsLoadingSummary(false));
+  }, [userId]);
 
   const handleProfilePress = () => {
     setShowProfileModal(true);
@@ -321,11 +285,9 @@ export default function HomeScreen() {
               s'kipper says:
             </Text>
             <Text style={styles.bubbleSubtext}>
-              {isLoading
+              {isLoadingSummary
                 ? "pop on your s'pot today and give me a hot second..."
-                : isError
-                ? fallback
-                : response}
+                : aiSummary?.insight}
             </Text>
           </Animated.View>
 

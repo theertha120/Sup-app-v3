@@ -1,6 +1,7 @@
 export type PromptType = "daily" | "home";
 
 export interface PostureData {
+  date: Date;
   uprightMinutesDaily: number;
   forwardLeanMinutesDaily: number;
   slouchedMinutesDaily: number;
@@ -12,5 +13,8 @@ export interface PostureData {
 }
 
 export interface AIProvider {
-  getPostureInsight(data: PostureData, promptType: PromptType): Promise<string>;
+  getScheduledDailyInsight(rows: PostureData[], promptType: PromptType): Promise<{
+    insight: string;
+    concisedSummary: string;
+  }>;
 }

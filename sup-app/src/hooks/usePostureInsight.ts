@@ -24,10 +24,10 @@ export function usePostureInsight({ promptType, isDataReady, ...data }: UsePostu
     setIsError(false);
 
     aiProvider
-      .getPostureInsight(data, promptType)
-      .then((text) => {
+      .getScheduledDailyInsight([data], promptType)
+      .then(({ insight }) => {
         if (!cancelled) {
-          setResponse(text);
+          setResponse(insight);
           setIsLoading(false);
         }
       })
