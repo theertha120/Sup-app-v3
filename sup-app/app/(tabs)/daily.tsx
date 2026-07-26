@@ -37,8 +37,11 @@ import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/d
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
-// const TODAY_KEY = new Date().toISOString().split("T")[0]; // TO USE FOR PRODUCTION, CURRENTLY HARDCODED FOR TESTING
-const TODAY_KEY = "2026-07-15"; // UPDATE TO CURRENT DATE LATER!
+const now = new Date();
+const year = now.getFullYear();
+const month = String(now.getMonth() + 1).padStart(2, "0");
+const day = String(now.getDate()).padStart(2, "0");
+const TODAY_KEY = `${year}-${month}-${day}`;
 
 const SEGMENT_COLORS: Record<string, string> = {
   upright:  "#6DC96D",

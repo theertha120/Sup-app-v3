@@ -32,7 +32,20 @@ const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TODAY_KEY = "2026-07-20";
+const getLocalDateKey = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+  // return `2026-07-25`
+};
+
+const getPreviousDateKey = (dateKey: string) => {
+  const date = new Date(dateKey + "T12:00:00"); // noon avoids DST edge cases
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split("T")[0];
+};
 
 export default function HomeScreen() {
 
@@ -192,7 +205,15 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!userId) return;
-    fetchDailyAiSummary(userId, TODAY_KEY)
+    const todayKey = getLocalDateKey();
+    const yesterdayKey = getPreviousDateKey(todayKey);
+
+    fetchDailyAiSummary(userId, todayKey)
+      .then((summary) => {
+        if (summary) return summary;
+        // Fall back to yesterday's summary if today's isn't ready yet
+        return fetchDailyAiSummary(userId, yesterdayKey);
+      })
       .then(setAiSummary)
       .catch(() => setAiSummary(null))
       .finally(() => setIsLoadingSummary(false));
