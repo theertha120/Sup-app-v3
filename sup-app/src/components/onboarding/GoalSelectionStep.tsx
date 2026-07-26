@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colours } from "@/theme/colours";
+import { useFonts } from "expo-font";
 import type { BehaviorGoalId } from "@/src/services/user/behaviorProfileService";
+import React from "react";
 
 const GOALS: { id: BehaviorGoalId; label: string }[] = [
   { id: "study_posture", label: "better study posture" },
@@ -17,6 +18,13 @@ export default function GoalSelectionStep({
   value: BehaviorGoalId[];
   onChange: (value: BehaviorGoalId[]) => void;
 }) {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <View style={styles.step}>
       <Text style={styles.title}>What do you want help with?</Text>
@@ -54,7 +62,9 @@ function Chip({
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
-      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
+      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -65,8 +75,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "700",
-    color: colours.textPrimary,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#1D014A",
   },
   options: {
     flexDirection: "row",
@@ -78,19 +88,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colours.border,
+    borderColor: "#AB99FA",
     backgroundColor: "#FFFFFF",
   },
   chipSelected: {
-    backgroundColor: colours.primary,
-    borderColor: colours.primary,
+    backgroundColor: "#AB99FA",
+    borderColor: "#AB99FA",
   },
   chipLabel: {
-    color: colours.textPrimary,
+    color: "#1D014A",
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
   },
   chipLabelSelected: {
-    color: "#FFFFFF",
+    color: "#1D014A",
+    fontFamily: "Agrandir-Regular",
   },
 });

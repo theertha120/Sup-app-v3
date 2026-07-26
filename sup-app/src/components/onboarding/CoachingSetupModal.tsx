@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -7,11 +8,13 @@ import {
   Text,
   View,
 } from "react-native";
+import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
 import ActiveHoursStep from "./ActiveHoursStep";
 import GoalSelectionStep from "./GoalSelectionStep";
 import ReminderPreferencesStep from "./ReminderPreferencesStep";
 import WeeklyGoalStep from "./WeeklyGoalStep";
+import DailyRunStep from "./DailyRunStep";
 import {
   type ActiveTimePreset,
   type BehaviorGoalId,
@@ -21,16 +24,15 @@ import {
   type ReminderTone,
   type WeeklyGoalId,
   createDefaultBehaviorProfile,
-  getPresetBehaviorHours,
   resolveTimeRangeFromPresets,
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
 
-type StepId = 0 | 1 | 2 | 3;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// function isValidTime(value: string): boolean {
-//   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
-// }
+type StepId = 0 | 1 | 2 | 3 | 4;
+
+// ─── Main Modal ───────────────────────────────────────────────────────────────
 
 export default function CoachingSetupModal({
   visible,
@@ -41,27 +43,17 @@ export default function CoachingSetupModal({
   onComplete: () => void;
   initialProfile?: BehaviorProfile | null;
 }) {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf")
+  });
+
   const defaults = useMemo(() => createDefaultBehaviorProfile(), []);
   const [step, setStep] = useState<StepId>(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Prefill from `initialProfile` when editing from settings
   const initial = initialProfile ?? null;
-
-  // const inferPreset = (start: string, end: string): ActiveTimePreset => {
-  //   const candidates: ActiveTimePreset[] = [
-  //     "morning",
-  //     "afternoon",
-  //     "evening",
-  //     "late_night",
-  //   ];
-  //   for (const p of candidates) {
-  //     const r = getPresetBehaviorHours(p);
-  //     if (r.start === start && r.end === end) return p;
-  //   }
-  //   return "afternoon";
-  // };
 
   const [primaryGoals, setPrimaryGoals] = useState<BehaviorGoalId[]>(
     initial ? initial.primaryGoals : defaults.primaryGoals
@@ -78,18 +70,17 @@ export default function CoachingSetupModal({
   const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoalId[]>(
     initial ? initial.weeklyGoals : defaults.weeklyGoals
   );
+  // Default daily run to 9 AM (hour 9)
+  const [dailyRunHour, setDailyRunHour] = useState<number>(
+    initial && typeof (initial as any).dailyRun === "number"
+      ? (initial as any).dailyRun
+      : 8
+  );
 
-  if (!visible) return null;
+  if (!visible || !fontsLoaded) return null;
 
   const canGoBack = step > 0;
-  const isLastStep = step === 3;
-
-  // const applyPreset = (nextPreset: ActiveTimePreset) => {
-  //   setPreset(nextPreset);
-  //   const range = getPresetBehaviorHours(nextPreset);
-  //   setActiveTimeStart(range.start);
-  //   setActiveTimeEnd(range.end);
-  // };
+  const isLastStep = step === 4;
 
   const buildProfileInput = (): BehaviorProfileInput => {
     const { start, end } = resolveTimeRangeFromPresets(activeTimePresets);
@@ -107,7 +98,6 @@ export default function CoachingSetupModal({
   const handleNext = async () => {
     setError("");
 
-    // Mandatory selections for each step
     if (step === 0 && primaryGoals.length === 0) {
       setError("Please select at least one goal.");
       return;
@@ -125,22 +115,17 @@ export default function CoachingSetupModal({
       return;
     }
 
-
-    if (step < 3) {
-      setStep((current) => ((current + 1) as StepId));
+    if (step < 4) {
+      setStep((current) => (current + 1) as StepId);
       return;
     }
 
     const profile = buildProfileInput();
 
-    // if (!isValidTime(profile.activeTimeStart) || !isValidTime(profile.activeTimeEnd)) {
-    //   setError("Use 24-hour time like 09:00 and 17:00.");
-    //   return;
-    // }
-
     setSaving(true);
     try {
       await saveCurrentBehaviorProfile(profile);
+      // TODO: also persist `dailyRunHour` to `user_profile.daily_run` via Supabase here
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your setup.");
@@ -150,14 +135,10 @@ export default function CoachingSetupModal({
   };
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-    >
+    <Modal visible transparent animationType="fade" statusBarTranslucent>
       <View style={styles.overlay}>
         <View style={styles.card}>
+          {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.kicker}>Coaching setup</Text>
@@ -165,62 +146,71 @@ export default function CoachingSetupModal({
             </View>
           </View>
 
+          {/* Progress */}
           <View style={styles.progressRow}>
-            {[0, 1, 2, 3].map((index) => (
+            {[0, 1, 2, 3, 4].map((index) => (
               <View
                 key={index}
-                style={[styles.progressDot, step >= index && styles.progressDotActive]}
+                style={[
+                  styles.progressDot,
+                  step >= index && styles.progressDotActive,
+                ]}
               />
             ))}
           </View>
 
+          {/* Step content */}
           <View style={styles.body}>
-            {step === 0 ? (
+            {step === 0 && (
               <GoalSelectionStep value={primaryGoals} onChange={setPrimaryGoals} />
-            ) : null}
-            {step === 1 ? (
+            )}
+            {step === 1 && (
               <ActiveHoursStep
                 presets={activeTimePresets}
                 onPresetsChange={setActiveTimePresets}
               />
-            ) : null}
-            {step === 2 ? (
+            )}
+            {step === 2 && (
               <ReminderPreferencesStep
                 tones={preferredTones}
                 frequency={reminderFrequency}
                 onTonesChange={setPreferredTones}
                 onFrequencyChange={setReminderFrequency}
               />
-            ) : null}
-            {step === 3 ? (
-              <WeeklyGoalStep
-                value={weeklyGoals}
-                onChange={setWeeklyGoals}
-              />
-            ) : null}
+            )}
+            {step === 3 && (
+              <WeeklyGoalStep value={weeklyGoals} onChange={setWeeklyGoals} />
+            )}
+            {step === 4 && (
+              <DailyRunStep value={dailyRunHour} onChange={setDailyRunHour} />
+            )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
 
+          {/* Footer */}
           <View style={styles.footer}>
-
             <View style={styles.primaryActions}>
-              {canGoBack ? (
+              {canGoBack && (
                 <Pressable
-                  style={styles.primaryButton}
-                  onPress={() => setStep((current) => ((current - 1) as StepId))}
+                  style={styles.backButton}
+                  onPress={() => setStep((current) => (current - 1) as StepId)}
                   disabled={saving}
                 >
-                  <Text style={styles.primaryButtonText}>Back</Text>
+                  <Text style={styles.backButtonText}>Back</Text>
                 </Pressable>
-              ) : null}
+              )}
 
-              <Pressable style={styles.primaryButton} onPress={handleNext} disabled={saving}>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={handleNext}
+                disabled={saving}
+              >
                 {saving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {isLastStep ? "Complete setup" : "Next"}
+                    {isLastStep ? "Done" : "Next"}
                   </Text>
                 )}
               </Pressable>
@@ -231,6 +221,8 @@ export default function CoachingSetupModal({
     </Modal>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   overlay: {
@@ -255,23 +247,18 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   kicker: {
-    color: colours.primary,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#AB99FA",
     fontSize: 12,
-    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 4,
   },
   title: {
-    color: colours.textPrimary,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#1D014A",
     fontSize: 24,
-    fontWeight: "800",
     lineHeight: 30,
-  },
-  close: {
-    color: colours.textSecondary,
-    fontSize: 18,
-    fontWeight: "700",
   },
   progressRow: {
     flexDirection: "row",
@@ -281,18 +268,18 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(24, 24, 36, 0.12)",
+    backgroundColor: "rgba(29, 1, 74, 0.12)",
   },
   progressDotActive: {
-    backgroundColor: colours.primary,
+    backgroundColor: "#AB99FA",
   },
   body: {
     gap: 16,
   },
   error: {
+    fontFamily: "Agrandir-Regular",
     color: "#B42318",
     fontSize: 13,
-    fontWeight: "600",
   },
   footer: {
     gap: 12,
@@ -301,30 +288,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  secondaryButton: {
+  backButton: {
     flex: 1,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colours.primarySoft,
-    backgroundColor: colours.primarySoft,
+    borderWidth: 1.5,
+    borderColor: "#AB99FA",
     paddingVertical: 15,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50,
   },
-  secondaryButtonText: {
-    color: colours.primary,
+  backButtonText: {
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#AB99FA",
     fontSize: 15,
-    fontWeight: "700",
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   primaryButton: {
-    flex: 1.2,
+    flex: 1,
     borderRadius: 16,
-    backgroundColor: colours.primary,
-    paddingVertical: 14,
+    backgroundColor: "#AB99FA",
+    paddingVertical: 15,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50,
   },
   primaryButtonText: {
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "800",
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
 });
