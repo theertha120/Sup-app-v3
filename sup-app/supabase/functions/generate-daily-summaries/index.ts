@@ -115,6 +115,15 @@ async function processUser(
   userId: string,
   today: string
 ): Promise<"ok" | "skipped" | "error"> {
+  const { data: existing } = await supabase
+    .from("daily_ai_summary")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .maybeSingle();
+
+  if (existing) return "skipped";
+
   const dates: string[] = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(`${today}T00:00:00.000Z`);

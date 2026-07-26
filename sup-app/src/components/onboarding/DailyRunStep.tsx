@@ -12,9 +12,11 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
 export default function DailyRunStep({
   value,
   onChange,
+  summaryGeneratedToday,
 }: {
   value: number;
   onChange: (hour: number) => void;
+  summaryGeneratedToday: boolean;
 }) {
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
@@ -26,8 +28,12 @@ export default function DailyRunStep({
   if (!fontsLoaded) return null;
 
   const selected = HOURS.find((h) => h.value === value) ?? HOURS[8];
-
-  return (
+  
+  const disclaimerText = summaryGeneratedToday
+    ? "Your daily prompt has already been generated for today. Your new time will take effect from tomorrow."
+    : "Your daily prompt hasn't run yet today. If you save now, it will trigger at your new selected time today.";
+  
+    return (
     <View style={styles.step}>
       <View style={styles.group}>
         <Text style={styles.title}>When should your daily prompt appear?</Text>
@@ -78,10 +84,7 @@ export default function DailyRunStep({
       </View>
 
       <View style={styles.disclaimer}>
-        <Text style={styles.disclaimerText}>
-          Your daily prompt on the home screen will trigger at this time.
-          Changes take effect from the next day.
-        </Text>
+        <Text style={styles.disclaimerText}>{disclaimerText}</Text>
       </View>
     </View>
   );

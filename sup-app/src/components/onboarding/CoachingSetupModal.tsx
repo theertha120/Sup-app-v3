@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import {
   ActivityIndicator,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useFonts } from "expo-font";
+import { supabase } from "@/src/lib/supabase";
 import ActiveHoursStep from "./ActiveHoursStep";
 import GoalSelectionStep from "./GoalSelectionStep";
 import ReminderPreferencesStep from "./ReminderPreferencesStep";
@@ -30,15 +31,22 @@ import {
 
 type StepId = 0 | 1 | 2 | 3 | 4;
 
+/** Today's date in SGT (UTC+8) as YYYY-MM-DD */
+function todayInSGT(): string {
+  const now = new Date();
+  const sgt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return sgt.toISOString().slice(0, 10);
+}
+
 export default function CoachingSetupModal({
   visible,
   onComplete,
-  onCancel,
+  onCancel = () => {},
   initialProfile,
 }: {
   visible: boolean;
   onComplete: () => void;
-  onCancel: () => void;
+  onCancel?: () => void;
   initialProfile?: BehaviorProfile | null;
 }) {
   const [fontsLoaded] = useFonts({
@@ -50,6 +58,7 @@ export default function CoachingSetupModal({
   const [step, setStep] = useState<StepId>(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [summaryGeneratedToday, setSummaryGeneratedToday] = useState(false);
 
   const initial = initialProfile ?? null;
 
@@ -71,6 +80,26 @@ export default function CoachingSetupModal({
   const [dailyRunHour, setDailyRunHour] = useState<number>(
     initial ? initial.dailyRun : defaults.dailyRun
   );
+
+  useEffect(() => {
+    if (!visible) return;
+
+    async function checkTodaySummary() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("daily_ai_summary")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .eq("date", todayInSGT())
+        .maybeSingle();
+
+      setSummaryGeneratedToday(!!data);
+    }
+
+    checkTodaySummary();
+  }, [visible]);
 
   if (!visible || !fontsLoaded) return null;
 
@@ -206,7 +235,11 @@ export default function CoachingSetupModal({
               <WeeklyGoalStep value={weeklyGoals} onChange={setWeeklyGoals} />
             )}
             {step === 4 && (
-              <DailyRunStep value={dailyRunHour} onChange={setDailyRunHour} />
+              <DailyRunStep
+                value={dailyRunHour}
+                onChange={setDailyRunHour}
+                summaryGeneratedToday={summaryGeneratedToday}
+              />
             )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
