@@ -202,6 +202,7 @@ export default function HomeScreen() {
 
   const [aiSummary, setAiSummary] = useState<{ insight: string; concised_summary: string } | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+  const [hasSummaryData, setHasSummaryData] = useState<boolean | null>(null); // null = unknown
 
   useEffect(() => {
     if (!userId) return;
@@ -214,8 +215,14 @@ export default function HomeScreen() {
         // Fall back to yesterday's summary if today's isn't ready yet
         return fetchDailyAiSummary(userId, yesterdayKey);
       })
-      .then(setAiSummary)
-      .catch(() => setAiSummary(null))
+      .then((summary) => {
+        setAiSummary(summary);
+        setHasSummaryData(summary != null);
+      })
+      .catch(() => {
+        setAiSummary(null);
+        setHasSummaryData(false);
+      })
       .finally(() => setIsLoadingSummary(false));
   }, [userId]);
 
@@ -307,8 +314,10 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.bubbleSubtext}>
               {isLoadingSummary
-                ? "pop on your s'pot today and give me a hot second..."
-                : aiSummary?.insight}
+                ? "Pop on your s'pot today and give me a hot second..."
+                : hasSummaryData === false
+                  ? "Pop on your s'pot and sit down. I'll cook up a daily personalised insight just for you once I've seen you in action."
+                  : aiSummary?.insight}
             </Text>
           </Animated.View>
 
