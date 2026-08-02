@@ -454,3 +454,31 @@ export async function fetchDailyPosturePair(
     return empty;
   }
 }
+
+// past 7 days
+export async function fetchLast7DaysPosture(
+  userId: string | null,
+  todayKey: string // YYYY-MM-DD
+): Promise<DailyPostureRow[]> {
+  if (!userId) return [];
+
+  // Build array of last 7 date keys
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(`${todayKey}T00:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  const { data, error } = await supabase
+    .from("posture_daily")
+    .select(DAILY_COLUMNS)
+    .eq("user_id", userId)
+    .in("date", dates)
+    .order("date", { ascending: false });
+
+  if (error || !data?.length) return [];
+  return (data as unknown as Array<Record<string, unknown> & { date: string }>)
+    .map(mapRowToDailyPostureRow)
+    .filter(Boolean) as DailyPostureRow[];
+}

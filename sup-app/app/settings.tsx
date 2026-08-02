@@ -379,6 +379,7 @@ export default function SettingsScreen() {
           setShowCoachingModal(false);
           showToast("Using default coaching setup", "success");
         }}
+        onCancel={() => setShowCoachingModal(false)}
       />
     </ScrollView>
   );

@@ -35,36 +35,29 @@ import {
 } from "../../src/services/posture/postureSyncService";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 
-// ─── Animation timing constants (mirrors home.tsx) ───────────────────────────
-const BUBBLE_POP_DURATION_MS  = 600;  // how long each card takes to pop in
-const FIRST_CARD_DELAY_MS     = 400;  // delay before session card appears
-const SECOND_CARD_DELAY_MS    = 450;  // delay after session card before score card
-const THIRD_CARD_DELAY_MS     = 450;  // delay after score card before snapshot card
-// ─────────────────────────────────────────────────────────────────────────────
-
-const STATIC_SNAPSHOT_MESSAGE_1 =
-  "you have been leaning forward for too long, take a stretch break immediately";
-const STATIC_SNAPSHOT_MESSAGE_2 =
-  "stand up before 3:30 pm to stay ahead of posture dips and missed walking breaks";
-
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
-const TODAY_KEY = new Date().toISOString().split("T")[0];
+const now = new Date();
+const year = now.getFullYear();
+const month = String(now.getMonth() + 1).padStart(2, "0");
+const day = String(now.getDate()).padStart(2, "0");
+const TODAY_KEY = `${year}-${month}-${day}`;
 
 const SEGMENT_COLORS: Record<string, string> = {
-  upright:      "#6DC96D",
+  upright:  "#6DC96D",
   forward_lean: "#FFD600",
-  slouched:     "#F5A623",
-  severe:       "#EC555E",
-  tilted_left:  "#F5A623",
-  tilted_right: "#F5A623",
+  slouched:  "#F5A623",
+  severe: "#EC555E",
+  tilted_left:   "#F5A623",
+  tilted_right:  "#F5A623",
 };
 
 function ScoreBar({ postureAverages }: { postureAverages: Record<string, number> }) {
   const segments = Object.entries(postureAverages).map(([key, pct]) => ({
-    pct,
-    color: SEGMENT_COLORS[key] ?? "#ccc",
-  }));
+      pct,
+      color: SEGMENT_COLORS[key] ?? "#ccc",
+    })
+  );
 
   return (
     <View style={[scoreBarStyles.track, scoreBarStyles.shadow]}>
@@ -100,6 +93,7 @@ const scoreBarStyles = StyleSheet.create({
   },
 });
 
+/** Small pill badge for % changes */
 function ChangeBadge({ value }: { value: number }) {
   const isUp = value >= 0;
   return (
@@ -128,6 +122,7 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
+/** Tiny '?' button */
 function InfoButton({ onPress }: { onPress: () => void }) {
   return (
     <TouchableOpacity style={infoStyles.button} onPress={onPress} hitSlop={8}>
@@ -157,10 +152,11 @@ const infoStyles = StyleSheet.create({
   },
 });
 
+/** Info popup modal */
 function InfoModal({
   metricKey,
   onClose,
-  metricInfo,
+  metricInfo
 }: {
   metricKey: string | null;
   onClose: () => void;
@@ -178,28 +174,6 @@ function InfoModal({
             <View style={modalStyles.sheet}>
               <Text style={modalStyles.title}>{info.title}</Text>
               <Text style={modalStyles.body}>{info.body}</Text>
-
-              {info.stats && (
-                <View style={modalStyles.statsContainer}>
-                  {info.stats.map((stat) => (
-                    <View
-                      key={stat.label}
-                      style={[
-                        modalStyles.statRow,
-                        info.stats && stat === info.stats[info.stats.length - 1] && { borderBottomWidth: 0 },
-                      ]}
-                    >
-                      <View style={modalStyles.statLabelRow}>
-                        {stat.color && (
-                          <View style={[modalStyles.dot, { backgroundColor: stat.color }]} />
-                        )}
-                        <Text style={modalStyles.statLabel}>{stat.label}</Text>
-                      </View>
-                      <Text style={modalStyles.statValue}>{stat.value}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
 
               <TouchableOpacity style={modalStyles.closeBtn} onPress={onClose}>
                 <Text style={modalStyles.closeBtnText}>got it</Text>
@@ -259,15 +233,43 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     color: "white",
   },
-  statsContainer: {
-    marginTop: 16,
+});
+
+/** Posture breakdown list shown inside the snapshot card */
+function PostureBreakdown({ stats }: { stats: { label: string; value: string; color?: string }[] }) {
+  return (
+    <View style={breakdownStyles.container}>
+      {stats.map((stat, i) => (
+        <View
+          key={stat.label}
+          style={[
+            breakdownStyles.row,
+            i === stats.length - 1 && { borderBottomWidth: 0 },
+          ]}
+        >
+          <View style={breakdownStyles.labelRow}>
+            {stat.color && (
+              <View style={[breakdownStyles.dot, { backgroundColor: stat.color }]} />
+            )}
+            <Text style={breakdownStyles.label}>{stat.label}</Text>
+          </View>
+          <Text style={breakdownStyles.value}>{stat.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const breakdownStyles = StyleSheet.create({
+  container: {
     width: "100%",
     borderRadius: 16,
     backgroundColor: "rgba(63, 36, 131, 0.06)",
     paddingVertical: 8,
     paddingHorizontal: 14,
+    marginTop: 4,
   },
-  statRow: {
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -275,7 +277,7 @@ const modalStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(63, 36, 131, 0.08)",
   },
-  statLabelRow: {
+  labelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -285,13 +287,13 @@ const modalStyles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  statLabel: {
+  label: {
     fontFamily: "Agrandir-Regular",
     fontSize: 13,
     color: PRIMARY_TEXT,
     opacity: 0.75,
   },
-  statValue: {
+  value: {
     fontFamily: "Agrandir-GrandHeavy",
     fontSize: 13,
     color: PRIMARY_TEXT,
@@ -306,105 +308,29 @@ export default function DailyScreen() {
   const [streakDays, setStreakDays] = useState<number | null>(null);
   const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
 
-  const TODAY_KEY = "2026-07-15"; // UPDATE TO CURRENT DATE LATER!
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
   const [isLoadingDaily, setIsLoadingDaily] = useState(true);
 
   const [fontsLoaded] = useFonts({
-    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
-  // ─── Card entrance animations ───────────────────────────────────────────────
-  const sessionCardAnim  = useRef(new Animated.Value(0)).current;
-  const scoreCardAnim    = useRef(new Animated.Value(0)).current;
-  const snapshotCardAnim = useRef(new Animated.Value(0)).current;
-
-  const sequenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasAnimatedRef = useRef(false);
-
-  const popIn = (anim: Animated.Value) =>
-    Animated.spring(anim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 80,
-      friction: 9,
-    });
-
-  const runEntrySequence = useCallback(() => {
-    sessionCardAnim.setValue(0);
-    scoreCardAnim.setValue(0);
-    snapshotCardAnim.setValue(0);
-
-    // 1. Session card
-    sequenceRef.current = setTimeout(() => {
-      popIn(sessionCardAnim).start(() => {
-
-        // 2. Score card
-        sequenceRef.current = setTimeout(() => {
-          popIn(scoreCardAnim).start(() => {
-
-            // 3. Snapshot card
-            sequenceRef.current = setTimeout(() => {
-              popIn(snapshotCardAnim).start();
-            }, THIRD_CARD_DELAY_MS);
-          });
-        }, SECOND_CARD_DELAY_MS);
-      });
-    }, FIRST_CARD_DELAY_MS);
-  }, [sessionCardAnim, scoreCardAnim, snapshotCardAnim]);
-
-  const cardAnimStyle = (anim: Animated.Value) => ({
-    opacity: anim,
-    transform: [
-      {
-        scale: anim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.85, 1],
-        }),
-      },
-      {
-        translateY: anim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [12, 0],
-        }),
-      },
-    ],
-  });
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-
-      // Re-run entry sequence every time the screen comes into focus
-      hasAnimatedRef.current = false;
-      runEntrySequence();
-
-      return () => {
-        if (sequenceRef.current) clearTimeout(sequenceRef.current);
-      };
-    }, [fadeAnim, runEntrySequence])
-  );
-
   const loadDailyPosture = useCallback(async (background = false) => {
     if (!userId) return;
     if (!background) setIsLoadingDaily(true);
-
+ 
+    // show cached data immediately so UI and AI prompt unblock right away
     const cached = await getCachedDailyPair(userId, TODAY_KEY);
     if (cached) {
       setDailyPair(cached);
       setIsLoadingDaily(false);
     }
-
+ 
+    // fetch fresh in background regardless
     fetchDailyPosturePair(userId, TODAY_KEY)
       .then((fresh) => {
         setDailyPair(fresh);
@@ -413,7 +339,7 @@ export default function DailyScreen() {
       .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
       .finally(() => setIsLoadingDaily(false));
   }, [userId]);
-
+ 
   const loadProfile = useCallback(() => {
     return fetchCurrentUserProfileWithStats()
       .then((profile) => {
@@ -426,7 +352,8 @@ export default function DailyScreen() {
       })
       .finally(() => setIsLoadingProfile(false));
   }, []);
-
+ 
+  // initial load: run all fetches in parallel
   useEffect(() => {
     if (!isAuthenticated) {
       setCurrentUser(null);
@@ -434,7 +361,7 @@ export default function DailyScreen() {
       setDailyPair({ today: null, previous: null });
       return;
     }
-
+ 
     Promise.all([
       loadProfile(),
       loadDailyPosture(),
@@ -458,6 +385,17 @@ export default function DailyScreen() {
     }, [isAuthenticated, loadProfile, loadDailyPosture])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim])
+  );
+
   const handleUsernameChange = async (newName: string) => {
     try {
       const updatedProfile = await updateCurrentUserProfile({ name: newName });
@@ -473,54 +411,66 @@ export default function DailyScreen() {
 
   const { today, previous } = dailyPair;
 
-  const totalDeskMs  = today?.totalDeskMs ?? 0;
-  const supScore     = today?.supScore ?? 0;
-  const stateTotals  = today?.stateTotals ?? {};
+  // Current day
+  const totalDeskMs = today?.totalDeskMs ?? 0;
+  const supScore = today?.supScore ?? 0;
+  const stateTotals = today?.stateTotals ?? {};
 
-  const prevSupScore    = previous?.supScore ?? 0;
+  // Previous day
+  const prevSupScore = previous?.supScore ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
 
   console.log("[DailyScreen] dailyPair", dailyPair);
 
-  const sessionHours   = Math.floor(totalDeskMs / 3_600_000);
+  const sessionHours = Math.floor(totalDeskMs / 3_600_000);
   const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
   const prevSessionMins = prevTotalDeskMs / 60000;
 
+  // % changes per metric (computed here so they use live step data)
   const scoreChange   = Math.round(((supScore - prevSupScore) / prevSupScore) * 100);
   const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
   const showBadges = today != null && previous != null;
 
   const STATE_TOTALS = {
-    upright:      stateTotals.upright      ?? 0,
+    upright: stateTotals.upright ?? 0,
     forward_lean: stateTotals.forward_lean ?? 0,
-    slouched:     stateTotals.slouched     ?? 0,
-    severe:       stateTotals.severe       ?? 0,
-    tilted_left:  stateTotals.tilted_left  ?? 0,
+    slouched: stateTotals.slouched ?? 0,
+    severe: stateTotals.severe ?? 0,
+    tilted_left: stateTotals.tilted_left ?? 0,
     tilted_right: stateTotals.tilted_right ?? 0,
   };
-
+  // normalise scores to out of 100%
   const TOTAL = Object.values(STATE_TOTALS).reduce((sum, v) => sum + v, 0);
-  const POSTURE_AVERAGES = Object.fromEntries(
-    Object.entries(STATE_TOTALS).map(([key, val]) => [key, (val / TOTAL) * 100])
+  const POSTURE_AVERAGES = (
+    Object.fromEntries(
+      Object.entries(STATE_TOTALS).map(([key, val]) => [
+        key,
+        (val / TOTAL) * 100,
+      ])
+    )
   ) as Record<keyof typeof STATE_TOTALS, number>;
 
+  // after normalising, if any of the posture averages are NaN (due to TOTAL being 0), set them to 0
   for (const key in POSTURE_AVERAGES) {
-    const k = key as keyof typeof POSTURE_AVERAGES;
-    if (isNaN(POSTURE_AVERAGES[k])) POSTURE_AVERAGES[k] = 0;
+    const postureKey = key as keyof typeof POSTURE_AVERAGES;
+    if (isNaN(POSTURE_AVERAGES[postureKey])) {
+      POSTURE_AVERAGES[postureKey] = 0;
+    }
   }
 
-  const METRIC_INFO: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }> = {
+  const POSTURE_STATS = [
+    { label: "Upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
+    { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
+    { label: "Slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
+    { label: "Severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
+    { label: "Tilted Left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
+    { label: "Tilted Right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
+  ];
+
+  const METRIC_INFO: Record<string, { title: string; body: string }> = {
     snapshot: {
       title: "s'napshot",
       body: `a real-time summary of your posture health. the bar shows how your spine health score averaged across your sessions today.\ntips below are personalised to your current posture patterns.\n\ngo into Desk Mode to see the data from each session.`,
-      stats: [
-        { label: "Upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
-        { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
-        { label: "Slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
-        { label: "Severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
-        { label: "Tilted Left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
-        { label: "Tilted Right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
-      ],
     },
     session: {
       title: "s'ession",
@@ -553,33 +503,34 @@ export default function DailyScreen() {
           <Text style={styles.sectionLabel}>today:</Text>
         </View>
 
-        {/* Stats grid — session first, then score */}
+        {/* S'napshot card */}
+        <View style={[styles.card, styles.shadow]}>
+          <InfoButton onPress={() => setActiveInfo("snapshot")} />
+          <Text style={styles.statLabel}>s'napshot</Text>
+          <ScoreBar postureAverages={POSTURE_AVERAGES} />
+          <PostureBreakdown stats={POSTURE_STATS} />
+        </View>
+
+        {/* Stats grid */}
         <View style={styles.grid}>
           {/* S'ession */}
-          <Animated.View style={[styles.card, styles.gridCell, styles.shadow, cardAnimStyle(sessionCardAnim)]}>
+          <View style={[styles.card, styles.gridCell, styles.shadow]}>
             <InfoButton onPress={() => setActiveInfo("session")} />
             {showBadges && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
             <Text style={styles.statValue}>
               {sessionHours}h {sessionMinutes}m
             </Text>
-          </Animated.View>
+          </View>
 
           {/* S'core */}
-          <Animated.View style={[styles.card, styles.gridCell, styles.shadow, cardAnimStyle(scoreCardAnim)]}>
+          <View style={[styles.card, styles.gridCell, styles.shadow]}>
             <InfoButton onPress={() => setActiveInfo("score")} />
             {showBadges && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
             <Text style={styles.statValue}>{supScore}</Text>
-          </Animated.View>
+          </View>
         </View>
-
-        {/* S'napshot card — last to appear */}
-        <Animated.View style={[styles.card, styles.shadow, cardAnimStyle(snapshotCardAnim)]}>
-          <InfoButton onPress={() => setActiveInfo("snapshot")} />
-          <Text style={styles.cardTitle}>s'napshot</Text>
-          <ScoreBar postureAverages={POSTURE_AVERAGES} />
-        </Animated.View>
 
       </ScrollView>
     </Animated.View>
@@ -655,13 +606,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
-  cardTitle: {
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 16,
-    color: PRIMARY_TEXT,
-    textAlign: "center",
-    marginBottom: 2,
-  },
   snapshotMessage: {
     fontFamily: "Agrandir-Regular",
     fontSize: 14,
@@ -690,6 +634,7 @@ const styles = StyleSheet.create({
     color: PRIMARY_TEXT,
     opacity: 0.75,
     marginBottom: 4,
+    textAlign: "center",
   },
   statValue: {
     fontFamily: "Agrandir-Regular",

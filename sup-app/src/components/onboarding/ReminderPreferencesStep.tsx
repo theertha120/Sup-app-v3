@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colours } from "@/theme/colours";
+import { useFonts } from "expo-font";
 import type { ReminderFrequency, ReminderTone } from "@/src/services/user/behaviorProfileService";
+import React from "react";
 
 const TONES: { id: ReminderTone; label: string }[] = [
   { id: "gentle", label: "gentle" },
@@ -14,7 +15,6 @@ const FREQUENCIES: { id: ReminderFrequency; label: string }[] = [
   { id: "light", label: "light" },
   { id: "medium", label: "medium" },
   { id: "active", label: "active" },
-  
 ];
 
 export default function ReminderPreferencesStep({
@@ -28,6 +28,13 @@ export default function ReminderPreferencesStep({
   onTonesChange: (value: ReminderTone[]) => void;
   onFrequencyChange: (value: ReminderFrequency) => void;
 }) {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <View style={styles.step}>
       <View style={styles.group}>
@@ -81,7 +88,9 @@ function Chip({
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
-      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
+      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -94,9 +103,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 18,
-    fontWeight: "700",
-    color: colours.textPrimary,
+    color: "#1D014A",
   },
   options: {
     flexDirection: "row",
@@ -108,19 +117,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colours.border,
+    borderColor: "#AB99FA",
     backgroundColor: "#FFFFFF",
   },
   chipSelected: {
-    backgroundColor: colours.primary,
-    borderColor: colours.primary,
+    backgroundColor: "#AB99FA",
+    borderColor: "#AB99FA",
   },
   chipLabel: {
-    color: colours.textPrimary,
+    fontFamily: "Agrandir-Regular",
     fontSize: 13,
-    fontWeight: "600",
+    color: "#1D014A",
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   chipLabelSelected: {
+    fontFamily: "Agrandir-Regular",
     color: "#FFFFFF",
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
 });

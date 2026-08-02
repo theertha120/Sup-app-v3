@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
 import type { WeeklyGoalId } from "@/src/services/user/behaviorProfileService";
+import React from "react";
 
 const GOALS: { id: WeeklyGoalId; label: string }[] = [
   { id: "3_resets_per_day", label: "complete 3 posture resets/day" },
@@ -15,6 +17,13 @@ export default function WeeklyGoalStep({
   value: WeeklyGoalId[];
   onChange: (value: WeeklyGoalId[]) => void;
 }) {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular": require("../../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <View style={styles.step}>
       <Text style={styles.title}>What is your weekly goal?</Text>
@@ -54,7 +63,9 @@ function Chip({
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
-      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
+      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -65,8 +76,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "700",
-    color: colours.textPrimary,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#1D014A",
   },
   options: {
     flexDirection: "row",
@@ -78,37 +89,39 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colours.border,
+    borderColor: "#AB99FA",
     backgroundColor: "#FFFFFF",
   },
   chipSelected: {
-    backgroundColor: colours.primary,
-    borderColor: colours.primary,
+    backgroundColor: "#AB99FA",
+    borderColor: "#AB99FA",
   },
   chipLabel: {
-    color: colours.textPrimary,
+    color: "#1D014A",
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
   },
   chipLabelSelected: {
-    color: "#FFFFFF",
+    color: "#1D014A",
+    fontFamily: "Agrandir-Regular",
   },
   customField: {
     gap: 8,
   },
   customLabel: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
     color: colours.textSecondary,
   },
   input: {
     borderWidth: 1,
-    borderColor: colours.border,
+    borderColor: "#AB99FA",
     borderRadius: 14,
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: colours.textPrimary,
+    color: "#1D014A",
     fontSize: 15,
+    fontFamily: "Agrandir-Regular",
   },
 });

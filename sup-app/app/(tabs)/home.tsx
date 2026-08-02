@@ -20,12 +20,7 @@ import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupMod
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import {
-  fetchDailyPosturePair,
-  type DailyPosturePair,
-  type DailyPostureRow,
-} from "../../src/services/posture/postureSyncService";
-import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
+import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -36,6 +31,21 @@ const TYPEWRITER_CHAR_DELAY_MS = 150;   // delay between each typed character
 const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before status bubble
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
 // ─────────────────────────────────────────────────────────────────────────────
+
+const getLocalDateKey = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+  // return `2026-07-25`
+};
+
+const getPreviousDateKey = (dateKey: string) => {
+  const date = new Date(dateKey + "T12:00:00"); // noon avoids DST edge cases
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split("T")[0];
+};
 
 export default function HomeScreen() {
 
@@ -48,9 +58,6 @@ export default function HomeScreen() {
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
 
-  const TODAY_KEY = "2026-07-07"; // UPDATE TO CURRENT DATE LATER!
-  const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
-  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
@@ -147,25 +154,6 @@ export default function HomeScreen() {
   }, [isLoadingProfile, currentUser, runEntrySequence]);
   // ─────────────────────────────────────────────────────────────────────────
 
-  const loadDailyPosture = useCallback(async (background = false) => {
-    if (!userId) return;
-    if (!background) setIsLoadingDaily(true);
-
-    const cached = await getCachedDailyPair(userId, TODAY_KEY);
-    if (cached) {
-      setDailyPair(cached);
-      setIsLoadingDaily(false);
-    }
-
-    fetchDailyPosturePair(userId, TODAY_KEY)
-      .then((fresh) => {
-        setDailyPair(fresh);
-        setCachedDailyPair(userId, TODAY_KEY, fresh);
-      })
-      .catch((err) => console.error("[HomeScreen] fetchDailyPosturePair failed", err))
-      .finally(() => setIsLoadingDaily(false));
-  }, [userId]);
-
   const loadProfile = useCallback(() => {
     return fetchCurrentUserProfileWithStats()
       .then((profile) => {
@@ -183,13 +171,11 @@ export default function HomeScreen() {
       setShowProfileModal(false);
       setShowCoachingSetupModal(false);
       setIsLoadingProfile(true);
-      setDailyPair({ today: null, previous: null });
       return;
     }
 
     Promise.all([
       loadProfile(),
-      loadDailyPosture(),
       fetchCurrentBehaviorProfile()
         .then((profile) => setShowCoachingSetupModal(profile == null))
         .catch(() => setShowCoachingSetupModal(false)),
@@ -211,13 +197,27 @@ export default function HomeScreen() {
     useCallback(() => {
       if (!isAuthenticated) return;
       loadProfile();
-      loadDailyPosture(true);
-    }, [isAuthenticated, loadProfile, loadDailyPosture])
+    }, [isAuthenticated, loadProfile])
   );
 
-  const { today } = dailyPair;
-  const stateTotals = today?.stateTotals ?? {};
-  console.log("[HomeScreen] stateTotals:", stateTotals);
+  const [aiSummary, setAiSummary] = useState<{ insight: string; concised_summary: string } | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    const todayKey = getLocalDateKey();
+    const yesterdayKey = getPreviousDateKey(todayKey);
+
+    fetchDailyAiSummary(userId, todayKey)
+      .then((summary) => {
+        if (summary) return summary;
+        // Fall back to yesterday's summary if today's isn't ready yet
+        return fetchDailyAiSummary(userId, yesterdayKey);
+      })
+      .then(setAiSummary)
+      .catch(() => setAiSummary(null))
+      .finally(() => setIsLoadingSummary(false));
+  }, [userId]);
 
   const handleProfilePress = () => {
     setShowProfileModal(true);
@@ -302,8 +302,13 @@ export default function HomeScreen() {
 
           {/* Status bubble */}
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
-            <Text style={styles.bubbleHeadline}>
+            <Text style={styles.bubbleText}>
               s'kipper says:
+            </Text>
+            <Text style={styles.bubbleSubtext}>
+              {isLoadingSummary
+                ? "pop on your s'pot today and give me a hot second..."
+                : aiSummary?.insight}
             </Text>
           </Animated.View>
 

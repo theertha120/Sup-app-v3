@@ -47,6 +47,7 @@ Respond with ONLY a JSON object, no other text:
   `.trim();
 }
 
+
 // To update if changing AI provider
 const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? "";
 

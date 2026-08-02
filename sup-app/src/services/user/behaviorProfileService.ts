@@ -31,10 +31,11 @@ export interface BehaviorProfile {
   primaryGoals: BehaviorGoalId[];
   preferredTones: ReminderTone[];
   reminderFrequency: ReminderFrequency;
-  activeTimePresets: ActiveTimePreset[]; // replaces activeTimeStart/End
+  activeTimePresets: ActiveTimePreset[];
   activeTimeStart: string;
   activeTimeEnd: string;
   weeklyGoals: WeeklyGoalId[];
+  dailyRun: number; // hour (0–23)
 }
 
 export interface BehaviorProfileInput {
@@ -45,6 +46,7 @@ export interface BehaviorProfileInput {
   activeTimeStart: string;
   activeTimeEnd: string;
   weeklyGoals: WeeklyGoalId[];
+  dailyRun: number; // hour (0–23)
 }
 
 type BehaviorProfileRow = {
@@ -55,9 +57,20 @@ type BehaviorProfileRow = {
   active_time_end: string | null;
   active_time_presets: ActiveTimePreset[] | null;
   weekly_goals: WeeklyGoalId[] | null;
+  daily_run: string | null; // stored as "HH:MM" in Supabase
 };
 
-// Persistence now uses Supabase table `user_profile`.
+/** Convert a "HH:MM" string from Supabase into an hour integer (0–23). */
+function dailyRunFromDb(value: string | null): number {
+  if (!value) return DEFAULT_BEHAVIOR_PROFILE.dailyRun;
+  const hour = parseInt(value.split(":")[0], 10);
+  return Number.isFinite(hour) ? hour : DEFAULT_BEHAVIOR_PROFILE.dailyRun;
+}
+
+/** Convert an hour integer (0–23) to the "HH:MM" string Supabase expects. */
+function dailyRunToDb(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
 
 export const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
   primaryGoals: ["general_posture_awareness"],
@@ -67,6 +80,7 @@ export const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
   activeTimeStart: "12:00",
   activeTimeEnd: "16:59",
   weeklyGoals: ["awareness_only"],
+  dailyRun: 9,
 };
 
 const PRESET_RANGES: Record<
@@ -126,12 +140,7 @@ function mapRowToBehaviorProfile(row: BehaviorProfileRow): BehaviorProfile | nul
     activeTimeStart: row.active_time_start,
     activeTimeEnd: row.active_time_end,
     weeklyGoals: row.weekly_goals,
-  };
-}
-
-function toProfileInput(profile: BehaviorProfileInput): BehaviorProfile {
-  return {
-    ...profile,
+    dailyRun: dailyRunFromDb(row.daily_run),
   };
 }
 
@@ -164,6 +173,7 @@ export function createDefaultBehaviorProfile(): BehaviorProfileInput {
     activeTimeStart: DEFAULT_BEHAVIOR_PROFILE.activeTimeStart,
     activeTimeEnd: DEFAULT_BEHAVIOR_PROFILE.activeTimeEnd,
     weeklyGoals: DEFAULT_BEHAVIOR_PROFILE.weeklyGoals,
+    dailyRun: DEFAULT_BEHAVIOR_PROFILE.dailyRun,
   };
 }
 
@@ -175,11 +185,10 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
   }
 
   try {
-    // Use `id` (text) for lookups so we don't conflict with numeric PK `id`.
     const { data, error } = await supabase
       .from("user_profile")
       .select(
-        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals, daily_run"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -194,7 +203,6 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
       return profile;
     }
 
-    // No row found for this user
     return null;
   } catch (error) {
     console.warn("[behavior-profile] Remote fetch failed", error);
@@ -206,20 +214,20 @@ export async function saveCurrentBehaviorProfile(
   profileInput: BehaviorProfileInput
 ): Promise<BehaviorProfile> {
   const userId = await getCurrentUserId();
-  const profile = toProfileInput(profileInput);
   const { start, end } = resolveTimeRangeFromPresets(profileInput.activeTimePresets);
 
-    const payload = {
-      primary_goals: profileInput.primaryGoals,
-      preferred_tones: profileInput.preferredTones,
-      reminder_frequency: profileInput.reminderFrequency,
-      active_time_presets: profileInput.activeTimePresets,
-      active_time_start: start,
-      active_time_end: end,
-      weekly_goals: profileInput.weeklyGoals
+  const payload = {
+    primary_goals: profileInput.primaryGoals,
+    preferred_tones: profileInput.preferredTones,
+    reminder_frequency: profileInput.reminderFrequency,
+    active_time_presets: profileInput.activeTimePresets,
+    active_time_start: start,
+    active_time_end: end,
+    weekly_goals: profileInput.weeklyGoals,
+    daily_run: dailyRunToDb(profileInput.dailyRun),
+    updated_at: new Date().toISOString(), // UTC timestamp e.g. "2025-01-15T09:00:00.000Z"
   };
 
-  // Upsert into `user_profile` table. Throw on error so callers know if save failed.
   const payloadWithAuthId = { id: userId, ...payload };
 
   try {
@@ -227,7 +235,7 @@ export async function saveCurrentBehaviorProfile(
       .from("user_profile")
       .upsert(payloadWithAuthId, { onConflict: "id" })
       .select(
-        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals"
+        "primary_goals, preferred_tones, reminder_frequency, active_time_start, active_time_end, active_time_presets, weekly_goals, daily_run"
       )
       .maybeSingle();
 
