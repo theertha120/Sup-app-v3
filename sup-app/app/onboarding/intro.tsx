@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useEffect } from "react";
 import { Animated, StyleSheet, Text, View, Image, Pressable } from "react-native";
+import { useFonts } from "expo-font";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
@@ -7,6 +8,10 @@ import BackgroundBlobs from "../(tabs)/backgroundBlobs";
 import { supabase } from "../../src/lib/supabase";
 
 export default function IntroScreen() {
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+  });
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -29,6 +34,8 @@ export default function IntroScreen() {
       }).start();
     }, [fadeAnim])
   );
+
+  if (!fontsLoaded) return null;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -82,8 +89,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   heading: {
-    fontSize: 36,
-    fontWeight: "900",
+    fontSize: 30,
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     textAlign: "center",
     letterSpacing: 0.5,
@@ -107,7 +114,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#fff",
     textAlign: "center",
   },

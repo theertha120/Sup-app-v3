@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
-import { isLoading, useFonts } from "expo-font";
+import { useFonts } from "expo-font";
 import React, { useRef, useCallback, useState, useEffect } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";

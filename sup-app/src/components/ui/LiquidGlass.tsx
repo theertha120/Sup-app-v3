@@ -1,8 +1,8 @@
 import React from "react";
-import { View, Pressable, Dimensions, StyleSheet } from "react-native";
+import { View, Pressable, Dimensions, StyleSheet, Image } from "react-native";
 import { BlurView } from "expo-blur";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Animated, {
   useAnimatedStyle,
@@ -19,6 +19,7 @@ export default function LiquidGlass({
 }: BottomTabBarProps) {
   const activeIndex = state.index;
   const TAB_WIDTH = TAB_BAR_WIDTH / state.routes.length;
+  const { bottom: bottomInset } = useSafeAreaInsets();
 
   const animatedBubbleStyle = useAnimatedStyle(() => {
     return {
@@ -36,27 +37,15 @@ export default function LiquidGlass({
     };
   });
 
-  const getIcon = (routeName: string) => {
-    switch (routeName) {
-      case "home":
-        return "home-outline";
-
-      case "stats":
-        return "bar-chart-outline";
-    
-      case "leaderboard":
-        return "trophy-outline";
-
-      case "desk":
-        return "desktop-outline";
-
-      default:
-        return "ellipse";
-    }
+  const NAV_IMAGES: Record<string, any> = {
+    home:        require("../../../assets/images/nav_home.png"),
+    stats:       require("../../../assets/images/nav_stats.png"),
+    leaderboard: require("../../../assets/images/nav_community.png"),
+    desk:        require("../../../assets/images/nav_desk.png"),
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { bottom: 25 + bottomInset }]}>
       <BlurView intensity={100} tint="light" style={styles.container}>
         <View style={styles.shine} />
         <View style={styles.shineBottom} />
@@ -95,10 +84,10 @@ export default function LiquidGlass({
               style={styles.tab}
             >
               <Animated.View style={scaleStyle}>
-                <Ionicons
-                  name={getIcon(route.name)}
-                  size={24}
-                  color={isFocused ? "#111" : "#888"}
+                <Image
+                  source={NAV_IMAGES[route.name]}
+                  style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
+                  resizeMode="contain"
                 />
               </Animated.View>
             </Pressable>

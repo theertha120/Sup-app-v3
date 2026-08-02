@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { useFonts } from "expo-font";
 
 const GENDERS = ["male", "female", "other"];
 
@@ -17,6 +18,13 @@ export default function FinalScreen() {
   const [age, setAge] = useState(27);
   const [accepted, setAccepted] = useState(false);
   const trackWidth = useRef(0);
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -136,18 +144,18 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   heading: {
     fontSize: 38,
-    fontWeight: "900",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     textAlign: "center",
     marginBottom: 10,
   },
   subheading: {
     fontSize: 20,
-    fontWeight: "500",
+    fontFamily: "Agrandir-Regular",
     color: "#111",
     textAlign: "center",
     lineHeight: 30,
@@ -161,7 +169,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     marginBottom: 10,
   },
@@ -182,7 +190,7 @@ const styles = StyleSheet.create({
   },
   genderText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
     color: "#333",
   },
   genderTextSelected: {
@@ -199,7 +207,7 @@ const styles = StyleSheet.create({
   },
   ageValue: {
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
   },
   sliderTrack: {
@@ -228,6 +236,7 @@ const styles = StyleSheet.create({
   },
   ageNote: {
     fontSize: 12,
+    fontFamily: "Agrandir-Regular",
     color: "#777",
     lineHeight: 17,
     marginTop: 6,
@@ -251,16 +260,18 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     flex: 1,
     fontSize: 14,
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     lineHeight: 20,
   },
   link: {
     color: "#5222AE",
     textDecorationLine: "underline",
-    fontWeight: "600",
+    fontFamily: "Agrandir-Regular",
   },
   privacyLink: {
     fontSize: 13,
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
     textDecorationLine: "underline",
     textAlign: "center",
@@ -275,7 +286,7 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#ffffff",
     textAlign: "center",
   },

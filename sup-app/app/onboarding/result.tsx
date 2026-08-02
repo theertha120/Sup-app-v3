@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { computeOnboardingResult, ARCHETYPE_DISPLAY, type Archetype } from "./archetypeScoring";
+import { useFonts } from "expo-font";
 
 const ARCHETYPE_IMAGE: Record<Archetype, any> = {
   Compiler:   require("../../assets/images/compiler.png"),
@@ -15,12 +16,19 @@ const ARCHETYPE_IMAGE: Record<Archetype, any> = {
 
 export default function ResultScreen() {
   const router = useRouter();
-  const { answers, age } = useOnboarding();
+  const { answers } = useOnboarding();
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
 
   const result = computeOnboardingResult(
     answers.q1, answers.q2, answers.q3, answers.q4, answers.q5, answers.q6,
   );
   const display = ARCHETYPE_DISPLAY[result.archetype];
+
+  if (!fontsLoaded) return null;
 
   return (
     <LinearGradient
@@ -48,11 +56,6 @@ export default function ResultScreen() {
           <Text style={styles.description}>{display.description}</Text>
 
           <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>s'pine age</Text>
-              <Text style={styles.statValue}>{age + display.spineAgeOffset}{display.spineAgeSuffix}</Text>
-              <Text style={styles.statSub}>{display.spineSub}</Text>
-            </View>
             <View style={styles.statCard}>
               <Text style={styles.statQuote}>{display.quote}</Text>
             </View>
@@ -119,7 +122,7 @@ const styles = StyleSheet.create({
   },
   header: {
     fontSize: 24,
-    fontWeight: "900",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#2D1A6E",
     textAlign: "center",
     marginBottom: 20,
@@ -143,12 +146,13 @@ const styles = StyleSheet.create({
   },
   clusterName: {
     fontSize: 20,
-    fontWeight: "800",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#ffffff",
     textAlign: "center",
   },
   description: {
     fontSize: 16,
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     textAlign: "center",
     lineHeight: 24,
@@ -171,28 +175,29 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
+    fontFamily: "Agrandir-Regular",
     color: "#666",
     marginBottom: 4,
     textAlign: "center",
   },
   statValue: {
     fontSize: 28,
-    fontWeight: "900",
+    fontFamily: "Agrandir-Regular",
     color: "#2D1A6E",
     marginBottom: 4,
     textAlign: "center",
   },
   statSub: {
     fontSize: 12,
+    fontFamily: "Agrandir-Regular",
     color: "#555",
     textAlign: "center",
   },
   statQuote: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#2D1A6E",
     lineHeight: 22,
-    fontStyle: "italic",
     textAlign: "center",
   },
   tagsRow: {
@@ -211,13 +216,14 @@ const styles = StyleSheet.create({
   },
   tagLabel: {
     fontSize: 10,
+    fontFamily: "Agrandir-Regular",
     color: "#888",
     marginBottom: 3,
     textAlign: "center",
   },
   tagValue: {
     fontSize: 12,
-    fontWeight: "700",
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
     textAlign: "center",
   },
@@ -231,7 +237,7 @@ const styles = StyleSheet.create({
   },
   downloadBtnText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#ffffff",
     textAlign: "center",
   },

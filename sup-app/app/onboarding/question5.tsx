@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, TextInput } from "react-nativ
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { useFonts } from "expo-font";
 
 const TOTAL_QUESTIONS = 6;
 const CURRENT_QUESTION = 5;
@@ -12,6 +13,13 @@ export default function Question5Screen() {
   const { setQ5 } = useOnboarding();
   const [selected, setSelected] = useState<string | null>(null);
   const [otherText, setOtherText] = useState("");
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
 
   const handleSelect = (key: string) => {
     setSelected(key);
@@ -122,12 +130,12 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   questionCounter: {
     fontSize: 18,
     color: "#333",
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   progressTrack: {
     height: 4,
@@ -149,14 +157,14 @@ const styles = StyleSheet.create({
   },
   questionLabel: {
     fontSize: 26,
-    fontWeight: "900",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     marginBottom: 6,
     textAlign: "center",
   },
   questionBody: {
     fontSize: 22,
-    fontWeight: "500",
+    fontFamily: "Agrandir-Regular",
     color: "#111",
     marginBottom: 10,
     textAlign: "center",
@@ -183,7 +191,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
   },
   optionTextSelected: {
@@ -195,6 +203,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
+    fontFamily: "Agrandir-Regular",
     color: "#333",
     marginBottom: 12,
     shadowColor: "#000",
@@ -215,6 +224,6 @@ const styles = StyleSheet.create({
   doneBtnText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Agrandir-GrandHeavy",
   },
 });

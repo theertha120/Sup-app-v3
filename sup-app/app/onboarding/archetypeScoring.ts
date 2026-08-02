@@ -107,7 +107,7 @@ export const ARCHETYPE_DISPLAY: Record<Archetype, ArchetypeDisplay> = {
   },
   Autonomist: {
     label: "the s'oloist",
-    description: "you move on your own terms — your spine didn't get the memo",
+    description: "you move on your own terms - your spine didn't get the memo",
     spineAgeOffset: 5,
     spineAgeSuffix: "?",
     spineSub: "could be better, could be worse",
@@ -115,7 +115,7 @@ export const ARCHETYPE_DISPLAY: Record<Archetype, ArchetypeDisplay> = {
   },
   Strategist: {
     label: "the s'trategist",
-    description: "you plan everything — now add your posture to the system",
+    description: "you plan everything - now add your posture to the system",
     spineAgeOffset: 3,
     spineAgeSuffix: "?",
     spineSub: "solid, with room to optimise",
@@ -123,7 +123,7 @@ export const ARCHETYPE_DISPLAY: Record<Archetype, ArchetypeDisplay> = {
   },
   Ritualist: {
     label: "the s'cheduler",
-    description: "your habits run your life — time to add this one to the stack",
+    description: "your habits run your life - time to add this one to the stack",
     spineAgeOffset: 6,
     spineAgeSuffix: "?!",
     spineSub: "consistent, just not consistently good",

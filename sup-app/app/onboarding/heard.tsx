@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { useFonts } from "expo-font";
 
 const OPTIONS = ["influencerr", "linkedin", "instagram", "tiktok", "friend/fam", "other"];
 
@@ -10,6 +11,13 @@ export default function HeardScreen() {
   const router = useRouter();
   const { setHowHeard } = useOnboarding();
   const [selected, setSelected] = useState<string | null>(null);
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+  });
+
+  if (!fontsLoaded) return null;
 
   return (
     <LinearGradient
@@ -57,7 +65,7 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: 28,
-    fontWeight: "800",
+    fontFamily: "Agrandir-GrandHeavy",
     color: "#5222AE",
     textAlign: "center",
     lineHeight: 36,
@@ -82,7 +90,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    fontWeight: "500",
+    fontFamily: "Agrandir-Regular",
     color: "#5222AE",
   },
   optionTextSelected: {
