@@ -42,6 +42,7 @@ const year = now.getFullYear();
 const month = String(now.getMonth() + 1).padStart(2, "0");
 const day = String(now.getDate()).padStart(2, "0");
 const TODAY_KEY = `${year}-${month}-${day}`;
+// const TODAY_KEY = `2026-07-15`; // hardcoded for testing
 
 const SEGMENT_COLORS: Record<string, string> = {
   upright:  "#6DC96D",

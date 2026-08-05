@@ -38,7 +38,7 @@ const getLocalDateKey = () => {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-  // return `2026-07-25`
+  // return `2026-07-20`; // hardcoded for testing
 };
 
 const getPreviousDateKey = (dateKey: string) => {
