@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  Modal,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
@@ -56,14 +57,26 @@ const HOURLY_POSTURE: Record<string, number> = {
 type Range = "week" | "month" | "year";
 
 // ─── Popup types ──────────────────────────────────────────────────────────────
+// x/y are ABSOLUTE SCREEN coordinates (from `measureInWindow`), not coordinates
+// local to a chart — the popup is rendered in a top-level Modal (see
+// `StatsScreen`), so it needs the same coordinate space the Modal renders in.
 
 interface PopupInfo {
-  x: number;        // x of data point within chart area
-  y: number;        // y of data point within chart area
+  x: number;
+  y: number;
   value: number;
   unit: string;
   dateRange: string;
   avgLabel: string;
+}
+
+// Which chart/card currently owns the (single, screen-wide) open popup, and
+// which item within it (bar index, cell index, or breakdown segment key) is
+// highlighted. Only one popup can be open at a time across the whole screen.
+interface ActivePopup {
+  chartId: string;
+  index: number | string;
+  info: PopupInfo;
 }
 
 // ─── Data generation ──────────────────────────────────────────────────────────
@@ -94,7 +107,7 @@ function fmtFull(d: Date) {
 
 // ─── Page count — replace body with real Supabase query ───────────────────────
 // Returns how many historical pages exist for this range. No cap — the user
-// can swipe all the way back to the first ever recorded session (fix 4).
+// can swipe all the way back to the first ever recorded session.
 function getAvailablePageCount(range: Range): number {
   // TODO: replace with real query:
   //   const { data } = await supabase
@@ -208,52 +221,24 @@ function heatColor(score: number) {
 }
 
 // ─── Data point popup ─────────────────────────────────────────────────────────
-// Fix 1: tapping anywhere outside the popup bubble dismisses it via the
-//         full-card Pressable overlay. The bubble itself stops propagation.
-// Fix 3: fully opaque white card style — no blur, matches the card design.
+// The popup bubble is rendered exactly once, at the StatsScreen level, inside
+// a react-native `Modal`. A Modal renders in its own native layer above the
+// *entire* app UI (including the floating nav bar and everything in the
+// ScrollView), so a single full-screen backdrop Pressable behind the bubble
+// dismisses it no matter what's tapped — another card, the range selector,
+// the header, or the nav bar — while the bubble's own Pressable stops
+// propagation so tapping the bubble itself doesn't dismiss it.
+//
+// Charts report the bubble's anchor point in ABSOLUTE SCREEN coordinates
+// (via `measureInWindow` on the pressed bar/cell/segment) rather than
+// chart-local coordinates, since the Modal's coordinate space starts at the
+// screen origin, not the scrolled card's origin.
 
 const POPUP_H = 76;
 const POPUP_W = 152;
 const LINE_H  = 24;
 
-function DataPointPopup({
-  popup,
-  onDismiss,
-}: {
-  popup: PopupInfo;
-  onDismiss: () => void;
-}) {
-  const chartW     = CARD_W - 36;
-  const rawLeft    = popup.x - POPUP_W / 2;
-  const clampedLeft = Math.max(0, Math.min(rawLeft, chartW - POPUP_W));
-  // Centre the connector line on the actual data-point x
-  const lineLeft = popup.x - clampedLeft - 0.5;
-
-  return (
-    // Fix 1: transparent pressable covers the entire chart area.
-    // Any tap that isn't caught by the bubble below reaches this and dismisses.
-    <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
-      {/* Bubble — stopPropagation so tapping it doesn't dismiss */}
-      <Pressable
-        style={[popupStyles.bubble, { top: popup.y - POPUP_H - LINE_H, left: clampedLeft }]}
-        onPress={(e) => e.stopPropagation()}
-      >
-        <Text style={popupStyles.dateText}>{popup.dateRange}</Text>
-        <Text style={popupStyles.valueText}>
-          {popup.value}
-          <Text style={popupStyles.unitText}> {popup.unit}</Text>
-        </Text>
-        <Text style={popupStyles.avgText}>{popup.avgLabel}</Text>
-
-        {/* Connector line */}
-        <View style={[popupStyles.line, { left: lineLeft }]} />
-      </Pressable>
-    </Pressable>
-  );
-}
-
 const popupStyles = StyleSheet.create({
-  // Fix 3: solid white, card-identical radius and shadow — no blur
   bubble: {
     position: "absolute",
     width: POPUP_W,
@@ -364,18 +349,21 @@ const rangeStyles = StyleSheet.create({
 });
 
 // ─── Swipeable card ───────────────────────────────────────────────────────────
-// Fix 4: no upper cap on pages — the user can swipe all the way to the
-//         first ever recorded period. Dots are replaced with a simple
-//         "X / N" counter when there are many pages to avoid a dot overflow.
+// No upper cap on pages — the user can swipe all the way to the first ever
+// recorded period. Dots are replaced with a simple "X / N" counter when there
+// are many pages to avoid a dot overflow.
 
 function SwipeCard({
   pages,
   renderPage,
   resetKey,
+  onPageChange,
 }: {
   pages:      PageData[];
   renderPage: (page: PageData, prevPage: PageData | null) => React.ReactNode;
   resetKey:   string;
+  /** Called whenever the visible page changes — used to dismiss any open popup, since it'd be anchored to now-stale data/position. */
+  onPageChange?: () => void;
 }) {
   const [pageIdx, setPageIdx] = useState(0);
   const prevResetKey = useRef(resetKey);
@@ -384,19 +372,47 @@ function SwipeCard({
     Promise.resolve().then(() => setPageIdx(0));
   }
 
+  // Bug fix: `PanResponder.create(...)` is only ever evaluated once, on the
+  // first render, because it's wrapped in `useRef(...)`.current — React
+  // re-runs the *expression* on every render but ignores the result after
+  // mount. That means `onPanResponderRelease` closed over whatever `pages`
+  // array existed at mount time forever. If the screen first mounted on
+  // "week" (many pages) and the user later switched to "month" (fewer
+  // pages), swipes still clamped against the stale week-length page count,
+  // so pageIdx could climb past the *current* pages.length (e.g. to 9, 10…
+  // for an 8-page month). `pages[pageIdx]` for those out-of-range indices is
+  // undefined, so `currentPage` fell back to `pages[0]` via `??` below —
+  // matching the exact symptom: counter reads "9 / 8", "10 / 8", but the
+  // card shows page 1's data. Mirroring `pages` into a ref that's updated on
+  // every render lets the stable PanResponder always clamp against the
+  // *current* page count.
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder:  (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderRelease: (_, g) => {
-        if (g.dx < -40) setPageIdx((p) => Math.min(p + 1, pages.length - 1));
+        const maxIdx = pagesRef.current.length - 1;
+        if (g.dx < -40) setPageIdx((p) => Math.min(p + 1, maxIdx));
         else if (g.dx > 40) setPageIdx((p) => Math.max(p - 1, 0));
       },
     })
   ).current;
 
+  useEffect(() => {
+    onPageChange?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdx]);
+
   const currentPage = pages[pageIdx] ?? pages[0];
   const prevPage    = pages[pageIdx + 1] ?? null;
+  // Extra guard against the one-render gap between a resetKey change and the
+  // deferred setPageIdx(0) above actually landing (e.g. switching from a
+  // long range straight to a short one) — keeps the counter's numerator from
+  // ever reading ahead of the *current* pages array too.
+  const displayIdx  = Math.min(pageIdx, pages.length - 1);
 
   return (
     <View>
@@ -410,7 +426,7 @@ function SwipeCard({
       {pages.length > 1 && (
         <>
           <Text style={swipeStyles.counter}>
-            {pageIdx + 1} / {pages.length}
+            {displayIdx + 1} / {pages.length}
           </Text>
           <Text style={swipeStyles.hint}>swipe left for older data</Text>
         </>
@@ -447,7 +463,6 @@ function avgLabel(range: Range): string {
 }
 
 // ─── Bar chart ────────────────────────────────────────────────────────────────
-// Fix 2: popup on bars. Fix 1: tap-outside dismisses.
 
 function fmtMins(m: number) {
   const h = Math.floor(m / 60); const r = m % 60;
@@ -458,51 +473,47 @@ function fmtMinsLong(m: number) {
   return h > 0 ? `${h}h ${r} min` : `${r} min`;
 }
 
-function BarChart({ data, prevData, range, type }: { data: PageData; prevData: PageData | null; range: Range, type: string }) {
-  const [popup, setPopup] = useState<PopupInfo | null>(null);
+function BarChart({
+  data, prevData, range, type, activeIndex, onOpenPopup, onClosePopup,
+}: {
+  data: PageData;
+  prevData: PageData | null;
+  range: Range;
+  type: string;
+  /** Index of the bar this chart's popup is currently open for, or null. Owned by StatsScreen. */
+  activeIndex: number | null;
+  onOpenPopup: (index: number, info: PopupInfo) => void;
+  onClosePopup: () => void;
+}) {
   const maxBarH = 72;
+  const barRefs = useRef<(View | null)[]>([]);
 
-  // shared vars used below must be declared in outer scope
-  let maxV = 1;
-  let n = 0;
-  let barYs: number[] = [];
-  let curAvgMins = 0;
+  const values = type === "session" ? data.sessionMins : data.scores;
+  const maxV   = Math.max(...values, 1);
+  const n      = values.length;
+  const curAvgMins = Math.round(values.reduce((a, b) => a + b, 0) / n);
+
   let prevAvgMins: number | null = null;
-  // choose source depending on type
-  const values = type == "session" ? data.sessionMins : data.scores;
-  maxV = Math.max(...values, 1);
-  n = values.length;
-  barYs = values.map((v) => {
-    const bh = Math.max(3, Math.round((v / maxV) * maxBarH));
-    return 88 - bh; // 88 = container height
-  });
-  curAvgMins = Math.round(values.reduce((a, b) => a + b, 0) / n);
   if (prevData) {
-    const prevValues = type == "session" ? prevData.sessionMins : prevData.scores;
+    const prevValues = type === "session" ? prevData.sessionMins : prevData.scores;
     prevAvgMins = Math.round(prevValues.reduce((a, b) => a + b, 0) / prevValues.length);
-  } else {
-    prevAvgMins = null;
   }
 
-  const chartW  = CARD_W - 36;
-  const gapTotal = 3 * (n - 1);
-  const barW    = (chartW - gapTotal) / n;
-  const barXs   = Array.from({ length: n }, (_, i) => i * (barW + 3) + barW / 2);
-  // y = pixels from top of the 88px container to the top of each bar
-
+  const chartW   = CARD_W - 36;
   const diffMins = prevAvgMins !== null ? curAvgMins - prevAvgMins : null;
 
   const handleBarPress = (i: number) => {
-    if (popup?.x === barXs[i]) { setPopup(null); return; }
-    setPopup({
-      x: barXs[i], y: barYs[i],
-      value: values[i], unit: "min",
-      dateRange: data.pointDates[i] ?? data.labels[i],
-      avgLabel:  avgLabel(range),
+    if (activeIndex === i) { onClosePopup(); return; }
+    barRefs.current[i]?.measureInWindow((x, y, width) => {
+      onOpenPopup(i, {
+        x: x + width / 2,
+        y,
+        value: values[i], unit: "min",
+        dateRange: data.pointDates[i] ?? data.labels[i],
+        avgLabel:  avgLabel(range),
+      });
     });
   };
-
-  const topPad = popup ? POPUP_H + LINE_H + 8 : 0;
 
   return (
     <View>
@@ -515,30 +526,25 @@ function BarChart({ data, prevData, range, type }: { data: PageData; prevData: P
         )}
       </View>
 
-      <View style={{ width: chartW, height: 88 + topPad }}>
-        {popup && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]}>
-            <DataPointPopup
-              popup={{ ...popup, y: topPad + popup.y }}
-              onDismiss={() => setPopup(null)}
-            />
-          </View>
-        )}
-        <View style={[barStyles.container, { position: "absolute", top: topPad, left: 0, right: 0 }]}>
-          {values.map((v, i) => {
-            const barH    = Math.max(3, Math.round((v / maxV) * maxBarH));
-            const isActive = popup?.x === barXs[i];
-            return (
-              <Pressable key={i} style={barStyles.col} onPress={() => handleBarPress(i)}>
-                <View style={[
-                  barStyles.bar,
-                  { height: barH, backgroundColor: isActive ? scoreColor(v) : "#6DC96D", opacity: isActive ? 1 : 0.85 },
-                ]} />
-                <Text style={barStyles.label}>{data.labels[i]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <View style={[barStyles.container, { width: chartW }]}>
+        {values.map((v, i) => {
+          const barH     = Math.max(3, Math.round((v / maxV) * maxBarH));
+          const isActive = activeIndex === i;
+          return (
+            <Pressable
+              key={i}
+              ref={(el) => { barRefs.current[i] = el; }}
+              style={barStyles.col}
+              onPress={() => handleBarPress(i)}
+            >
+              <View style={[
+                barStyles.bar,
+                { height: barH, backgroundColor: isActive ? scoreColor(v) : "#6DC96D", opacity: isActive ? 1 : 0.85 },
+              ]} />
+              <Text style={barStyles.label}>{data.labels[i]}</Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -554,10 +560,16 @@ const barStyles = StyleSheet.create({
 });
 
 // ─── Posture heatmap ──────────────────────────────────────────────────────────
-// Fix 2: tap a cell to show popup with that hour's score.
 
-function PostureHeatmap({ hourlyData, range }: { hourlyData: Record<string, number>; range: Range }) {
-  const [popup, setPopup] = useState<PopupInfo | null>(null);
+function PostureHeatmap({
+  hourlyData, range, activeIndex, onOpenPopup, onClosePopup,
+}: {
+  hourlyData: Record<string, number>;
+  range: Range;
+  activeIndex: number | null;
+  onOpenPopup: (index: number, info: PopupInfo) => void;
+  onClosePopup: () => void;
+}) {
   const hours = Object.keys(hourlyData);
   const vals  = Object.values(hourlyData);
   const active   = vals.filter((v) => v > 0);
@@ -570,44 +582,33 @@ function PostureHeatmap({ hourlyData, range }: { hourlyData: Record<string, numb
 
   const labelHours = ["9am","11am","1pm","3pm","5pm","7pm"];
   const chartW     = CARD_W - 36;
-  const cellW      = (chartW - 2 * (hours.length - 1)) / hours.length;
+  const cellRefs   = useRef<(View | null)[]>([]);
 
-  const handleCellPress = (i: number, cellX: number) => {
+  const handleCellPress = (i: number) => {
     if (vals[i] === 0) return; // no data for this hour
-    if (popup?.x === cellX) { setPopup(null); return; }
-    setPopup({
-      x: cellX, y: 0, // y=0 → popup appears above the cells
-      value: vals[i], unit: "score",
-      dateRange: hours[i],
-      avgLabel: avgLabel(range),
+    if (activeIndex === i) { onClosePopup(); return; }
+    cellRefs.current[i]?.measureInWindow((x, y, width) => {
+      onOpenPopup(i, {
+        x: x + width / 2,
+        y,
+        value: vals[i], unit: "score",
+        dateRange: hours[i],
+        avgLabel: avgLabel(range),
+      });
     });
   };
 
-  const topPad = popup ? POPUP_H + LINE_H + 8 : 0;
-
   return (
     <View>
-      <View style={{ height: 26 + topPad }}>
-        {popup && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]}>
-            <DataPointPopup
-              popup={{ ...popup, y: topPad }}
-              onDismiss={() => setPopup(null)}
-            />
-          </View>
-        )}
-        <View style={[heatStyles.row, { position: "absolute", top: topPad, left: 0, right: 0 }]}>
-          {hours.map((h, i) => {
-            const cellX = i * (cellW + 2) + cellW / 2;
-            return (
-              <Pressable
-                key={h}
-                style={[heatStyles.cell, { backgroundColor: heatColor(vals[i]) }]}
-                onPress={() => handleCellPress(i, cellX)}
-              />
-            );
-          })}
-        </View>
+      <View style={[heatStyles.row, { width: chartW }]}>
+        {hours.map((h, i) => (
+          <Pressable
+            key={h}
+            ref={(el) => { cellRefs.current[i] = el; }}
+            style={[heatStyles.cell, { backgroundColor: heatColor(vals[i]) }]}
+            onPress={() => handleCellPress(i)}
+          />
+        ))}
       </View>
       <View style={heatStyles.labelsRow}>
         {labelHours.map((l) => <Text key={l} style={heatStyles.label}>{l}</Text>)}
@@ -626,67 +627,60 @@ const heatStyles = StyleSheet.create({
 });
 
 // ─── Posture breakdown ────────────────────────────────────────────────────────
-// Fix 2: tap a segment or row to show popup with that posture type's percentage.
 
-function PostureBreakdown({ stateTotals, range }: { stateTotals: Record<string, number>; range: Range }) {
-  const [popup, setPopup] = useState<PopupInfo | null>(null);
+function PostureBreakdown({
+  stateTotals, range, activeKey, onOpenPopup, onClosePopup,
+}: {
+  stateTotals: Record<string, number>;
+  range: Range;
+  activeKey: string | null;
+  onOpenPopup: (key: string, info: PopupInfo) => void;
+  onClosePopup: () => void;
+}) {
   const keys  = Object.keys(stateTotals);
   const total = keys.reduce((s, k) => s + stateTotals[k], 0) || 1;
   const pcts  = Object.fromEntries(keys.map((k) => [k, (stateTotals[k] / total) * 100]));
   for (const k of keys) if (isNaN(pcts[k])) pcts[k] = 0;
 
-  const chartW = CARD_W - 36;
-  // Compute cumulative x centre for each segment for popup anchoring
-  let cumulative = 0;
-  const segXs: Record<string, number> = {};
-  for (const k of keys) {
-    const segW = (pcts[k] / 100) * chartW;
-    segXs[k]  = cumulative + segW / 2;
-    cumulative += segW;
-  }
+  const chartW  = CARD_W - 36;
+  const segRefs = useRef<Record<string, View | null>>({});
+  const rowRefs = useRef<Record<string, View | null>>({});
 
-  const handlePress = (k: string) => {
+  const openFrom = (k: string, refs: React.RefObject<Record<string, View | null>>) => {
     if (pcts[k] === 0) return;
-    if (popup?.dateRange === k) { setPopup(null); return; }
-    setPopup({
-      x: segXs[k], y: 0,
-      value: Math.round(pcts[k] * 10) / 10, unit: "%",
-      dateRange: SEGMENT_LABELS[k],
-      avgLabel: avgLabel(range),
+    if (activeKey === k) { onClosePopup(); return; }
+    refs.current[k]?.measureInWindow((x, y, width) => {
+      onOpenPopup(k, {
+        x: x + width / 2,
+        y,
+        value: Math.round(pcts[k] * 10) / 10, unit: "%",
+        dateRange: SEGMENT_LABELS[k],
+        avgLabel: avgLabel(range),
+      });
     });
   };
 
-  const topPad = popup ? POPUP_H + LINE_H + 8 : 0;
-
   return (
     <View>
-      <View style={{ height: 14 + topPad }}>
-        {popup && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]}>
-            <DataPointPopup
-              popup={{ ...popup, y: topPad }}
-              onDismiss={() => setPopup(null)}
+      <View style={[bdStyles.track, { width: chartW }]}>
+        {keys.map((k) =>
+          pcts[k] > 0 ? (
+            <Pressable
+              key={k}
+              ref={(el) => { segRefs.current[k] = el; }}
+              style={[bdStyles.seg, { flex: pcts[k], backgroundColor: SEGMENT_COLORS[k] }]}
+              onPress={() => openFrom(k, segRefs)}
             />
-          </View>
+          ) : null
         )}
-        <View style={[bdStyles.track, { position: "absolute", top: topPad, left: 0, right: 0 }]}>
-          {keys.map((k) =>
-            pcts[k] > 0 ? (
-              <Pressable
-                key={k}
-                style={[bdStyles.seg, { flex: pcts[k], backgroundColor: SEGMENT_COLORS[k] }]}
-                onPress={() => handlePress(k)}
-              />
-            ) : null
-          )}
-        </View>
       </View>
       <View style={[bdStyles.list, { marginTop: 10 }]}>
         {keys.map((k, i) => (
           <Pressable
             key={k}
+            ref={(el) => { rowRefs.current[k] = el; }}
             style={[bdStyles.row, i === keys.length - 1 && { borderBottomWidth: 0 }]}
-            onPress={() => handlePress(k)}
+            onPress={() => openFrom(k, rowRefs)}
           >
             <View style={bdStyles.labelRow}>
               <View style={[bdStyles.dot, { backgroundColor: SEGMENT_COLORS[k] }]} />
@@ -714,13 +708,22 @@ const bdStyles = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function StatsScreen() {
-  const [range, setRange]       = useState<Range>("week");
-  const [resetKey, setResetKey] = useState("week");
+  const [range, setRange]             = useState<Range>("week");
+  const [resetKey, setResetKey]       = useState("week");
+  const [activePopup, setActivePopup] = useState<ActivePopup | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
   const pages                   = generatePages(range);
 
-  const handleRangeChange = (r: Range) => { setRange(r); setResetKey(r); };
+  const closePopup = () => setActivePopup(null);
+  const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
+    setActivePopup({ chartId, index, info });
+
+  const handleRangeChange = (r: Range) => {
+    setRange(r);
+    setResetKey(r);
+    closePopup(); // data is changing — any open popup would be pointing at stale info
+  };
 
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
@@ -729,12 +732,24 @@ export default function StatsScreen() {
 
   if (!fontsLoaded) return null;
 
+  // Bubble placement, clamped to the screen (not just the card) since it's
+  // now rendered in a full-screen Modal.
+  let bubbleTop = 0, bubbleLeft = 0, lineLeft = 0;
+  if (activePopup) {
+    const { x, y } = activePopup.info;
+    const rawLeft  = x - POPUP_W / 2;
+    bubbleLeft = Math.max(16, Math.min(rawLeft, SCREEN_W - POPUP_W - 16));
+    bubbleTop  = Math.max(50, y - POPUP_H - LINE_H);
+    lineLeft   = x - bubbleLeft - 0.5;
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={closePopup}
         contentContainerStyle={{
           paddingVertical: 8,
           paddingBottom: scrollPaddingBottom,
@@ -745,44 +760,84 @@ export default function StatsScreen() {
 
         {/* ── S'CORE TREND ── */}
         <View style={[styles.card, styles.shadow]}>
-          <SwipeCard pages={pages} resetKey={resetKey} renderPage={(p, prev) => (
+          <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
             <>
               <Text style={styles.cardTitle}>s'core trend</Text>
-              <BarChart data={p} prevData={prev} range={range} type="score" />
+              <BarChart
+                data={p} prevData={prev} range={range} type="score"
+                activeIndex={activePopup?.chartId === "score" ? (activePopup.index as number) : null}
+                onOpenPopup={(i, info) => openPopup("score", i, info)}
+                onClosePopup={closePopup}
+              />
             </>
           )} />
         </View>
 
         {/* ── S'ESSION TIME ── */}
         <View style={[styles.card, styles.shadow]}>
-          <SwipeCard pages={pages} resetKey={resetKey} renderPage={(p, prev) => (
+          <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
             <>
               <Text style={styles.cardTitle}>s'ession time</Text>
-              <BarChart data={p} prevData={prev} range={range} type="session" />
+              <BarChart
+                data={p} prevData={prev} range={range} type="session"
+                activeIndex={activePopup?.chartId === "session" ? (activePopup.index as number) : null}
+                onOpenPopup={(i, info) => openPopup("session", i, info)}
+                onClosePopup={closePopup}
+              />
             </>
           )} />
         </View>
 
         {/* ── WHEN YOUR POSTURE SLIPS ── */}
         <View style={[styles.card, styles.shadow]}>
-          <SwipeCard pages={pages} resetKey={resetKey} renderPage={() => (
+          <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={() => (
             <>
               <Text style={styles.cardTitle}>when your posture slips</Text>
-              <PostureHeatmap hourlyData={HOURLY_POSTURE} range={range} />
+              <PostureHeatmap
+                hourlyData={HOURLY_POSTURE} range={range}
+                activeIndex={activePopup?.chartId === "heatmap" ? (activePopup.index as number) : null}
+                onOpenPopup={(i, info) => openPopup("heatmap", i, info)}
+                onClosePopup={closePopup}
+              />
             </>
           )} />
         </View>
 
         {/* ── POSTURE BREAKDOWN ── */}
         <View style={[styles.card, styles.shadow]}>
-          <SwipeCard pages={pages} resetKey={resetKey} renderPage={(p) => (
+          <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
             <>
               <Text style={styles.cardTitle}>posture breakdown</Text>
-              <PostureBreakdown stateTotals={p.stateTotals} range={range} />
+              <PostureBreakdown
+                stateTotals={p.stateTotals} range={range}
+                activeKey={activePopup?.chartId === "breakdown" ? (activePopup.index as string) : null}
+                onOpenPopup={(k, info) => openPopup("breakdown", k, info)}
+                onClosePopup={closePopup}
+              />
             </>
           )} />
         </View>
       </ScrollView>
+
+      {/* ── Global popup — Modal renders above everything, including the nav bar ── */}
+      {activePopup && (
+        <Modal transparent visible animationType="none" onRequestClose={closePopup}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closePopup}>
+            <Pressable
+              style={[popupStyles.bubble, { top: bubbleTop, left: bubbleLeft }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={popupStyles.dateText}>{activePopup.info.dateRange}</Text>
+              <Text style={popupStyles.valueText}>
+                {activePopup.info.value}
+                <Text style={popupStyles.unitText}> {activePopup.info.unit}</Text>
+              </Text>
+              <Text style={popupStyles.avgText}>{activePopup.info.avgLabel}</Text>
+              <View style={[popupStyles.line, { left: lineLeft }]} />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
