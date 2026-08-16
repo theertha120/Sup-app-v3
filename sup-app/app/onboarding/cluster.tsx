@@ -34,7 +34,6 @@ export default function ClusterScreen() {
         <Text style={styles.buttonText}>s'tart now</Text>
       </TouchableOpacity>
       <Text style={styles.quizNote}>the quiz will take approximately 5 mins :)</Text>
-      <View style={styles.content} />
     </LinearGradient>
   );
 }
@@ -49,9 +48,6 @@ const styles = StyleSheet.create({
     right: 16,
     width: 160,
     height: 190,
-  },
-  content: {
-    flex: 1,
   },
   speechBubble: {
     position: "absolute",
