@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
-import { computeOnboardingResult, ARCHETYPE_DISPLAY, type Archetype } from "./archetypeScoring";
+import { computeOnboardingResult, ARCHETYPE_DISPLAY, type Archetype } from "@/src/lib/onboarding/archetypeScoring";
 import { useFonts } from "expo-font";
 
 const ARCHETYPE_IMAGE: Record<Archetype, any> = {
