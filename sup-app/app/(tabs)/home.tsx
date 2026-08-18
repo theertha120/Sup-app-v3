@@ -21,6 +21,7 @@ import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorPro
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
+import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -325,7 +326,10 @@ export default function HomeScreen() {
           <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
             <Pressable
               style={[styles.bubble, styles.bubbleRight, styles.shadow]}
-              onPress={() => router.push("/daily")}
+              onPress={() => {
+                logNavbarClick(userId, "today_summary");
+                router.push("/daily");
+              }}
             >
               <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
             </Pressable>
