@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, PanResponder } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -8,8 +8,14 @@ import { useFonts } from "expo-font";
 
 const GENDERS = ["male", "female", "other"];
 
-const MIN_AGE = 18;
+const MIN_AGE = 5;
 const MAX_AGE = 100;
+const AGES = Array.from({ length: MAX_AGE - MIN_AGE + 1 }, (_, i) => MIN_AGE + i);
+
+const AGE_ITEM_HEIGHT = 36;
+const AGE_VISIBLE_ITEMS = 3;
+const AGE_PICKER_HEIGHT = AGE_ITEM_HEIGHT * AGE_VISIBLE_ITEMS;
+const AGE_PADDING = AGE_ITEM_HEIGHT * Math.floor(AGE_VISIBLE_ITEMS / 2);
 
 export default function FinalScreen() {
   const router = useRouter();
@@ -17,7 +23,7 @@ export default function FinalScreen() {
   const [gender, setGender] = useState("male");
   const [age, setAge] = useState(27);
   const [accepted, setAccepted] = useState(false);
-  const trackWidth = useRef(0);
+  const ageScrollRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
@@ -26,23 +32,16 @@ export default function FinalScreen() {
 
   if (!fontsLoaded) return null;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        if (trackWidth.current === 0) return;
-        const x = e.nativeEvent.locationX;
-        const ratio = Math.min(1, Math.max(0, x / trackWidth.current));
-        setAge(Math.round(MIN_AGE + ratio * (MAX_AGE - MIN_AGE)));
-      },
-      onPanResponderMove: (e) => {
-        if (trackWidth.current === 0) return;
-        const x = e.nativeEvent.locationX;
-        const ratio = Math.min(1, Math.max(0, x / trackWidth.current));
-        setAge(Math.round(MIN_AGE + ratio * (MAX_AGE - MIN_AGE)));
-      },
-    })
-  ).current;
+  const scrollToAge = (value: number, animated: boolean) => {
+    const index = AGES.indexOf(value);
+    ageScrollRef.current?.scrollTo({ y: index * AGE_ITEM_HEIGHT, animated });
+  };
+
+  const handleAgeScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(e.nativeEvent.contentOffset.y / AGE_ITEM_HEIGHT);
+    const clamped = Math.min(AGES.length - 1, Math.max(0, index));
+    setAge(AGES[clamped]);
+  };
 
   return (
     <LinearGradient
@@ -57,7 +56,7 @@ export default function FinalScreen() {
       </TouchableOpacity>
 
       <Text style={styles.heading}>final s'tep!!</Text>
-      <Text style={styles.subheading}>enter your details to reveal{"\n"}your s'upercluster</Text>
+      <Text style={styles.subheading}>enter your details to start your journey!</Text>
 
       <View style={styles.card}>
         {/* Gender */}
@@ -76,17 +75,31 @@ export default function FinalScreen() {
 
         {/* Age */}
         <View style={styles.ageSection}>
-          <View style={styles.ageHeader}>
-            <Text style={styles.fieldLabel}>age</Text>
-            <Text style={styles.ageValue}>{age}</Text>
-          </View>
-          <View
-            style={styles.sliderTrack}
-            onLayout={(e) => { trackWidth.current = e.nativeEvent.layout.width; }}
-            {...panResponder.panHandlers}
-          >
-            <View style={[styles.sliderFill, { width: `${((age - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100}%` as any }]} />
-            <View style={[styles.sliderThumb, { left: `${((age - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100}%` as any }]} />
+          <Text style={styles.fieldLabel}>age</Text>
+          <View style={styles.agePicker}>
+            <View style={styles.agePickerHighlight} pointerEvents="none" />
+            <ScrollView
+              ref={ageScrollRef}
+              showsVerticalScrollIndicator={false}
+              snapToInterval={AGE_ITEM_HEIGHT}
+              decelerationRate="fast"
+              contentContainerStyle={{ paddingVertical: AGE_PADDING }}
+              onMomentumScrollEnd={handleAgeScrollEnd}
+              onScrollEndDrag={handleAgeScrollEnd}
+              onContentSizeChange={() => scrollToAge(age, false)}
+            >
+              {AGES.map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={styles.agePickerItem}
+                  onPress={() => { setAge(value); scrollToAge(value, true); }}
+                >
+                  <Text style={[styles.agePickerItemText, value === age && styles.agePickerItemTextSelected]}>
+                    {value}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
           <Text style={styles.ageNote}>this data is necessary to accurately determine your current s'pine health</Text>
         </View>
@@ -112,12 +125,20 @@ export default function FinalScreen() {
           saveAgeToContext(age);
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            await supabase.from("profiles").update({ gender, age }).eq("id", user.id);
+            await supabase.from("profiles").update({
+              gender,
+              age,
+              onboarding: true,
+              archetype: "",
+              chronotype: "",
+              interoception: "",
+              elasticity: "",
+            }).eq("id", user.id);
           }
-          router.push("/onboarding/result" as any);
+          router.replace("/" as any);
         }}
       >
-        <Text style={styles.nextBtnText}>next</Text>
+        <Text style={styles.nextBtnText}>start your posture health journey</Text>
       </TouchableOpacity>
     </LinearGradient>
   );
@@ -199,40 +220,35 @@ const styles = StyleSheet.create({
   ageSection: {
     marginBottom: 24,
   },
-  ageHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
+  agePicker: {
+    height: AGE_PICKER_HEIGHT,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 4,
   },
-  ageValue: {
-    fontSize: 22,
-    fontFamily: "Agrandir-Regular",
-    color: "#5222AE",
-  },
-  sliderTrack: {
-    height: 8,
-    backgroundColor: "#D0C8F0",
-    borderRadius: 4,
-    marginBottom: 10,
-    position: "relative",
-    justifyContent: "center",
-  },
-  sliderFill: {
-    height: 8,
-    backgroundColor: "#5222AE",
-    borderRadius: 4,
+  agePickerHighlight: {
     position: "absolute",
     left: 0,
+    right: 0,
+    top: AGE_PADDING,
+    height: AGE_ITEM_HEIGHT,
+    borderRadius: 10,
+    backgroundColor: "#D0C8F0",
   },
-  sliderThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#5222AE",
-    position: "absolute",
-    marginLeft: -11,
-    top: -7,
+  agePickerItem: {
+    height: AGE_ITEM_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  agePickerItemText: {
+    fontSize: 18,
+    fontFamily: "Agrandir-Regular",
+    color: "#999",
+  },
+  agePickerItemTextSelected: {
+    fontSize: 22,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#5222AE",
   },
   ageNote: {
     fontSize: 12,
@@ -277,11 +293,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   nextBtn: {
-    backgroundColor: "#AB99FA",
+    backgroundColor: "#5222AE",
     borderRadius: 50,
     paddingVertical: 16,
-    paddingHorizontal: 48,
-    marginTop: 20,
+    paddingHorizontal: 40,
+    marginTop: 24,
     alignSelf: "center",
   },
   nextBtnText: {

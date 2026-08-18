@@ -35,7 +35,7 @@ export default function HeardScreen() {
           <TouchableOpacity
             key={option}
             style={[styles.option, selected === option && styles.optionSelected]}
-            onPress={() => { setSelected(option); setHowHeard(option); router.push("/onboarding/question1" as any); }}
+            onPress={() => { setSelected(option); setHowHeard(option); router.push("/onboarding/details" as any); }}
           >
             <Text style={[styles.optionText, selected === option && styles.optionTextSelected]}>
               {option}
