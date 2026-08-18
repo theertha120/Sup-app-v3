@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -79,62 +79,72 @@ export default function DetailsScreen() {
         <Text style={styles.backText}> Back</Text>
       </TouchableOpacity>
 
-      <View style={styles.content}>
-        <Text style={styles.heading}>almost there!</Text>
-        <Text style={styles.subheading}>enter your details to reveal{"\n"}your s'upercluster</Text>
-
-        <View style={styles.card}>
-          <Text style={styles.fieldLabel}>first name</Text>
-          <TextInput
-            style={styles.input}
-            value={firstName}
-            onChangeText={setFirstName}
-            autoCapitalize="words"
-          />
-
-          <Text style={styles.fieldLabel}>last name</Text>
-          <TextInput
-            style={styles.input}
-            value={lastName}
-            onChangeText={setLastName}
-            autoCapitalize="words"
-          />
-
-          <Text style={styles.fieldLabel}>email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <Text style={styles.fieldLabel}>password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <Text style={styles.fieldLabel}>confirm password</Text>
-          <TextInput
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
-        </View>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.nextBtn, !isValid && styles.nextBtnDisabled]}
-          onPress={handleNext}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.nextBtnText}>next</Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.heading}>almost there!</Text>
+          <Text style={styles.subheading}>enter your details!</Text>
+
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>first name</Text>
+            <TextInput
+              style={styles.input}
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.fieldLabel}>last name</Text>
+            <TextInput
+              style={styles.input}
+              value={lastName}
+              onChangeText={setLastName}
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.fieldLabel}>email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+
+            <Text style={styles.fieldLabel}>password</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+
+            <Text style={styles.fieldLabel}>confirm password</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.nextBtn, !isValid && styles.nextBtnDisabled]}
+            onPress={handleNext}
+          >
+            <Text style={styles.nextBtnText}>next</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }
@@ -162,10 +172,14 @@ const styles = StyleSheet.create({
     color: "#333",
     fontFamily: "Agrandir-GrandHeavy",
   },
-  content: {
+  keyboardView: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "flex-start",
+    paddingBottom: 200,
   },
   heading: {
     fontSize: 36,
