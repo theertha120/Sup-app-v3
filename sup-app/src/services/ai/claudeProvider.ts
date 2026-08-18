@@ -23,7 +23,7 @@ function buildPromptSupdate(data: SessionInsightData): string {
     : "";
 
   const dailySection = data.dailySummary
-    ? `\nGoal for this user (from their most recent daily summary):\n  ${data.dailySummary}`
+    ? `\nToday's goal for this user:\n  ${data.dailySummary}`
     : "";
 
   return `
@@ -38,7 +38,7 @@ ${breakdown || "  - no posture data recorded yet"}
 ${previousSection}
 ${dailySection}
 
-Write a warm, conversational 2-3 sentence mid-session update. Reference their goal if one is provided. Comment on the most notable aspect of their session so far. Give one clear actionable suggestion they can act on right now. Lowercase only unless for proper nouns. No bullet points or headers.
+Write a warm, conversational 2-3 sentence mid-session update. Reference today's goal if one is provided. Comment on the most notable aspect of their session so far. Give one clear actionable suggestion they can act on right now. Lowercase only unless for proper nouns. No bullet points or headers.
 
 Based on everything above, decide if this session is "green" (going well), "yellow" (ok, room to improve), or "red" (needs attention). Use your own judgment.
 
