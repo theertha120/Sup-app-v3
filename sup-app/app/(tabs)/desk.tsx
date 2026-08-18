@@ -34,6 +34,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
+import { useToast } from "../../src/contexts/ToastContext";
+
+const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
+
+function formatClockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 // ── Posture colour system ─────────────────────────────────────────────────────
 
@@ -264,6 +271,9 @@ export default function DeskScreen() {
     "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
   });
 
+  const { showToast } = useToast();
+  const [lastUpdateClickAt, setLastUpdateClickAt] = useState<number | null>(null);
+
   // ── Use the global context — NOT a local hook ──────────────────────────────
   const {
     topSensor, bottomSensor,
@@ -344,11 +354,21 @@ export default function DeskScreen() {
     : "rgba(163, 218, 225, 1)";
 
   const handleOpenUpdateModal = useCallback(async () => {
+    if (lastUpdateClickAt !== null) {
+      const nextAvailableAt = lastUpdateClickAt + UPDATE_COOLDOWN_MS;
+      if (Date.now() < nextAvailableAt) {
+        showToast(`you can s'update again at ${formatClockTime(nextAvailableAt)}`, "error");
+        return;
+      }
+    }
+    setLastUpdateClickAt(Date.now());
+
     setUpdateMessage(null);
     setIsLoadingUpdate(true);
     setShowUpdateModal(true);
     try {
-      // Fetch today's goal summary from Supabase
+      // Fetch today's goal summary from Supabase, falling back to the most
+      // recent one available if nothing's been generated for today yet.
       let dailySummary: string | null = null;
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -362,7 +382,20 @@ export default function DeskScreen() {
           .eq("date", today)
           .maybeSingle();
         console.log("[s'update] daily goal result:", data?.concised_summary ?? "none", "error:", error?.message ?? "none");
-        dailySummary = data?.concised_summary ?? null;
+
+        if (data?.concised_summary) {
+          dailySummary = data.concised_summary;
+        } else {
+          const { data: latest, error: latestError } = await supabase
+            .from("daily_ai_summary")
+            .select("concised_summary")
+            .eq("user_id", user.id)
+            .order("date", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          console.log("[s'update] fallback to latest goal:", latest?.concised_summary ?? "none", "error:", latestError?.message ?? "none");
+          dailySummary = latest?.concised_summary ?? null;
+        }
       }
 
       const result = await aiProvider.getSessionInsight({
@@ -382,7 +415,7 @@ export default function DeskScreen() {
     } finally {
       setIsLoadingUpdate(false);
     }
-  }, [sessionDurationMs, currentState, timeInCurrentStateMs, cpl, sessionStats, updateHistory]);
+  }, [sessionDurationMs, currentState, timeInCurrentStateMs, cpl, sessionStats, updateHistory, lastUpdateClickAt, showToast]);
 
   const handleEndSession = useCallback(async () => {
     if (!topSensor.state.connected && !bottomSensor.state.connected) return;

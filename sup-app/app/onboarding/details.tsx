@@ -2,15 +2,14 @@ import React, { useState } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
 
 export default function DetailsScreen() {
   const router = useRouter();
-  const { register } = useAuth();
-  const { answers } = useOnboarding();
+  const { register, checkEmailRegistered } = useAuth();
+  const { setPendingSignup } = useOnboarding();
 
   const [fontsLoaded] = useFonts({
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
@@ -45,26 +44,32 @@ export default function DetailsScreen() {
       return;
     }
     setError("");
-    const res = await register(email.trim(), password);
-    if (!res.success) {
-      setError(res.error || "registration failed");
+
+    const check = await checkEmailRegistered(email.trim());
+    if (!check.success) {
+      setError(check.error || "failed to check email");
       return;
     }
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("profiles").update({
-        name: firstName.trim(),
-        last_name: lastName.trim(),
-        how_heard: answers.howHeard,
-        q1: answers.q1,
-        q2: answers.q2,
-        q3: answers.q3,
-        q4: answers.q4,
-        q5: answers.q5,
-        q6: answers.q6,
-      }).eq("id", user.id);
+    if (check.exists) {
+      setError("this email is already registered, try signing in instead");
+      return;
     }
-    router.push("/onboarding/final" as any);
+
+    const res = await register(email.trim(), password);
+    if (!res.success) {
+      if (/email rate limit exceeded/i.test(res.error ?? "")) {
+        setError("We've hit the email sending limit for now, please try again in about an hour");
+      } else {
+        setError(res.error || "registration failed");
+      }
+      return;
+    }
+    setPendingSignup({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim(),
+    });
+    router.push("/onboarding/verify-email" as any);
   };
 
   return (
