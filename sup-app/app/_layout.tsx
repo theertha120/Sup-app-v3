@@ -6,6 +6,7 @@ import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
+import { TutorialProvider } from "@/src/contexts/TutorialContext";
 
 export default function RootLayout() {
   // Initialize reminder notifications
@@ -14,6 +15,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <OnboardingProvider>
+      <TutorialProvider>
       <ToastProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
@@ -44,12 +46,19 @@ export default function RootLayout() {
 
             {/* Onboarding */}
             <Stack.Screen name="onboarding" />
+
+            {/* Post-onboarding tutorial */}
+            <Stack.Screen
+              name="tutorial"
+              options={{ presentation: "transparentModal" }}
+            />
           </Stack>
 
           {/* Global auth modal */}
           <SignInModal />
         </IMUProvider>
       </ToastProvider>
+      </TutorialProvider>
       </OnboardingProvider>
     </AuthProvider>
   );

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useTutorial } from "@/src/contexts/TutorialContext";
 import { useFonts } from "expo-font";
 import { supabase } from "@/src/lib/supabase";
 import ActiveHoursStep from "./ActiveHoursStep";
@@ -54,6 +56,7 @@ export default function CoachingSetupModal({
     "Agrandir-GrandHeavy": require("../../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
+  const { tutorialStep, dismissTutorial } = useTutorial();
   const defaults = useMemo(() => createDefaultBehaviorProfile(), []);
   const [step, setStep] = useState<StepId>(0);
   const [saving, setSaving] = useState(false);
@@ -119,6 +122,7 @@ export default function CoachingSetupModal({
 
   const handleCancel = () => {
     resetToInitial();
+    dismissTutorial();
     onCancel();
   };
 
@@ -166,6 +170,7 @@ export default function CoachingSetupModal({
     setSaving(true);
     try {
       await saveCurrentBehaviorProfile(profile);
+      dismissTutorial();
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your setup.");
@@ -206,6 +211,23 @@ export default function CoachingSetupModal({
               />
             ))}
           </View>
+
+          {tutorialStep === "coaching-tip" && (
+            <View style={styles.tutorialTip}>
+              <Image
+                source={require("../../../assets/images/mascot.png")}
+                style={styles.tutorialTipMascot}
+                resizeMode="contain"
+              />
+              <View style={styles.tutorialTipTextWrap}>
+                <Text style={styles.tutorialTipText}>
+                  {step < 4
+                    ? "this is a preference for the reminder push notifications which will give you posture tips."
+                    : "set the time you want the daily prompt on the home page to appear at. you can set this time as the time when you will start your first session."}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Body */}
           <ScrollView
@@ -325,6 +347,33 @@ const styles = StyleSheet.create({
     fontFamily: "Agrandir-Regular",
     color: "#AB99FA",
     fontSize: 14,
+  },
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
   },
   progressRow: {
     flexDirection: "row",

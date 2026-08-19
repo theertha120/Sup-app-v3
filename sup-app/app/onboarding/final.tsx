@@ -135,7 +135,8 @@ export default function FinalScreen() {
               elasticity: "",
             }).eq("id", user.id);
           }
-          router.replace("/" as any);
+          router.replace("/(tabs)/home" as any);
+          router.push("/tutorial/intro" as any);
         }}
       >
         <Text style={styles.nextBtnText}>start your posture health journey</Text>

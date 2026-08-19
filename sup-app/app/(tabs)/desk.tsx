@@ -35,6 +35,7 @@ import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
+import { useTutorial } from "../../src/contexts/TutorialContext";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -272,6 +273,7 @@ export default function DeskScreen() {
   });
 
   const { showToast } = useToast();
+  const { tutorialStep, dismissTutorial } = useTutorial();
   const [lastUpdateClickAt, setLastUpdateClickAt] = useState<number | null>(null);
 
   // ── Use the global context — NOT a local hook ──────────────────────────────
@@ -537,6 +539,24 @@ export default function DeskScreen() {
           </Pressable>
         )}
 
+        {tutorialStep === "figure-tip" && (
+          <View style={s.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={s.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={s.tutorialTipTextWrap}>
+              <Text style={s.tutorialTipText}>
+                see real-time feedback on your posture here: this figure updates live to show how you're sitting right now.
+              </Text>
+              <Pressable onPress={dismissTutorial}>
+                <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* Figure card */}
         <View style={[s.figureCard, { borderColor: figureColor + "33" }]}>
           {isTracking && (
@@ -734,6 +754,44 @@ const s = StyleSheet.create({
   calibrateBanner:      { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF3E0", borderRadius: 14, padding: 14, marginBottom: 14 },
   calibrateBannerTitle: { fontSize: 13, color: "#E65100", fontFamily: "Agrandir-Regular" },
   calibrateBannerSub:   { fontSize: 12, color: "#BF360C", marginTop: 2, lineHeight: 17, fontFamily: "Agrandir-Regular" },
+
+  tutorialTip: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
+  },
 
   figureCard: {
     backgroundColor: "#fff", borderRadius: 20, alignSelf: "stretch",

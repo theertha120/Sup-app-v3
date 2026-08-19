@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions, Image } from "react-native";
 import { router } from "expo-router";
 import { useFonts } from "expo-font";
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -22,6 +22,7 @@ import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
+import { useTutorial } from "@/src/contexts/TutorialContext";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -58,6 +59,7 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
+  const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -323,17 +325,53 @@ export default function HomeScreen() {
           </Animated.View>
 
           {/* Action bubble — navigate to daily summary */}
-          <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
-            <Pressable
-              style={[styles.bubble, styles.bubbleRight, styles.shadow]}
-              onPress={() => {
-                logNavbarClick(userId, "today_summary");
-                router.push("/daily");
-              }}
-            >
-              <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
-            </Pressable>
-          </Animated.View>
+          <View style={styles.actionBubbleWrap}>
+            <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
+              <Pressable
+                style={[styles.bubble, styles.bubbleRight, styles.shadow]}
+                onPress={() => {
+                  logNavbarClick(userId, "today_summary");
+                  if (tutorialStep === "data-tip") {
+                    setTutorialStep("snapshot-tip");
+                  } else {
+                    dismissTutorial();
+                  }
+                  router.push("/daily");
+                }}
+              >
+                <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
+              </Pressable>
+            </Animated.View>
+
+            {tutorialStep === "goals-tip" && (
+              <View style={styles.tutorialTip}>
+                <Image
+                  source={require("../../assets/images/mascot.png")}
+                  style={styles.tutorialTipMascot}
+                  resizeMode="contain"
+                />
+                <View style={styles.tutorialTipTextWrap}>
+                  <Text style={styles.tutorialTipText}>get daily personalised goals here every morning!</Text>
+                  <Pressable onPress={() => setTutorialStep("data-tip")}>
+                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {tutorialStep === "data-tip" && (
+              <View style={styles.tutorialTip}>
+                <Image
+                  source={require("../../assets/images/mascot.png")}
+                  style={styles.tutorialTipMascot}
+                  resizeMode="contain"
+                />
+                <View style={styles.tutorialTipTextWrap}>
+                  <Text style={styles.tutorialTipText}>click on this button to see your posture data for today</Text>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
     </Animated.View>
@@ -434,6 +472,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+
+  actionBubbleWrap: {
+    position: "relative",
+    alignItems: "flex-end",
+  },
+  tutorialTip: {
+    position: "absolute",
+    top: -34,
+    right: 16,
+    maxWidth: 230,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 30,
+    height: 30,
+  },
+  tutorialTipTextWrap: {
+    flexShrink: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 12,
+    color: "#FFFFFF",
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 12,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
 
   profileContent: {

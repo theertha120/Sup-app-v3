@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, ActivityIndicator, Alert,
+  Pressable, ActivityIndicator, Alert, Image,
 } from "react-native";
 import { useFonts } from "expo-font";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +29,7 @@ import { bleService, SensorSlot } from "../src/services/BLEService";
 import { Device } from "react-native-ble-plx";
 import { useAuth } from "../src/contexts/AuthContext";
 import CalibrationModal from "../src/components/modals/CalibrationModal";
+import { useTutorial } from "../src/contexts/TutorialContext";
 
 // ── Device identity types ─────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ export default function SensorSetupScreen() {
   } = useIMUContext();
 
   const { userId } = useAuth();
+  const { tutorialStep, setTutorialStep } = useTutorial();
 
   const [fontsLoaded] = useFonts({
     "Agrandir-GrandHeavy": require("../assets/fonts/Agrandir-GrandHeavy.otf"),
@@ -99,6 +101,23 @@ export default function SensorSetupScreen() {
   const [savedTop,         setSavedTop]         = useState<SavedDevice | null>(null);
   const [savedBottom,      setSavedBottom]      = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
+
+  // ── Tutorial: once calibration actually completes, move on to connecting ──
+
+  useEffect(() => {
+    if (tutorialStep === "calibrate-tip" && calibration.isComplete) {
+      setTutorialStep("connect-tip");
+    }
+  }, [tutorialStep, calibration.isComplete, setTutorialStep]);
+
+  // ── Tutorial: once both s'pots connect, move on to desk mode ─────────────
+
+  useEffect(() => {
+    if (tutorialStep === "connect-tip" && bothConnected) {
+      setTutorialStep("figure-tip");
+      router.push("/desk" as any);
+    }
+  }, [tutorialStep, bothConnected, setTutorialStep]);
 
   // ── Load saved device identity ────────────────────────────────────────────
 
@@ -347,6 +366,21 @@ export default function SensorSetupScreen() {
           <SensorRow slot="top"    label="top s'pot"    position="between your shoulder blades" />
           <View style={styles.divider} />
           <SensorRow slot="bottom" label="bottom s'pot" position="lower back, just above your waistband" />
+
+          {tutorialStep === "connect-tip" && (
+            <View style={[styles.tutorialTip, { marginTop: 12, marginBottom: 0 }]}>
+              <Image
+                source={require("../assets/images/mascot.png")}
+                style={styles.tutorialTipMascot}
+                resizeMode="contain"
+              />
+              <View style={styles.tutorialTipTextWrap}>
+                <Text style={styles.tutorialTipText}>
+                  connect both top and bottom s'pots. once they're both connected, a session starts automatically.
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Auto-connect button */}
@@ -395,6 +429,24 @@ export default function SensorSetupScreen() {
             <Pressable onPress={() => setAssigningSlot(null)} style={styles.cancelRow}>
               <Text style={styles.cancelText}>cancel</Text>
             </Pressable>
+          </View>
+        )}
+
+        {tutorialStep === "calibrate-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                this is a personalised calibration to determine your posture states: wear your s'pots and calibrate now. it's a one-time thing, and every future session will refer to this baseline.
+              </Text>
+              <Pressable onPress={() => setTutorialStep("connect-tip")}>
+                <Text style={styles.tutorialTipNext}>skip for now and do it later!</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -517,6 +569,43 @@ const styles = StyleSheet.create({
 
   statusBanner:     { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, marginBottom: 16 },
   statusBannerText: { fontSize: 13, fontWeight: "600", flex: 1, fontFamily: "Agrandir-Regular" },
+
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
+  },
 
   disconnectBtn: {
     flexDirection: "row",
