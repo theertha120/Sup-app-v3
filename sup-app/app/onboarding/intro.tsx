@@ -59,7 +59,7 @@ export default function IntroScreen() {
         {/* Button */}
         <Pressable
           style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-          onPress={() => router.push("/onboarding/cluster" as any)}
+          onPress={() => router.push("/onboarding/heard" as any)}
         >
           <Text style={styles.buttonText}>Let's gooooo</Text>
         </Pressable>

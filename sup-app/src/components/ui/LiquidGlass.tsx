@@ -8,15 +8,25 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from "react-native-reanimated";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { logNavbarClick, type NavbarTab } from "@/src/services/analytics/navbarClickService";
 
 const { width } = Dimensions.get("window");
 
 const TAB_BAR_WIDTH = width - 40;
 
+const ROUTE_TO_TAB: Record<string, NavbarTab> = {
+  home: "home",
+  stats: "stats",
+  leaderboard: "community",
+  desk: "desk",
+};
+
 export default function LiquidGlass({
   state,
   navigation,
 }: BottomTabBarProps) {
+  const { userId } = useAuth();
   const activeIndex = state.index;
   const TAB_WIDTH = TAB_BAR_WIDTH / state.routes.length;
   const { bottom: bottomInset } = useSafeAreaInsets();
@@ -58,6 +68,9 @@ export default function LiquidGlass({
           const isFocused = state.index === index;
 
           const onPress = () => {
+            const tab = ROUTE_TO_TAB[route.name];
+            if (tab) logNavbarClick(userId, tab);
+
             const event = navigation.emit({
               type: "tabPress",
               target: route.key,

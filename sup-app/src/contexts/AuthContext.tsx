@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/src/lib/supabase";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
-import { createDefaultBehaviorProfile } from "@/src/services/user/behaviorProfileService";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -12,9 +11,20 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (
     email: string,
-    password: string,
-    name?: string
+    password: string
   ) => Promise<{ success: boolean; error?: string }>;
+  verifyEmailOtp: (
+    email: string,
+    token: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  resendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
+  checkEmailRegistered: (email: string) => Promise<{ success: boolean; exists?: boolean; error?: string }>;
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyPasswordResetOtp: (
+    email: string,
+    token: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -92,70 +102,146 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function register(
     email: string,
-    password: string,
-    name?: string
+    password: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
 
       if (error) {
         console.warn("[auth] signUp failed", error);
         return { success: false, error: error.message };
       }
 
-      if (!user) {
+      if (!data.user) {
         return { success: false, error: "No user returned from signUp" };
       }
 
-      // Try to create profile rows immediately using the returned user id.
-      const displayName = name || email.split("@")[0];
-      try {
-        await supabase.from("profiles").insert({
-          id: user.id,
-          name: displayName,
-          avatar_url: null,
-          current_streak: 0,
-          weekly_avg_points: 0,
-        });
-
-        const def = createDefaultBehaviorProfile();
-        await supabase.from("user_profile").upsert({
-          id: user.id,
-          primary_goals: def.primaryGoals,
-          preferred_tones: def.preferredTones,
-          reminder_frequency: def.reminderFrequency,
-          active_time_start: def.activeTimeStart,
-          active_time_end: def.activeTimeEnd,
-          weekly_goals: def.weeklyGoals,
-        });
-      } catch (e) {
-        console.warn("[auth] failed to create profile rows after signUp", e);
-      }
-
-      // After sign-up, attempt to sign in immediately to establish a session.
-      const signIn = await supabase.auth.signInWithPassword({ email, password });
-
-      if (signIn.error || !signIn.data?.user) {
-        // Sign-in failed (likely due to email confirmation). Return success=false but inform user,
-        // profiles were created and user can confirm email to sign in.
-        const errMsg = signIn.error?.message || "Please confirm your email before signing in.";
-        console.warn("[auth] post-signup signIn failed", signIn.error);
-        return { success: false, error: errMsg };
-      }
-
-      const signedInUser = signIn.data.user;
-
-      // After successful sign-in, auto-detect timezone
-      await autoDetectAndSaveTimezone(signedInUser.id);
-
-      setUserId(signedInUser.id);
-      setIsAuthenticated(true);
+      // Email confirmation is required, so no session exists yet — the caller
+      // must send the user through verifyEmailOtp before they're signed in.
+      // Profile rows are created after verification, once a session exists.
       return { success: true };
     } catch (err) {
       console.error("[auth] register error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function verifyEmailOtp(
+    email: string,
+    token: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "signup",
+      });
+
+      if (error || !data.user) {
+        const msg = error?.message || "Invalid or expired code";
+        console.warn("[auth] verifyEmailOtp failed", error);
+        return { success: false, error: msg };
+      }
+
+      await autoDetectAndSaveTimezone(data.user.id);
+
+      setUserId(data.user.id);
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] verifyEmailOtp error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function resendOtp(
+    email: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.auth.resend({ type: "signup", email });
+      if (error) {
+        console.warn("[auth] resendOtp failed", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] resendOtp error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function checkEmailRegistered(
+    email: string
+  ): Promise<{ success: boolean; exists?: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke("check-email", {
+        body: { email },
+      });
+      if (error) {
+        console.warn("[auth] checkEmailRegistered failed", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true, exists: !!data?.exists };
+    } catch (err) {
+      console.error("[auth] checkEmailRegistered error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function requestPasswordReset(
+    email: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) {
+        console.warn("[auth] requestPasswordReset failed", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] requestPasswordReset error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function verifyPasswordResetOtp(
+    email: string,
+    token: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "recovery",
+      });
+
+      if (error || !data.user) {
+        const msg = error?.message || "Invalid or expired code";
+        console.warn("[auth] verifyPasswordResetOtp failed", error);
+        return { success: false, error: msg };
+      }
+
+      setUserId(data.user.id);
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] verifyPasswordResetOtp error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  async function updatePassword(
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        console.warn("[auth] updatePassword failed", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] updatePassword error", err);
       return { success: false, error: String(err) };
     }
   }
@@ -172,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, logout }}>
       {children}
     </AuthContext.Provider>
   );
