@@ -4,92 +4,34 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Switch,
-  Modal,
   ActivityIndicator,
-  Alert, // for testing notifications
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useToast } from "../src/contexts/ToastContext";
-import {
-  getSettingsSnapshot,
-  updateSettings,
-  type AppSettings,
-} from "../src/services/user/settingsService";
 import CoachingSetupModal from "../src/components/onboarding/CoachingSetupModal";
 import {
   fetchCurrentBehaviorProfile,
   type BehaviorProfile,
 } from "../src/services/user/behaviorProfileService";
 
-import { sendLocalNotification } from "@/src/services/reminder/pushNotificationService"; // for testing notifications
+import { useTutorial } from "@/src/contexts/TutorialContext";
 
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<AppSettings>(getSettingsSnapshot);
+  const { tutorialStep, setTutorialStep } = useTutorial();
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
-  const [testingNotification, setTestingNotification] = useState(false); // for testing notifications
-  
-  // Theme and Units state
-  const [showThemeModal, setShowThemeModal] = useState(false);
-  const [showUnitsModal, setShowUnitsModal] = useState(false);
-
-  const updateSetting = <K extends keyof AppSettings>(
-    key: K,
-    value: AppSettings[K],
-    options?: { toastMessage?: string }
-  ) => {
-    setSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      updateSettings({ [key]: value });
-      return next;
-    });
-
-    if (options?.toastMessage) {
-      showToast(options.toastMessage, "success");
-    }
-  };
 
   const handleLogout = () => {
     logout();
     router.replace("/home");
-  };
-  
-  const getThemeLabel = () => {
-    if (settings.theme === "light") return "Light";
-    if (settings.theme === "dark") return "Dark";
-    return "Auto";
-  };
-  
-  const getUnitsLabel = () => {
-    return settings.units === "metric" ? "Metric (cm, kg)" : "Imperial (in, lb)";
-  };
-
-  // For testing notifications
-  const handleTestNotification = async () => {
-    setTestingNotification(true);
-    try {
-      await sendLocalNotification(
-        "Test Reminder",
-        "This is a test — tap one of the actions below to try it out!",
-      );
-      showToast("Test notification sent!", "success");
-    } catch (error) {
-      Alert.alert(
-        "Notification Failed",
-        "Could not send test notification. Make sure permissions are granted in your device settings.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setTestingNotification(false);
-    }
   };
 
 
@@ -107,33 +49,24 @@ export default function SettingsScreen() {
       {/* Preferences Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
-        
-        <Pressable style={styles.settingItem} onPress={() => setShowThemeModal(true)}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Theme</Text>
-            <Text style={styles.settingDescription}>{getThemeLabel()}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
 
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Sound Effects</Text>
-            <Text style={styles.settingDescription}>
-              Play sounds for actions
-            </Text>
+        {tutorialStep === "settings-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>click here to set your coaching preferences.</Text>
+            </View>
           </View>
-          <Switch
-            value={settings.soundEffectsEnabled}
-            onValueChange={(value) => updateSetting("soundEffectsEnabled", value)}
-            trackColor={{ false: "#E0E0E0", true: colours.primary }}
-            thumbColor="white"
-          />
-        </View>
+        )}
 
         <Pressable
           style={styles.settingItem}
           onPress={async () => {
+            if (tutorialStep === "settings-tip") setTutorialStep("coaching-tip");
             setLoadingCoachingProfile(true);
             try {
               const profile = await fetchCurrentBehaviorProfile();
@@ -156,40 +89,6 @@ export default function SettingsScreen() {
           }
         </Pressable>
 
-        <Pressable style={styles.settingItem} onPress={() => setShowUnitsModal(true)}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Units</Text>
-            <Text style={styles.settingDescription}>{getUnitsLabel()}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-      </View>
-
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Test Notification</Text>
-            <Text style={styles.settingDescription}>
-              Send a reminder notification with all 4 action buttons
-            </Text>
-          </View>
-          <Pressable
-            style={[
-              styles.testButton,
-              testingNotification && styles.testButtonDisabled,
-            ]}
-            onPress={handleTestNotification}
-            disabled={testingNotification}
-          >
-            {testingNotification ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.testButtonText}>Send</Text>
-            )}
-          </Pressable>
-        </View>
       </View>
 
       {/* Data & Privacy Section */}
@@ -228,10 +127,22 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+      </View>
 
-        <Pressable style={styles.settingItem}>
+      {/* Help Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Help</Text>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={() => {
+            router.replace("/(tabs)/home" as any);
+            router.push("/tutorial/intro" as any);
+          }}
+        >
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Rate Us</Text>
+            <Text style={styles.settingLabel}>Run tutorial again</Text>
+            <Text style={styles.settingDescription}>Replay the app walkthrough</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -247,125 +158,6 @@ export default function SettingsScreen() {
       {/* Footer space */}
       <View style={{ height: 40 }} />
 
-      {/* Theme Selection Modal */}
-      <Modal
-        visible={showThemeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowThemeModal(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowThemeModal(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Theme</Text>
-            
-            <Pressable
-              style={[styles.modalOption, settings.theme === "light" && styles.modalOptionSelected]}
-              onPress={() => {
-                updateSetting("theme", "light");
-                setShowThemeModal(false);
-              }}
-            >
-              <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, settings.theme === "light" && styles.modalOptionTextSelected]}>
-                  ☀️  Light
-                </Text>
-              </View>
-              {settings.theme === "light" && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-
-            <Pressable
-              style={[styles.modalOption, settings.theme === "dark" && styles.modalOptionSelected]}
-              onPress={() => {
-                updateSetting("theme", "dark");
-                setShowThemeModal(false);
-              }}
-            >
-              <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, settings.theme === "dark" && styles.modalOptionTextSelected]}>
-                  🌙  Dark
-                </Text>
-              </View>
-              {settings.theme === "dark" && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-
-            <Pressable
-              style={[styles.modalOption, settings.theme === "auto" && styles.modalOptionSelected]}
-              onPress={() => {
-                updateSetting("theme", "auto");
-                setShowThemeModal(false);
-              }}
-            >
-              <View style={styles.modalOptionTextContainer}>
-                <Text style={[styles.modalOptionText, settings.theme === "auto" && styles.modalOptionTextSelected]}>
-                  🔄  Auto (System)
-                </Text>
-              </View>
-              {settings.theme === "auto" && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-
-            <Pressable
-              style={styles.modalCancel}
-              onPress={() => setShowThemeModal(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Units Selection Modal */}
-      <Modal
-        visible={showUnitsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowUnitsModal(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowUnitsModal(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Units</Text>
-            
-            <Pressable
-              style={[styles.modalOption, settings.units === "metric" && styles.modalOptionSelected]}
-              onPress={() => {
-                updateSetting("units", "metric");
-                setShowUnitsModal(false);
-              }}
-            >
-              <View>
-                <Text style={[styles.modalOptionText, settings.units === "metric" && styles.modalOptionTextSelected]}>
-                  Metric
-                </Text>
-                <Text style={styles.modalOptionSubtext}>Centimeters, Kilograms</Text>
-              </View>
-              {settings.units === "metric" && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-
-            <Pressable
-              style={[styles.modalOption, settings.units === "imperial" && styles.modalOptionSelected]}
-              onPress={() => {
-                updateSetting("units", "imperial");
-                setShowUnitsModal(false);
-              }}
-            >
-              <View>
-                <Text style={[styles.modalOptionText, settings.units === "imperial" && styles.modalOptionTextSelected]}>
-                  Imperial
-                </Text>
-                <Text style={styles.modalOptionSubtext}>Inches, Pounds</Text>
-              </View>
-              {settings.units === "imperial" && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-
-            <Pressable
-              style={styles.modalCancel}
-              onPress={() => setShowUnitsModal(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-
       {/* Coaching setup modal (edit existing or create) */}
       <CoachingSetupModal
         key={showCoachingModal ? "open" : "closed"}
@@ -374,6 +166,10 @@ export default function SettingsScreen() {
         onComplete={() => {
           setShowCoachingModal(false);
           showToast("Coaching preferences saved", "success");
+          if (tutorialStep === "coaching-tip") {
+            setTutorialStep("connect-tip");
+            router.push("/sensor-setup" as any);
+          }
         }}
         onSkip={() => {
           setShowCoachingModal(false);
@@ -441,6 +237,33 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F6F6FA",
   },
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+  },
   settingInfo: {
     flex: 1,
   },
@@ -481,87 +304,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-    width: "100%",
-    maxWidth: 340,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#222",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  modalOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#F6F6FA",
-    marginBottom: 10,
-  },
-  modalOptionSelected: {
-    backgroundColor: colours.primary,
-  },
-  modalOptionTextContainer: {
-    flex: 1,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: "#222",
-    fontWeight: "500",
-  },
-  modalOptionTextSelected: {
-    color: "white",
-  },
-  modalOptionSubtext: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 2,
-  },
-  checkmark: {
-    fontSize: 20,
-    color: "white",
-    fontWeight: "700",
-  },
-  modalCancel: {
-    padding: 14,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  modalCancelText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "600",
-  },
-  // for test notification button
-  testButton: {
-    backgroundColor: colours.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 64,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testButtonDisabled: {
-    opacity: 0.6,
-  },
-  testButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
 });

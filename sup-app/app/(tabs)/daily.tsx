@@ -9,6 +9,7 @@ import {
   Modal,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  Image,
 } from "react-native";
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router } from "expo-router";
@@ -34,6 +35,8 @@ import {
   type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
+import { useTutorial } from "@/src/contexts/TutorialContext";
+import { colours } from "@/theme/colours";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -303,6 +306,7 @@ const breakdownStyles = StyleSheet.create({
 export default function DailyScreen() {
   const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
+  const { tutorialStep, setTutorialStep } = useTutorial();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [streakDays, setStreakDays] = useState<number | null>(null);
@@ -503,6 +507,29 @@ export default function DailyScreen() {
           <Text style={styles.sectionLabel}>today:</Text>
         </View>
 
+        {tutorialStep === "snapshot-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                here's your snapshot, the % of time in each posture state you spent today. You can also see your total session time, and your s'up score, all for today's s'pot sessions.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setTutorialStep("settings-tip");
+                  router.push("/settings");
+                }}
+              >
+                <Text style={styles.tutorialTipNext}>got it</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* S'napshot card */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveInfo("snapshot")} />
@@ -589,6 +616,44 @@ const styles = StyleSheet.create({
     fontFamily: "Agrandir-GrandHeavy",
     fontSize: 20,
     color: PRIMARY_TEXT,
+  },
+
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
 
   card: {

@@ -35,6 +35,7 @@ import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
+import { useTutorial } from "../../src/contexts/TutorialContext";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -272,6 +273,7 @@ export default function DeskScreen() {
   });
 
   const { showToast } = useToast();
+  const { tutorialStep, setTutorialStep } = useTutorial();
   const [lastUpdateClickAt, setLastUpdateClickAt] = useState<number | null>(null);
 
   // ── Use the global context — NOT a local hook ──────────────────────────────
@@ -537,6 +539,24 @@ export default function DeskScreen() {
           </Pressable>
         )}
 
+        {tutorialStep === "figure-tip" && (
+          <View style={s.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={s.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={s.tutorialTipTextWrap}>
+              <Text style={s.tutorialTipText}>
+                see real-time feedback on your posture here: this figure updates live to show how you're sitting right now.
+              </Text>
+              <Pressable onPress={() => setTutorialStep("supdate-tip")}>
+                <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* Figure card */}
         <View style={[s.figureCard, { borderColor: figureColor + "33" }]}>
           {isTracking && (
@@ -569,14 +589,57 @@ export default function DeskScreen() {
 
         {/* Action buttons */}
         {(topSensor.state.connected || bottomSensor.state.connected) && (
-          <View style={s.actionRow}>
-            <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
-              <Text style={s.updateBtnText}>s'update</Text>
-            </Pressable>
-            <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
-              <Text style={s.disconnectBtnText}>end s'ession</Text>
-            </Pressable>
-          </View>
+          <>
+            {tutorialStep === "supdate-tip" && (
+              <View style={s.tutorialTip}>
+                <Image
+                  source={require("../../assets/images/mascot.png")}
+                  style={s.tutorialTipMascot}
+                  resizeMode="contain"
+                />
+                <View style={s.tutorialTipTextWrap}>
+                  <Text style={s.tutorialTipText}>
+                    click the 's'update' button to get a mid-session update on how you are doing overall and how close you are to your daily goal. you can use it once every 2 hours.
+                  </Text>
+                  <Pressable onPress={() => setTutorialStep("end-session-tip")}>
+                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {tutorialStep === "end-session-tip" && (
+              <View style={s.tutorialTip}>
+                <Image
+                  source={require("../../assets/images/mascot.png")}
+                  style={s.tutorialTipMascot}
+                  resizeMode="contain"
+                />
+                <View style={s.tutorialTipTextWrap}>
+                  <Text style={s.tutorialTipText}>
+                    click 'end session' button to end your session.
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      setTutorialStep("stats-tip");
+                      router.replace("/(tabs)/stats" as any);
+                    }}
+                  >
+                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            <View style={s.actionRow}>
+              <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
+                <Text style={s.updateBtnText}>s'update</Text>
+              </Pressable>
+              <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
+                <Text style={s.disconnectBtnText}>end s'ession</Text>
+              </Pressable>
+            </View>
+          </>
         )}
 
         {/* Session stats — only when tracking */}
@@ -734,6 +797,44 @@ const s = StyleSheet.create({
   calibrateBanner:      { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF3E0", borderRadius: 14, padding: 14, marginBottom: 14 },
   calibrateBannerTitle: { fontSize: 13, color: "#E65100", fontFamily: "Agrandir-Regular" },
   calibrateBannerSub:   { fontSize: 12, color: "#BF360C", marginTop: 2, lineHeight: 17, fontFamily: "Agrandir-Regular" },
+
+  tutorialTip: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
+  },
 
   figureCard: {
     backgroundColor: "#fff", borderRadius: 20, alignSelf: "stretch",
