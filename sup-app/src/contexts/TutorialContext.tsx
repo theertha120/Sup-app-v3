@@ -9,6 +9,11 @@ export type TutorialStep =
   | "calibrate-tip"
   | "connect-tip"
   | "figure-tip"
+  | "supdate-tip"
+  | "end-session-tip"
+  | "stats-tip"
+  | "community-tip"
+  | "add-friends-tip"
   | null;
 
 interface TutorialContextType {

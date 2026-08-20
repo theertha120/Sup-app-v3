@@ -167,7 +167,7 @@ export default function SettingsScreen() {
           setShowCoachingModal(false);
           showToast("Coaching preferences saved", "success");
           if (tutorialStep === "coaching-tip") {
-            setTutorialStep("calibrate-tip");
+            setTutorialStep("connect-tip");
             router.push("/sensor-setup" as any);
           }
         }}

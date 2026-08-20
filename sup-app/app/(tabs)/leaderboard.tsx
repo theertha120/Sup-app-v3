@@ -6,9 +6,11 @@ import {
   Pressable,
   Animated,
   TextInput,
+  Image,
 } from "react-native";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTutorial } from "../../src/contexts/TutorialContext";
 import { colours } from "../../theme/colours";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import type { User } from "../../constants/env";
@@ -82,6 +84,7 @@ function AnimatedNumber({ value, style }: { value: number; style?: any }) {
 export default function LeaderboardScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { showToast } = useToast();
+  const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
 
   useFocusEffect(
     useCallback(() => {
@@ -369,6 +372,24 @@ export default function LeaderboardScreen() {
         <Text style={styles.headerSubtitle}>Global Community</Text>
       </View>
 
+      {tutorialStep === "community-tip" && (
+        <View style={styles.tutorialTip}>
+          <Image
+            source={require("../../assets/images/mascot.png")}
+            style={styles.tutorialTipMascot}
+            resizeMode="contain"
+          />
+          <View style={styles.tutorialTipTextWrap}>
+            <Text style={styles.tutorialTipText}>
+              community is where you can see your ranking with others using the app.
+            </Text>
+            <Pressable onPress={() => setTutorialStep("add-friends-tip")}>
+              <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
         <Text style={styles.rankLabel}>
@@ -499,7 +520,25 @@ export default function LeaderboardScreen() {
       {/* Friends */}
       <View style={styles.friendSection}>
         <Text style={styles.friendTitle}>Friends</Text>
-       
+
+        {tutorialStep === "add-friends-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                search friends by name and make new friends.
+              </Text>
+              <Pressable onPress={dismissTutorial}>
+                <Text style={styles.tutorialTipNext}>got it!</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <View style={styles.friendAddRow}>
           <TextInput
             value={friendUsernameInput}
@@ -730,6 +769,42 @@ const styles = StyleSheet.create({
     color: "white",
     opacity: 0.8,
     marginTop: 4,
+  },
+
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
 
   rankCard: {

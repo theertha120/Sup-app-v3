@@ -12,7 +12,7 @@
  *   4. All existing identity management, picker filter, and forget logic preserved.
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
   Pressable, ActivityIndicator, Alert, Image,
@@ -102,22 +102,32 @@ export default function SensorSetupScreen() {
   const [savedBottom,      setSavedBottom]      = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
 
-  // ── Tutorial: once calibration actually completes, move on to connecting ──
-
-  useEffect(() => {
-    if (tutorialStep === "calibrate-tip" && calibration.isComplete) {
-      setTutorialStep("connect-tip");
-    }
-  }, [tutorialStep, calibration.isComplete, setTutorialStep]);
-
-  // ── Tutorial: once both s'pots connect, move on to desk mode ─────────────
+  // ── Tutorial: once both s'pots connect, move on to calibration ───────────
 
   useEffect(() => {
     if (tutorialStep === "connect-tip" && bothConnected) {
+      setTutorialStep("calibrate-tip");
+    }
+  }, [tutorialStep, bothConnected, setTutorialStep]);
+
+  // ── Tutorial: once calibration actually completes, move on to desk mode ──
+  //
+  // Only reacts to a fresh false→true flip while this tip is showing — if
+  // calibration.isComplete was already true when we arrived here (e.g.
+  // re-running the tutorial after calibrating before), this must NOT skip
+  // the tip; it should still display, letting the user re-calibrate or skip.
+
+  const prevCalibrationCompleteRef = useRef(calibration.isComplete);
+
+  useEffect(() => {
+    const wasComplete = prevCalibrationCompleteRef.current;
+    prevCalibrationCompleteRef.current = calibration.isComplete;
+
+    if (tutorialStep === "calibrate-tip" && calibration.isComplete && !wasComplete) {
       setTutorialStep("figure-tip");
       router.push("/desk" as any);
     }
-  }, [tutorialStep, bothConnected, setTutorialStep]);
+  }, [tutorialStep, calibration.isComplete, setTutorialStep]);
 
   // ── Load saved device identity ────────────────────────────────────────────
 
@@ -267,6 +277,12 @@ export default function SensorSetupScreen() {
   const connectedIds     = bleService.getConnectedDeviceIds();
   const availableDevices = discoveredDevices.filter((d) => !connectedIds.includes(d.id));
 
+  const calibrationTipText = !bothConnected
+    ? "don't have your s'pots right now? you can skip for now and calibrate later when both sensors are connected."
+    : calibration.isComplete
+      ? "you're already calibrated. you can still re-calibrate anytime later."
+      : "this is a one-time calibration that personalises how we determine your posture states, in real time.";
+
   // ── Sensor row ────────────────────────────────────────────────────────────
 
   function SensorRow({ slot, label, position }: {
@@ -378,6 +394,14 @@ export default function SensorSetupScreen() {
                 <Text style={styles.tutorialTipText}>
                   connect both top and bottom s'pots. once they're both connected, a session starts automatically.
                 </Text>
+                <Pressable
+                  onPress={() => {
+                    setTutorialStep("stats-tip");
+                    router.replace("/(tabs)/stats" as any);
+                  }}
+                >
+                  <Text style={styles.tutorialTipNext}>skip for now and go to stats</Text>
+                </Pressable>
               </View>
             </View>
           )}
@@ -440,11 +464,14 @@ export default function SensorSetupScreen() {
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                this is a personalised calibration to determine your posture states: wear your s'pots and calibrate now. it's a one-time thing, and every future session will refer to this baseline.
-              </Text>
-              <Pressable onPress={() => setTutorialStep("connect-tip")}>
-                <Text style={styles.tutorialTipNext}>skip for now and do it later!</Text>
+              <Text style={styles.tutorialTipText}>{calibrationTipText}</Text>
+              <Pressable
+                onPress={() => {
+                  setTutorialStep("figure-tip");
+                  router.push("/desk" as any);
+                }}
+              >
+                <Text style={styles.tutorialTipNext}>skip and do calibration later</Text>
               </Pressable>
             </View>
           </View>

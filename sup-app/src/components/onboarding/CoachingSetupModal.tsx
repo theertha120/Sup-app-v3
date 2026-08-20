@@ -170,7 +170,6 @@ export default function CoachingSetupModal({
     setSaving(true);
     try {
       await saveCurrentBehaviorProfile(profile);
-      dismissTutorial();
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your setup.");
@@ -223,7 +222,7 @@ export default function CoachingSetupModal({
                 <Text style={styles.tutorialTipText}>
                   {step < 4
                     ? "this is a preference for the reminder push notifications which will give you posture tips."
-                    : "set the time you want the daily prompt on the home page to appear at. you can set this time as the time when you will start your first session."}
+                    : "set the time you want the daily personalised goal on the home page to appear at. you can set this time as the time when you will start your first session."}
                 </Text>
               </View>
             </View>

@@ -1,10 +1,12 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Platform } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Platform, Image } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useIMUContext } from "../../src/contexts/IMUContext";
+import { useTutorial } from "../../src/contexts/TutorialContext";
 import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
 import {
   useSessionStats,
@@ -296,6 +298,7 @@ function PostureBreakdown({ todayStats, weekStats, todayTotalMs, weekTotalMs }: 
 
 export default function StatsScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { tutorialStep, setTutorialStep } = useTutorial();
 
   useFocusEffect(
     useCallback(() => {
@@ -442,6 +445,29 @@ export default function StatsScreen() {
           <Text style={styles.headerTitle}>Your posture health</Text>
           <Text style={styles.headerSubtitle}>Based on daily wearable data</Text>
         </View>
+
+        {tutorialStep === "stats-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                this is the stats page where you can see your weekly, monthly, and yearly data summarised to track your overall progress.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setTutorialStep("community-tip");
+                  router.replace("/leaderboard" as any);
+                }}
+              >
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {/* Date Range Selector */}
         <View style={styles.dateRangeContainer}>
@@ -685,6 +711,36 @@ const styles = StyleSheet.create({
   header:                 { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 12 },
   headerTitle:            { fontSize: 22, fontWeight: "600", color: "#222" },
   headerSubtitle:         { marginTop: 4, color: "#666" },
+  tutorialTip:            {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot:      { width: 34, height: 34 },
+  tutorialTipTextWrap:    { flex: 1 },
+  tutorialTipText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
+  },
   dateRangeContainer:     { flexDirection: "row", marginHorizontal: 16, marginBottom: 16, backgroundColor: "#E5E5EA", borderRadius: 12, padding: 4 },
   dateRangeButton:        { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, alignItems: "center" },
   dateRangeButtonActive:  { backgroundColor: "white", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
