@@ -49,21 +49,16 @@ const SEGMENT_LABELS: Record<string, string> = {
   tilted_right: "Tilted Right",
 };
 
-// to update: Constants [0 is if there is no session]
-const HOURLY_POSTURE: Record<string, number> = {
-  "00:00": 0,  "01:00": 0,  "02:00": 0,  "03:00": 0,
-  "04:00": 0,  "05:00": 0,  "06:00": 0,  "07:00": 48,
-  "08:00": 72, "09:00": 81, "10:00": 79, "11:00": 85,
-  "12:00": 60, "13:00": 55, "14:00": 50, "15:00": 44,
-  "16:00": 38, "17:00": 42, "18:00": 30, "19:00": 0,
-  "20:00": 0,  "21:00": 0,  "22:00": 0,  "23:00": 0,
-};
+// // to update: Constants [0 is if there is no session]
+// const HOURLY_POSTURE: Record<string, number> = {
+//   "00:00": 0,  "01:00": 0,  "02:00": 0,  "03:00": 0,
+//   "04:00": 0,  "05:00": 0,  "06:00": 0,  "07:00": 48,
+//   "08:00": 72, "09:00": 81, "10:00": 79, "11:00": 85,
+//   "12:00": 60, "13:00": 55, "14:00": 50, "15:00": 44,
+//   "16:00": 38, "17:00": 42, "18:00": 30, "19:00": 0,
+//   "20:00": 0,  "21:00": 0,  "22:00": 0,  "23:00": 0,
+// };
 
-// Data generation
-
-function seed(i: number, base: number, spread: number, offset = 0) {
-  return Math.max(20, Math.min(98, Math.round(base + Math.sin(i * 1.3 + offset) * spread)));
-}
 
 type Range = "week" | "month" | "year";
 
@@ -633,70 +628,70 @@ const barStyles = StyleSheet.create({
 
 // Posture heatmap
 
-function PostureHeatmap({
-  hourlyData, range, activeIndex, onOpenPopup, onClosePopup,
-}: {
-  hourlyData: Record<string, number>;
-  range: Range;
-  activeIndex: number | null;
-  onOpenPopup: (index: number, info: PopupInfo) => void;
-  onClosePopup: () => void;
-}) {
-  const hours = Object.keys(hourlyData);
-  const vals  = Object.values(hourlyData);
-  const active   = vals.filter((v) => v > 0);
-  const allZero  = active.length === 0;
-  const worstVal = allZero ? 0 : Math.min(...active);
-  const worstHr  = allZero ? "" : hours[vals.indexOf(worstVal)];
-  const insight  = allZero
-    ? "no posture data recorded — start a session to see patterns."
-    : `your posture holds well in the morning, then dips around ${worstHr} through the afternoon.`;
+// function PostureHeatmap({
+//   hourlyData, range, activeIndex, onOpenPopup, onClosePopup,
+// }: {
+//   hourlyData: Record<string, number>;
+//   range: Range;
+//   activeIndex: number | null;
+//   onOpenPopup: (index: number, info: PopupInfo) => void;
+//   onClosePopup: () => void;
+// }) {
+//   const hours = Object.keys(hourlyData);
+//   const vals  = Object.values(hourlyData);
+//   const active   = vals.filter((v) => v > 0);
+//   const allZero  = active.length === 0;
+//   const worstVal = allZero ? 0 : Math.min(...active);
+//   const worstHr  = allZero ? "" : hours[vals.indexOf(worstVal)];
+//   const insight  = allZero
+//     ? "no posture data recorded — start a session to see patterns."
+//     : `your posture holds well in the morning, then dips around ${worstHr} through the afternoon.`;
 
-  const labelHours = ["9am","11am","1pm","3pm","5pm","7pm"];
-  const chartW     = CARD_W - 36;
-  const cellRefs   = useRef<(View | null)[]>([]);
+//   const labelHours = ["9am","11am","1pm","3pm","5pm","7pm"];
+//   const chartW     = CARD_W - 36;
+//   const cellRefs   = useRef<(View | null)[]>([]);
 
-  const handleCellPress = (i: number) => {
-    if (vals[i] === 0) return; // no session data for this hour, so no popup
-    if (activeIndex === i) { onClosePopup(); return; }
-    cellRefs.current[i]?.measureInWindow((x, y, width) => {
-      onOpenPopup(i, {
-        x: x + width / 2,
-        y,
-        value: vals[i], unit: "score",
-        dateRange: hours[i],
-        avgLabel: avgLabel(range),
-      });
-    });
-  };
+//   const handleCellPress = (i: number) => {
+//     if (vals[i] === 0) return; // no session data for this hour, so no popup
+//     if (activeIndex === i) { onClosePopup(); return; }
+//     cellRefs.current[i]?.measureInWindow((x, y, width) => {
+//       onOpenPopup(i, {
+//         x: x + width / 2,
+//         y,
+//         value: vals[i], unit: "score",
+//         dateRange: hours[i],
+//         avgLabel: avgLabel(range),
+//       });
+//     });
+//   };
 
-  return (
-    <View>
-      <View style={[heatStyles.row, { width: chartW }]}>
-        {hours.map((h, i) => (
-          <Pressable
-            key={h}
-            ref={(el) => { cellRefs.current[i] = el; }}
-            style={[heatStyles.cell, { backgroundColor: heatColor(vals[i]) }]}
-            onPress={() => handleCellPress(i)}
-          />
-        ))}
-      </View>
-      <View style={heatStyles.labelsRow}>
-        {labelHours.map((l) => <Text key={l} style={heatStyles.label}>{l}</Text>)}
-      </View>
-      <Text style={heatStyles.insight}>{insight}</Text>
-    </View>
-  );
-}
+//   return (
+//     <View>
+//       <View style={[heatStyles.row, { width: chartW }]}>
+//         {hours.map((h, i) => (
+//           <Pressable
+//             key={h}
+//             ref={(el) => { cellRefs.current[i] = el; }}
+//             style={[heatStyles.cell, { backgroundColor: heatColor(vals[i]) }]}
+//             onPress={() => handleCellPress(i)}
+//           />
+//         ))}
+//       </View>
+//       <View style={heatStyles.labelsRow}>
+//         {labelHours.map((l) => <Text key={l} style={heatStyles.label}>{l}</Text>)}
+//       </View>
+//       <Text style={heatStyles.insight}>{insight}</Text>
+//     </View>
+//   );
+// }
 
-const heatStyles = StyleSheet.create({
-  row:       { flexDirection: "row", gap: 2 },
-  cell:      { flex: 1, height: 26, borderRadius: 4 },
-  labelsRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  label:     { fontSize: 9, color: "rgba(29,1,74,0.45)", fontWeight: "600" },
-  insight:   { fontFamily: "Agrandir-Regular", fontSize: 11, color: PRIMARY_TEXT, lineHeight: 17, marginTop: 8, opacity: 0.8 },
-});
+// const heatStyles = StyleSheet.create({
+//   row:       { flexDirection: "row", gap: 2 },
+//   cell:      { flex: 1, height: 26, borderRadius: 4 },
+//   labelsRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+//   label:     { fontSize: 9, color: "rgba(29,1,74,0.45)", fontWeight: "600" },
+//   insight:   { fontFamily: "Agrandir-Regular", fontSize: 11, color: PRIMARY_TEXT, lineHeight: 17, marginTop: 8, opacity: 0.8 },
+// });
 
 // Posture breakdown
 
@@ -884,7 +879,7 @@ export default function StatsScreen() {
         </View>
 
         {/* WHEN YOUR POSTURE SLIPS */}
-        <View style={[styles.card, styles.shadow]}>
+        {/* <View style={[styles.card, styles.shadow]}>
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={() => (
               <>
@@ -900,7 +895,7 @@ export default function StatsScreen() {
           ) : (
             <Text style={styles.cardTitle}>loading…</Text> // or a spinner
           )}
-        </View>
+        </View> */}
 
         {/* POSTURE BREAKDOWN */}
         <View style={[styles.card, styles.shadow]}>
