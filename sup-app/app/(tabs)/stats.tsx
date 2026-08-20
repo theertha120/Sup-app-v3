@@ -1,772 +1,960 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Platform, Image } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { colours } from "../../theme/colours";
-import { useAuth } from "../../src/contexts/AuthContext";
-import { useIMUContext } from "../../src/contexts/IMUContext";
-import { useTutorial } from "../../src/contexts/TutorialContext";
-import type { PostureSessionStats } from "../../src/services/posture/postureAnalysisService";
+import React, { useState, useRef, useEffect } from "react";
+import { supabase } from "../../src/lib/supabase";
 import {
-  useSessionStats,
-  formatDuration,
-  formatPercent,
-  StateTimeMap,
-  DayData,
-} from "../../src/hooks/useSessionStats";
-import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData";
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Animated,
+  Dimensions,
+  PanResponder,
+  Modal,
+} from "react-native";
+import { BlurView } from "expo-blur";
+import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
+import { useFonts } from "expo-font";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import BackgroundBlobs from "./backgroundBlobs";
+import HeaderBar from "@/src/components/ui/HeaderBar";
+import {
+  fetchPosturePageRows,
+  type PosturePageRow,
+  type StateTotals,
+} from "../../src/services/posture/postureSyncService";
+import { useAuth } from "@/src/contexts/AuthContext";
 
-type DateRange = "today" | "last7days";
+const { width: SCREEN_W } = Dimensions.get("window");
+const PRIMARY_TEXT = "#1D014A";
+const CARD_W = SCREEN_W - 40;
 
-// Using live IMU session data via `useSessionStats` instead of mock stream
+const NAV_BAR_HEIGHT = 72;
+const NAV_BOTTOM_OFFSET = 25;
 
-// ── Posture colours ───────────────────────────────────────
-
-const STATE_COLORS: Record<DeskPostureState, string> = {
-  upright: "#4CAF50",
-  transition: "#8BC34A",
-  forward_lean: "#CDDC39",
-  slouched: "#FF9800",
-  severe: "#F44336",
-  tilted_left: "#FF9800",
-  tilted_right: "#FF9800",
+const SEGMENT_COLORS: Record<string, string> = {
+  upright:      "#6DC96D",
+  forward_lean: "#FFD600",
+  slouched:     "#F5A623",
+  severe:       "#EC555E",
+  tilted_left:  "#F5A623",
+  tilted_right: "#F5A623",
 };
 
-const STATE_INFO: Record<DeskPostureState, { label: string }> = {
-  upright: { label: "good alignment" },
-  transition: { label: "slight forward shift" },
-  forward_lean: { label: "leaning forward" },
-  slouched: { label: "spine rounding" },
-  severe: { label: "high spinal load" },
-  tilted_left: { label: "shifting left" },
-  tilted_right: { label: "shifting right" },
+const SEGMENT_LABELS: Record<string, string> = {
+  upright:      "Upright",
+  forward_lean: "Forward Lean",
+  slouched:     "Slouched",
+  severe:       "Severe",
+  tilted_left:  "Tilted Left",
+  tilted_right: "Tilted Right",
 };
 
-const STATE_ORDER: DeskPostureState[] = [
-  "upright",
-  "transition",
-  "forward_lean",
-  "slouched",
-  "severe",
-  "tilted_left",
-  "tilted_right",
-];
+// // to update: Constants [0 is if there is no session]
+// const HOURLY_POSTURE: Record<string, number> = {
+//   "00:00": 0,  "01:00": 0,  "02:00": 0,  "03:00": 0,
+//   "04:00": 0,  "05:00": 0,  "06:00": 0,  "07:00": 48,
+//   "08:00": 72, "09:00": 81, "10:00": 79, "11:00": 85,
+//   "12:00": 60, "13:00": 55, "14:00": 50, "15:00": 44,
+//   "16:00": 38, "17:00": 42, "18:00": 30, "19:00": 0,
+//   "20:00": 0,  "21:00": 0,  "22:00": 0,  "23:00": 0,
+// };
 
-const BAR_STACK_ORDER: DeskPostureState[] = [
-  "severe",
-  "slouched",
-  "tilted_left",
-  "tilted_right",
-  "forward_lean",
-  "transition",
-  "upright",
-];
 
-// Animated number component for smooth transitions
-function AnimatedNumber({
-  value,
-  style,
-  decimals = 2,
-}: {
+type Range = "week" | "month" | "year";
+
+interface PopupInfo {
+  x: number;
+  y: number;
   value: number;
-  style?: any;
-  decimals?: number;
-}) {
-  const [displayValue, setDisplayValue] = useState<number>(value);
-  const animationRef = useRef<any>(null);
-  useEffect(() => {
-    if (animationRef.current) {
-      clearInterval(animationRef.current);
-      animationRef.current = null;
+  unit: string;
+  dateRange: string;
+  avgLabel: string;
+}
+
+interface ActivePopup {
+  chartId: string;
+  index: number | string;
+  info: PopupInfo;
+}
+
+export interface PageData {
+  labels:      string[];
+  scores:      number[];
+  sessionMins: number[];
+  hasData:     boolean[];
+  stateTotals: Record<string, number>;
+  startDate:   string;
+  endDate:     string;
+  pointDates:  string[];
+}
+
+function fmt(d: Date) {
+  const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  return `${d.getDate()} ${M[d.getMonth()]}`;
+}
+
+function fmtFull(d: Date) {
+  const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ─── Page count — replace body with real Supabase query ───────────────────────
+// Returns how many historical pages exist for this range. No cap — the user
+// can swipe all the way back to the first ever recorded session.
+async function getAvailablePageCount(userId: string, range: Range): Promise<number> {
+  if (!userId) {
+    console.error("[getAvailablePageCount] missing userId");
+    return 0;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('posture_daily')
+      .select('updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: true })
+      .limit(1)
+    
+    if (error) throw error;
+
+    const dataStart = new Date(data?.[0]?.updated_at || new Date(2026, 0, 1).toISOString())
+    const now = new Date();
+
+
+    if (range === "week") {
+      const msPerWeek = 7 * 86_400_000;
+      // No cap — pages go back to dataStart
+      return Math.max(1, Math.ceil((now.getTime() - dataStart.getTime()) / msPerWeek));
+    } else if (range === "month") {
+      const monthDiff =
+        (now.getFullYear() - dataStart.getFullYear()) * 12 +
+        (now.getMonth() - dataStart.getMonth());
+      return Math.max(1, monthDiff + 1);
+    } else {
+      const yearDiff = now.getFullYear() - dataStart.getFullYear();
+      return Math.max(1, yearDiff + 1);
     }
-
-    const startValue = displayValue;
-    const endValue = value;
-    const duration = 250;
-    const startTime = Date.now();
-
-    if (startValue === endValue) return;
-    animationRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const current = startValue + (endValue - startValue) * easeProgress;
-
-      setDisplayValue(current);
-
-      if (progress >= 1) {
-        setDisplayValue(endValue);
-        if (animationRef.current) {
-          clearInterval(animationRef.current);
-          animationRef.current = null;
-        }
-      }
-    }, 16);
-
-    return () => {
-      if (animationRef.current) {
-        clearInterval(animationRef.current);
-        animationRef.current = null;
-      }
-    };
-  }, [value]);
-
-  return <Text style={style}>{typeof displayValue === "number" ? displayValue.toFixed(decimals) : String(displayValue)}</Text>;
+  } catch (error) {
+    console.error("[getAvailablePageCount] error:", error);
+    return 0; // fallback to 0 pages if error occurs
+  }
 }
 
-function AnimatedProgressBar({ goodPercent, animationKey }: { goodPercent: number; animationKey?: string | number }) {
-  const animatedWidth = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    animatedWidth.setValue(0);
-    Animated.timing(animatedWidth, { toValue: goodPercent, duration: 300, useNativeDriver: false }).start();
-  }, [goodPercent, animationKey]);
+function toDateKey(d: Date): string {
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+type FullStateTotals = Required<Omit<StateTotals, "transition">>;
+
+function emptyStateTotals(): FullStateTotals {
+  return {
+    upright: 0,
+    forward_lean: 0,
+    slouched: 0,
+    severe: 0,
+    tilted_left: 0,
+    tilted_right: 0,
+  };
+}
+
+function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | undefined) {
+  if (!row) return;
+  const totals = row.stateTotals;
+  if (!totals) return;
+  for (const key of Object.keys(target) as (keyof FullStateTotals)[]) {
+    target[key] += totals[key] ?? 0; // transition, if present on totals, is never iterated
+  }
+}
+
+function avgOf(values: number[]): number {
+  const valid = values.filter((v) => !isNaN(v));
+  if (!valid.length) return 0;
+  return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
+}
+
+function sessionMinsOf(row: PosturePageRow | undefined): number {
+  if (!row) return 0;
+  if (row.totalDeskMs != null) return row.totalDeskMs / 60000;
+  return row.totalMinutes ?? 0;
+}
+
+async function generatePages(userId: string, range: Range): Promise<PageData[]> {
+  const now    = new Date();
+  const MS_DAY = 86_400_000;
+  const PAGES  = await getAvailablePageCount(userId, range);
+
+  const pages: PageData[] = [];
+
+  for (let p = 0; p < PAGES; p++) {
+    const stateTotals: FullStateTotals = emptyStateTotals();
+    
+    if (range === "week") {
+      const end   = new Date(now.getTime() - p * 7 * MS_DAY);
+      const start = new Date(end.getTime() - 6 * MS_DAY);
+      const startKey = toDateKey(start);
+      const endKey   = toDateKey(end);
+
+      const rows = await fetchPosturePageRows(userId, startKey, endKey);
+
+      const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * MS_DAY));
+      const dayKeys = days.map(toDateKey);
+      const dayRows = dayKeys.map((k) => rows.find((r) => r.date === k));
+
+      dayRows.forEach((r) => accumulateStateTotals(stateTotals, r));
+
+      pages.push({
+        labels:      ["mon","tue","wed","thu","fri","sat","sun"],
+        scores:      dayRows.map((r) => r?.supScore ?? 0),
+        sessionMins: dayRows.map((r) => sessionMinsOf(r)),
+        hasData:     dayRows.map((r) => r !== undefined),
+        stateTotals,
+        startDate:   fmt(start),
+        endDate:     fmt(end),
+        pointDates:  days.map((d) => fmtFull(d)),
+      });
+
+    } else if (range === "month") {
+      const ref   = new Date(now);
+      ref.setMonth(ref.getMonth() - p);
+      const year  = ref.getFullYear();
+      const month = ref.getMonth();
+      const start = new Date(year, month, 1);
+      const end   = new Date(year, month + 1, 0);
+      const startKey = toDateKey(start);
+      const endKey   = toDateKey(end);
+
+      const rows = await fetchPosturePageRows(userId, startKey, endKey);
+      rows.forEach((r) => accumulateStateTotals(stateTotals, r));
+
+      // 4 weekly buckets: 1-7, 8-14, 15-21, 22-end
+      const weekBounds = [
+        [1, 7], [8, 14], [15, 21], [22, end.getDate()],
+      ];
+      const weekly = weekBounds.map(([dStart, dEnd]) => {
+        const bucketRows = rows.filter((r) => {
+          const day = new Date(`${r.date}T00:00:00.000Z`).getUTCDate();
+          return day >= dStart && day <= dEnd;
+        });
+        return {
+          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
+          sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
+          hasData:     bucketRows.length > 0,
+        };
+      });
+
+      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      pages.push({
+        labels:      ["wk 1","wk 2","wk 3","wk 4"],
+        scores:      weekly.map((w) => w.score),
+        sessionMins: weekly.map((w) => w.sessionMins),
+        hasData:     weekly.map((w) => w.hasData),
+        stateTotals,
+        startDate:   fmt(start),
+        endDate:     fmt(end),
+        pointDates:  [
+          `1–7 ${M[month]} ${year}`,
+          `8–14 ${M[month]} ${year}`,
+          `15–21 ${M[month]} ${year}`,
+          `22–${end.getDate()} ${M[month]} ${year}`,
+        ],
+      });
+
+    } else {
+      const yr = now.getFullYear() - p;
+      const start = new Date(yr, 0, 1);
+      const end   = new Date(yr, 11, 31);
+      const startKey = toDateKey(start);
+      const endKey   = toDateKey(end);
+
+      const rows = await fetchPosturePageRows(userId, startKey, endKey);
+      rows.forEach((r) => accumulateStateTotals(stateTotals, r));
+
+      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const monthly = Array.from({ length: 12 }, (_, m) => {
+        const bucketRows = rows.filter((r) => {
+          const month = new Date(`${r.date}T00:00:00.000Z`).getUTCMonth();
+          return month === m;
+        });
+        return {
+          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
+          sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
+          hasData:     bucketRows.length > 0,
+        };
+      });
+
+      pages.push({
+        labels:      ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"],
+        scores:      monthly.map((m) => m.score),
+        sessionMins: monthly.map((m) => m.sessionMins),
+        hasData:     monthly.map((m) => m.hasData),
+        stateTotals,
+        startDate:   `1 jan ${yr}`,
+        endDate:     `31 dec ${yr}`,
+        pointDates:  M.map((m) => `${m} ${yr}`),
+      });
+    }
+  }
+
+  return pages;
+}
+
+function scoreColor(s: number) {
+  if (s >= 75) return "#6DC96D";
+  if (s >= 55) return "#FFD600";
+  if (s >= 40) return "#F5A623";
+  return "#EC555E";
+}
+
+function heatColor(score: number) {
+  if (score === 0)   return "rgba(63,36,131,0.07)";
+  if (score >= 75)   return "#6DC96D";
+  if (score >= 55)   return "#C3E87C";
+  if (score >= 40)   return "#FFD600";
+  if (score >= 25)   return "#F5A623";
+  return "#EC555E";
+}
+
+// Data popup
+
+const POPUP_H = 76;
+const POPUP_W = 152;
+const LINE_H  = 24;
+
+const popupStyles = StyleSheet.create({
+  bubble: {
+    position: "absolute",
+    width: POPUP_W,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: "#1D014A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 12,
+    elevation: 10,
+    gap: 2,
+  },
+  dateText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 10,
+    color: "rgba(29,1,74,0.45)",
+  },
+  valueText: {
+    fontFamily: "Agrandir-GrandHeavy",
+    fontSize: 20,
+    color: PRIMARY_TEXT,
+    lineHeight: 24,
+  },
+  unitText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "rgba(29,1,74,0.55)",
+  },
+  avgText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 10,
+    color: "rgba(29,1,74,0.4)",
+  },
+  line: {
+    position: "absolute",
+    bottom: -LINE_H,
+    width: 1.5,
+    height: LINE_H,
+    backgroundColor: "#FFFFFF",
+  },
+});
+
+// LiquidGlass range selector
+
+function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range) => void }) {
+  const RANGES: Range[] = ["week", "month", "year"];
+  const TAB_W   = (SCREEN_W - 40 - 8) / 3;
+  const bubbleX = useRef(new Animated.Value(0)).current;
+
+  const handlePress = (r: Range) => {
+    const idx = RANGES.indexOf(r);
+    Animated.spring(bubbleX, {
+      toValue: idx * TAB_W + (TAB_W / 2 - 30),
+      damping: 15, stiffness: 140, useNativeDriver: true,
+    }).start();
+    onChange(r);
+  };
+
   return (
-    <View style={styles.metricBarRow}>
-      <Animated.View style={[styles.metricBarGood, { width: animatedWidth.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }) }]} />
+    <View style={rangeStyles.wrapper}>
+      <BlurView intensity={100} tint="light" style={rangeStyles.container}>
+        <View style={rangeStyles.shine} />
+        <View style={rangeStyles.shineBottom} />
+        <Animated.View style={[rangeStyles.activeBubble, { transform: [{ translateX: bubbleX }] }]} />
+        {RANGES.map((r) => (
+          <Pressable key={r} style={rangeStyles.tab} onPress={() => handlePress(r)}>
+            <Text style={[rangeStyles.label, r === range && rangeStyles.labelActive]}>{r}</Text>
+          </Pressable>
+        ))}
+      </BlurView>
     </View>
   );
 }
 
-// ── Stacked bar chart ─────────────────────────────────────────────────────────
+const rangeStyles = StyleSheet.create({
+  wrapper: {
+    marginHorizontal: 20, marginBottom: 18,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 6,
+  },
+  container: {
+    height: 52, borderRadius: 26, overflow: "hidden",
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.65)",
+  },
+  shine: {
+    position: "absolute", top: 0, left: 0, right: 0, height: 22,
+    backgroundColor: "rgba(255,255,255,0.35)",
+    borderTopLeftRadius: 26, borderTopRightRadius: 26,
+  },
+  shineBottom: {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  activeBubble: {
+    position: "absolute", width: 60, height: 40, borderRadius: 20, top: 6,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.9)",
+    shadowColor: "#fff", shadowOpacity: 0.6, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
+  },
+  tab: { flex: 1, height: "100%", justifyContent: "center", alignItems: "center" },
+  label: { fontFamily: "Agrandir-GrandHeavy", fontSize: 14, color: PRIMARY_TEXT, opacity: 0.5 },
+  labelActive: { opacity: 1 },
+});
 
-const CHART_HEIGHT = 100;
+// Swipeable card
 
-function StackedBarChart({ days }: { days: DayData[] }) {
-  const maxMs     = Math.max(...days.map((d) => d.totalMs), 1);
-  const withData  = days.filter((d) => d.totalMs > 0);
-  const avgMs     = withData.length > 0 ? withData.reduce((s, d) => s + d.totalMs, 0) / withData.length : 0;
-
-  const recentMs  = days.slice(4).reduce((s, d) => s + d.totalMs, 0);
-  const priorMs   = days.slice(0, 4).reduce((s, d) => s + d.totalMs, 0);
-  const trendPct  = priorMs > 0 ? Math.round(((recentMs - priorMs) / priorMs) * 100) : null;
-
-  const weekTotal   = days.reduce((s, d) => s + d.totalMs, 0);
-  const weekUpright = days.reduce((s, d) => s + (d.states.upright ?? 0), 0);
-  const alignPct    = weekTotal > 0 ? Math.round((weekUpright / weekTotal) * 100) : null;
-
-  const bestDay = withData.reduce<DayData | null>((best, d) => {
-    const pct     = d.totalMs > 0 ? (d.states.upright ?? 0) / d.totalMs : 0;
-    const bestPct = best && best.totalMs > 0 ? (best.states.upright ?? 0) / best.totalMs : 0;
-    return pct > bestPct ? d : best;
-  }, null);
-
-  return (
-    <View style={ch.container}>
-      {/* Header */}
-      <View style={ch.insightHeader}>
-        <View style={ch.insightMain}>
-          <Text style={ch.avgLabel}>daily average</Text>
-          <Text style={ch.avgValue}>{avgMs > 0 ? formatDuration(avgMs) : "--"}</Text>
-          {trendPct !== null && (
-            <View style={ch.trendRow}>
-              <Ionicons name={trendPct >= 0 ? "arrow-up" : "arrow-down"} size={12} color={trendPct >= 0 ? "#4CAF50" : "#FF9800"} />
-              <Text style={[ch.trendText, { color: trendPct >= 0 ? "#4CAF50" : "#FF9800" }]}>
-                {Math.abs(trendPct)}% vs prior days
-              </Text>
-            </View>
-          )}
-        </View>
-        <View style={ch.insightChips}>
-          {alignPct !== null && (
-            <View style={ch.chip}>
-              <Text style={ch.chipValue}>{alignPct}%</Text>
-              <Text style={ch.chipLabel}>aligned</Text>
-            </View>
-          )}
-          {bestDay && (
-            <View style={ch.chip}>
-              <Text style={ch.chipValue}>{bestDay.label}</Text>
-              <Text style={ch.chipLabel}>best day</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Bars */}
-      <View style={ch.chartArea}>
-        {[0.25, 0.5, 0.75, 1].map((frac) => (
-          <View key={frac} style={[ch.gridLine, { bottom: frac * CHART_HEIGHT }]} />
-        ))}
-        <View style={ch.barsRow}>
-          {days.map((day) => {
-            const barH    = day.totalMs > 0 ? (day.totalMs / maxMs) * CHART_HEIGHT : 0;
-            const isToday = day.isToday;
-            return (
-              <View key={day.dateKey} style={ch.barCol}>
-                <View style={[ch.barContainer, { height: CHART_HEIGHT }]}>
-                  {barH > 0 ? (
-                    <View style={[ch.bar, { height: barH }]}>
-                      {BAR_STACK_ORDER.map((k) => {
-                        const ms  = day.states[k] ?? 0;
-                        const pct = day.totalMs > 0 ? ms / day.totalMs : 0;
-                        if (pct === 0) return null;
-                        return <View key={k} style={{ height: `${pct * 100}%` as any, backgroundColor: STATE_COLORS[k] }} />;
-                      })}
-                    </View>
-                  ) : (
-                    <View style={ch.emptyBar} />
-                  )}
-                </View>
-                <Text style={[ch.dayLabel, isToday && ch.dayLabelToday]}>{day.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-        <View style={ch.xAxis} />
-      </View>
-
-      {/* Legend */}
-      <View style={ch.legend}>
-        {([["upright", "aligned"], ["forward_lean", "forward"], ["slouched", "rounding"], ["severe", "high load"]] as [DeskPostureState, string][]).map(([k, lbl]) => (
-          <View key={k} style={ch.legendItem}>
-            <View style={[ch.legendDot, { backgroundColor: STATE_COLORS[k] }]} />
-            <Text style={ch.legendText}>{lbl}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-// ── Posture breakdown (week filter) ───────────────────────────────────────────
-
-type StatFilter = "today" | "week";
-
-function PostureBreakdown({ todayStats, weekStats, todayTotalMs, weekTotalMs }: {
-  todayStats: StateTimeMap; weekStats: StateTimeMap;
-  todayTotalMs: number; weekTotalMs: number;
+function SwipeCard({
+  pages,
+  renderPage,
+  resetKey,
+  onPageChange,
+}: {
+  pages:      PageData[];
+  renderPage: (page: PageData, prevPage: PageData | null) => React.ReactNode;
+  resetKey:   string;
+  onPageChange?: () => void;
 }) {
-  const [filter, setFilter] = useState<StatFilter>("today");
-  const stats = filter === "today" ? todayStats : weekStats;
-  const total = filter === "today" ? todayTotalMs : weekTotalMs;
+  const [pageIdx, setPageIdx] = useState(0);
+  const prevResetKey = useRef(resetKey);
+  if (prevResetKey.current !== resetKey) {
+    prevResetKey.current = resetKey;
+    Promise.resolve().then(() => setPageIdx(0));
+  }
+
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder:  (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_, g) => {
+        const maxIdx = pagesRef.current.length - 1;
+        if (g.dx < -40) setPageIdx((p) => Math.min(p + 1, maxIdx));
+        else if (g.dx > 40) setPageIdx((p) => Math.max(p - 1, 0));
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    onPageChange?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdx]);
+
+  const currentPage = pages[pageIdx] ?? pages[0];
+  const prevPage    = pages[pageIdx + 1] ?? null;
+  // Extra guard against the one-render gap between a resetKey change and the
+  // deferred setPageIdx(0) above actually landing (e.g. switching from a
+  // long range straight to a short one) — keeps the counter's numerator from
+  // ever reading ahead of the *current* pages array too.
+  const displayIdx  = Math.min(pageIdx, pages.length - 1);
 
   return (
-    <View style={pb.container}>
-      <View style={pb.headerRow}>
-        <Text style={pb.heading}>posture breakdown</Text>
-        <View style={pb.filterRow}>
-          {(["today", "week"] as StatFilter[]).map((f) => (
-            <Pressable key={f} style={[pb.pill, filter === f && pb.pillActive]} onPress={() => setFilter(f)}>
-              <Text style={[pb.pillText, filter === f && pb.pillTextActive]}>{f === "today" ? "today" : "7 days"}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
+    <View>
+      <Text style={swipeStyles.dateRange}>
+        {currentPage.startDate} – {currentPage.endDate}
+      </Text>
+      <Animated.View {...panResponder.panHandlers}>
+        {renderPage(currentPage, prevPage)}
+      </Animated.View>
 
-      <Text style={pb.totalTime}>{total > 0 ? `${formatDuration(total)} tracked` : "no data yet"}</Text>
-
-      {total === 0 ? (
-        <View style={pb.empty}>
-          <Text style={pb.emptyText}>use desk mode with your s'pots connected to start building your breakdown</Text>
-        </View>
-      ) : (
+      {pages.length > 1 && (
         <>
-          {/* Stacked horizontal bar */}
-          <View style={pb.stackedBar}>
-            {STATE_ORDER.map((k) => {
-              const ms  = stats[k] ?? 0;
-              const pct = total > 0 ? (ms / total) * 100 : 0;
-              if (pct < 1) return null;
-              return <View key={k} style={{ width: `${pct}%` as any, backgroundColor: STATE_COLORS[k], height: "100%" }} />;
-            })}
-          </View>
-
-          <View style={pb.list}>
-            {STATE_ORDER.map((k) => {
-              const ms = stats[k] ?? 0;
-              if (ms === 0) return null;
-              const pct   = total > 0 ? Math.round((ms / total) * 100) : 0;
-              const color = STATE_COLORS[k];
-              return (
-                <View key={k} style={pb.row}>
-                  <View style={[pb.dot, { backgroundColor: color }]} />
-                  <Text style={pb.stateLabel}>{STATE_INFO[k].label}</Text>
-                  <Text style={[pb.statePct, { color }]}>{pct}%</Text>
-                  <Text style={pb.stateTime}>{formatDuration(ms)}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <Text style={swipeStyles.counter}>
+            {displayIdx + 1} / {pages.length}
+          </Text>
+          <Text style={swipeStyles.hint}>swipe left for older data</Text>
         </>
       )}
     </View>
   );
 }
 
-// ── Main screen ───────────────────────────────────────────────────────────────
+const swipeStyles = StyleSheet.create({
+  dateRange: {
+    fontFamily: "Agrandir-Regular", fontSize: 10,
+    color: "rgba(29,1,74,0.38)", marginBottom: 4,
+  },
+  counter: {
+    textAlign: "center", fontSize: 10, marginTop: 10,
+    color: "rgba(29,1,74,0.45)", fontFamily: "Agrandir-Regular",
+  },
+  hint: {
+    textAlign: "center", fontSize: 10, color: "rgba(29,1,74,0.32)",
+    marginTop: 4, fontFamily: "Agrandir-Regular",
+  },
+});
+
+// Shared helpers
+
+function avg(arr: number[]) {
+  return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+}
+
+function avgLabel(range: Range): string {
+  if (range === "week")  return "Daily avg";
+  if (range === "month") return "Weekly avg";
+  return "Monthly avg";
+}
+
+// Bar chart
+
+function fmtMins(m: number) {
+  const h = Math.floor(m / 60); const r = m % 60;
+  return h > 0 ? `${h}h ${r}m` : `${r}m`;
+}
+function fmtMinsLong(m: number) {
+  const h = Math.floor(m / 60); const r = m % 60;
+  return h > 0 ? `${h}h ${r} min` : `${r} min`;
+}
+
+function BarChart({
+  data, prevData, range, type, hasData, activeIndex, onOpenPopup, onClosePopup,
+}: {
+  data: PageData;
+  prevData: PageData | null;
+  range: Range;
+  type: string;
+  hasData: boolean[];
+  activeIndex: number | null;
+  onOpenPopup: (index: number, info: PopupInfo) => void;
+  onClosePopup: () => void;
+}) {
+  const maxBarH = 72;
+  const barRefs = useRef<(View | null)[]>([]);
+
+  const values = type === "session" ? data.sessionMins : data.scores;
+  const maxV   = Math.max(...values, 1);
+  const n      = values.length;
+  const curAvgMins = Math.round(values.reduce((a, b) => a + b, 0) / n);
+
+  let prevAvgMins: number | null = null;
+  if (prevData) {
+    const prevValues = type === "session" ? prevData.sessionMins : prevData.scores;
+    prevAvgMins = Math.round(prevValues.reduce((a, b) => a + b, 0) / prevValues.length);
+  }
+
+  const chartW   = CARD_W - 36;
+  const diffMins = prevAvgMins !== null ? curAvgMins - prevAvgMins : null;
+
+  const handleBarPress = (i: number) => {
+    if (activeIndex === i) { onClosePopup(); return; }
+    barRefs.current[i]?.measureInWindow((x, y, width) => {
+      onOpenPopup(i, {
+        x: x + width / 2,
+        y,
+        value: type === "session" ? Number(values[i].toFixed(2)) : values[i], //fix to 2 decimal places for session time
+        unit: type === "session" ? "min" : "score",
+        dateRange: data.pointDates[i] ?? data.labels[i],
+        avgLabel:  avgLabel(range),
+      });
+    });
+  };
+
+  return (
+    <View>
+      <View style={barStyles.statRow}>
+        <Text style={barStyles.statText}>avg {fmtMinsLong(curAvgMins)}</Text>
+        {diffMins !== null && (
+          <Text style={[barStyles.statText, { color: diffMins >= 0 ? "#6DC96D" : "#EC555E" }]}>
+            {"  "}{diffMins >= 0 ? "↑" : "↓"} {fmtMins(Math.abs(diffMins))}
+          </Text>
+        )}
+      </View>
+
+      <View style={[barStyles.container, { width: chartW }]}>
+        {values.map((v, i) => {
+          const barH     = Math.max(3, Math.round((v / maxV) * maxBarH));
+          const isActive = activeIndex === i;
+          const barHasData  = hasData?.[i] !== false; // treat missing hasData as "has data"
+          const barColor    = !barHasData ? "#C4C4C4" : (isActive ? scoreColor(v) : "#6DC96D");
+          const barOpacity  = !barHasData ? 1 : (isActive ? 1 : 0.85);
+          return (
+            <Pressable
+              key={i}
+              ref={(el) => { barRefs.current[i] = el; }}
+              style={barStyles.col}
+              onPress={() => handleBarPress(i)}
+            >
+              <View style={[
+                barStyles.bar,
+                { height: barH, backgroundColor: barColor, opacity: barOpacity },
+              ]} />
+              <Text style={barStyles.label}>{data.labels[i]}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const barStyles = StyleSheet.create({
+  statRow:   { flexDirection: "row", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 4 },
+  statText:  { fontFamily: "Agrandir-Regular", fontSize: 11, color: "rgba(29,1,74,0.55)" },
+  container: { flexDirection: "row", alignItems: "flex-end", height: 88, gap: 3 },
+  col:       { flex: 1, alignItems: "center", gap: 3 },
+  bar:       { width: "100%", borderRadius: 3, backgroundColor: "#6DC96D" },
+  label:     { fontSize: 8, color: "rgba(29,1,74,0.5)", fontWeight: "600" },
+});
+
+// Posture heatmap
+
+// function PostureHeatmap({
+//   hourlyData, range, activeIndex, onOpenPopup, onClosePopup,
+// }: {
+//   hourlyData: Record<string, number>;
+//   range: Range;
+//   activeIndex: number | null;
+//   onOpenPopup: (index: number, info: PopupInfo) => void;
+//   onClosePopup: () => void;
+// }) {
+//   const hours = Object.keys(hourlyData);
+//   const vals  = Object.values(hourlyData);
+//   const active   = vals.filter((v) => v > 0);
+//   const allZero  = active.length === 0;
+//   const worstVal = allZero ? 0 : Math.min(...active);
+//   const worstHr  = allZero ? "" : hours[vals.indexOf(worstVal)];
+//   const insight  = allZero
+//     ? "no posture data recorded — start a session to see patterns."
+//     : `your posture holds well in the morning, then dips around ${worstHr} through the afternoon.`;
+
+//   const labelHours = ["9am","11am","1pm","3pm","5pm","7pm"];
+//   const chartW     = CARD_W - 36;
+//   const cellRefs   = useRef<(View | null)[]>([]);
+
+//   const handleCellPress = (i: number) => {
+//     if (vals[i] === 0) return; // no session data for this hour, so no popup
+//     if (activeIndex === i) { onClosePopup(); return; }
+//     cellRefs.current[i]?.measureInWindow((x, y, width) => {
+//       onOpenPopup(i, {
+//         x: x + width / 2,
+//         y,
+//         value: vals[i], unit: "score",
+//         dateRange: hours[i],
+//         avgLabel: avgLabel(range),
+//       });
+//     });
+//   };
+
+//   return (
+//     <View>
+//       <View style={[heatStyles.row, { width: chartW }]}>
+//         {hours.map((h, i) => (
+//           <Pressable
+//             key={h}
+//             ref={(el) => { cellRefs.current[i] = el; }}
+//             style={[heatStyles.cell, { backgroundColor: heatColor(vals[i]) }]}
+//             onPress={() => handleCellPress(i)}
+//           />
+//         ))}
+//       </View>
+//       <View style={heatStyles.labelsRow}>
+//         {labelHours.map((l) => <Text key={l} style={heatStyles.label}>{l}</Text>)}
+//       </View>
+//       <Text style={heatStyles.insight}>{insight}</Text>
+//     </View>
+//   );
+// }
+
+// const heatStyles = StyleSheet.create({
+//   row:       { flexDirection: "row", gap: 2 },
+//   cell:      { flex: 1, height: 26, borderRadius: 4 },
+//   labelsRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+//   label:     { fontSize: 9, color: "rgba(29,1,74,0.45)", fontWeight: "600" },
+//   insight:   { fontFamily: "Agrandir-Regular", fontSize: 11, color: PRIMARY_TEXT, lineHeight: 17, marginTop: 8, opacity: 0.8 },
+// });
+
+// Posture breakdown
+
+function PostureBreakdown({
+  stateTotals, range, activeKey, onOpenPopup, onClosePopup,
+}: {
+  stateTotals: Record<string, number>;
+  range: Range;
+  activeKey: string | null;
+  onOpenPopup: (key: string, info: PopupInfo) => void;
+  onClosePopup: () => void;
+}) {
+  const keys  = Object.keys(stateTotals);
+  const total = keys.reduce((s, k) => s + stateTotals[k], 0) || 1;
+  const pcts  = Object.fromEntries(keys.map((k) => [k, (stateTotals[k] / total) * 100]));
+  for (const k of keys) if (isNaN(pcts[k])) pcts[k] = 0;
+
+  const chartW  = CARD_W - 36;
+  const segRefs = useRef<Record<string, View | null>>({});
+  const rowRefs = useRef<Record<string, View | null>>({});
+
+  const openFrom = (k: string, refs: React.RefObject<Record<string, View | null>>) => {
+    if (pcts[k] === 0) return;
+    if (activeKey === k) { onClosePopup(); return; }
+    refs.current[k]?.measureInWindow((x, y, width) => {
+      onOpenPopup(k, {
+        x: x + width / 2,
+        y,
+        value: Math.round(pcts[k] * 10) / 10, unit: "%",
+        dateRange: SEGMENT_LABELS[k],
+        avgLabel: avgLabel(range),
+      });
+    });
+  };
+
+  return (
+    <View>
+      <View style={[bdStyles.track, { width: chartW }]}>
+        {keys.map((k) =>
+          pcts[k] > 0 ? (
+            <Pressable
+              key={k}
+              ref={(el) => { segRefs.current[k] = el; }}
+              style={[bdStyles.seg, { flex: pcts[k], backgroundColor: SEGMENT_COLORS[k] }]}
+              onPress={() => openFrom(k, segRefs)}
+            />
+          ) : null
+        )}
+      </View>
+      <View style={[bdStyles.list, { marginTop: 10 }]}>
+        {keys.map((k, i) => (
+          <Pressable
+            key={k}
+            ref={(el) => { rowRefs.current[k] = el; }}
+            style={[bdStyles.row, i === keys.length - 1 && { borderBottomWidth: 0 }]}
+            onPress={() => openFrom(k, rowRefs)}
+          >
+            <View style={bdStyles.labelRow}>
+              <View style={[bdStyles.dot, { backgroundColor: SEGMENT_COLORS[k] }]} />
+              <Text style={bdStyles.lbl}>{SEGMENT_LABELS[k]}</Text>
+            </View>
+            <Text style={bdStyles.val}>{pcts[k].toFixed(1)}%</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const bdStyles = StyleSheet.create({
+  track:    { flexDirection: "row", height: 14, borderRadius: 7, overflow: "hidden" },
+  seg:      { height: "100%" },
+  list:     { backgroundColor: "rgba(63,36,131,0.06)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  row:      { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: "rgba(63,36,131,0.08)" },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dot:      { width: 7, height: 7, borderRadius: 4 },
+  lbl:      { fontFamily: "Agrandir-Regular", fontSize: 12, color: PRIMARY_TEXT, opacity: 0.75 },
+  val:      { fontFamily: "Agrandir-GrandHeavy", fontSize: 12, color: PRIMARY_TEXT },
+});
+
+// Main screen
 
 export default function StatsScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { tutorialStep, setTutorialStep } = useTutorial();
+  const { isAuthenticated, userId } = useAuth();
 
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-    }, [])
-  );
+  const [range, setRange]             = useState<Range>("week");
+  const [resetKey, setResetKey]       = useState("week");
+  const [activePopup, setActivePopup] = useState<ActivePopup | null>(null);
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
+  const [pages, setPages] = useState<PageData[]>([]);
 
-  const [dateRange, setDateRange] = useState<DateRange>("last7days");
-  const { userId } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated || !userId) {
+      setPages([]);
+      return;
+    }
 
-  const { posture, bothConnected, isNeutralCalibrated, neckAlignmentPercent, shoulderBalancePercent, upperBackPercent } = useIMUContext();
-  const currentState = (posture?.state ?? "upright") as DeskPostureState;
-  const isTracking = bothConnected && isNeutralCalibrated;
+    let mounted = true;
+    generatePages(userId, range).then((p) => { if (mounted) setPages(p); });
+    return () => { mounted = false; };
+  }, [isAuthenticated, userId, range]);
 
-  const {
-    sessionStats: liveSessionStats,
-    sessionTotalMs,
-    todayStats,
-    weekDays,
-    weekStats,
-    todayTotalMs,
-    weekTotalMs,
-  } = useSessionStats(isTracking ? currentState : undefined);
+  console.log("[StatsScreen] render — userId:", userId, "pages:", pages);
 
-  const sessionStats = useMemo(() => {
-    const totalMs = sessionTotalMs;
-    const goodMs = liveSessionStats.upright ?? 0;
-    const badMs = Math.max(0, totalMs - goodMs);
-    const goodPct = totalMs > 0 ? (goodMs / totalMs) * 100 : 0;
-    const avgScore = Math.round(goodPct);
-    return {
-      avgScore,
-      totalMs,
-      goodPosturePercent: goodPct,
-      goodPostureMs: goodMs,
-      badPostureMs: badMs,
-      isVariableSession: false,
-    } as PostureSessionStats;
-  }, [liveSessionStats, sessionTotalMs]);
+  const closePopup = () => setActivePopup(null);
+  const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
+    setActivePopup({ chartId, index, info });
 
-  // --- UI throttle: snapshot displayed stats only every 5 minutes ---
-  const STATS_UI_UPDATE_MS = 5 * 60_000; // 5 minutes
-  const liveStatsRef = useRef({
-    avgScore: sessionStats.avgScore,
-    totalMs: sessionStats.totalMs,
-    goodPosturePercent: sessionStats.goodPosturePercent,
-    neckAlignmentPercent: neckAlignmentPercent,
-    shoulderBalancePercent: shoulderBalancePercent,
-    upperBackPercent: upperBackPercent,
+  const handleRangeChange = (r: Range) => {
+    setRange(r);
+    setResetKey(r);
+    closePopup(); // data is changing — any open popup would be pointing at stale info
+  };
+
+  const [fontsLoaded] = useFonts({
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
+    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
-  useEffect(() => {
-    liveStatsRef.current = {
-      avgScore: sessionStats.avgScore,
-      totalMs: sessionStats.totalMs,
-      goodPosturePercent: sessionStats.goodPosturePercent,
-      neckAlignmentPercent: neckAlignmentPercent,
-      shoulderBalancePercent: shoulderBalancePercent,
-      upperBackPercent: upperBackPercent,
-    };
-  }, [sessionStats, neckAlignmentPercent, shoulderBalancePercent, upperBackPercent]);
+  if (!fontsLoaded) return null;
 
-  const [displayAvgScore, setDisplayAvgScore] = useState<number>(sessionStats.avgScore);
-  const [displayTotalMs, setDisplayTotalMs] = useState<number>(sessionStats.totalMs);
-  const [displayGoodPosturePercent, setDisplayGoodPosturePercent] = useState<number>(sessionStats.goodPosturePercent);
-  const [displayNeckPercent, setDisplayNeckPercent] = useState<number | null>(neckAlignmentPercent ?? null);
-  const [displayShoulderPercent, setDisplayShoulderPercent] = useState<number | null>(shoulderBalancePercent ?? null);
-  const [displayUpperBackPercent, setDisplayUpperBackPercent] = useState<number | null>(upperBackPercent ?? null);
-
-  // Immediate refresh when screen focused
-  useFocusEffect(
-    useCallback(() => {
-      setDisplayAvgScore(liveStatsRef.current.avgScore);
-      setDisplayTotalMs(liveStatsRef.current.totalMs);
-      setDisplayGoodPosturePercent(liveStatsRef.current.goodPosturePercent);
-      setDisplayNeckPercent(liveStatsRef.current.neckAlignmentPercent ?? null);
-      setDisplayShoulderPercent(liveStatsRef.current.shoulderBalancePercent ?? null);
-      setDisplayUpperBackPercent(liveStatsRef.current.upperBackPercent ?? null);
-    }, [])
-  );
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setDisplayAvgScore(liveStatsRef.current.avgScore);
-      setDisplayTotalMs(liveStatsRef.current.totalMs);
-      setDisplayGoodPosturePercent(liveStatsRef.current.goodPosturePercent);
-      setDisplayNeckPercent(liveStatsRef.current.neckAlignmentPercent ?? null);
-      setDisplayShoulderPercent(liveStatsRef.current.shoulderBalancePercent ?? null);
-      setDisplayUpperBackPercent(liveStatsRef.current.upperBackPercent ?? null);
-    }, STATS_UI_UPDATE_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  const todayStatsDisplay = useMemo(() => {
-    if (dateRange !== "today") return null;
-    if (!todayStats || todayTotalMs <= 0) return null;
-    return {
-      totalMinutes: todayTotalMs / 60000,
-      goodPostureMinutes: (todayStats.upright ?? 0) / 60000,
-      avgScore: todayTotalMs > 0 ? Math.round(((todayStats.upright ?? 0) / todayTotalMs) * 100) : 0,
-    } as { totalMinutes: number; goodPostureMinutes: number; avgScore: number };
-  }, [dateRange, todayStats, todayTotalMs]);
-
-  const { bestDay, worstDay } = useMemo(() => {
-    const days = (weekDays ?? []).filter((d) => d.totalMs > 0);
-    if (days.length === 0) return { bestDay: null, worstDay: null };
-    const sorted = [...days].sort((a, b) => {
-      const aPct = a.totalMs > 0 ? (a.states.upright ?? 0) / a.totalMs : 0;
-      const bPct = b.totalMs > 0 ? (b.states.upright ?? 0) / b.totalMs : 0;
-      return bPct - aPct;
-    });
-    return { bestDay: sorted[0], worstDay: sorted[sorted.length - 1] };
-  }, [weekDays]);
-
-  const hasData = sessionStats != null && displayTotalMs > 0;
-  const hasHistoricalData = dateRange === "today" ? todayTotalMs > 0 : weekTotalMs > 0;
-
-  const MIN_MS = 5 * 60_000; // 5 minutes in ms
-  const hasEnoughData = sessionStats != null && displayTotalMs >= MIN_MS;
-
-  // Snapshot session stats for display (throttled)
-  const displaySessionStats: PostureSessionStats = useMemo(() => {
-    const totalMs = displayTotalMs;
-    const goodPct = displayGoodPosturePercent;
-    const goodMs = Math.round((goodPct / 100) * totalMs);
-    const badMs = Math.max(0, totalMs - goodMs);
-    return {
-      avgScore: Math.round(goodPct),
-      totalMs,
-      goodPosturePercent: goodPct,
-      goodPostureMs: goodMs,
-      badPostureMs: badMs,
-      isVariableSession: sessionStats.isVariableSession,
-    } as PostureSessionStats;
-  }, [displayTotalMs, displayGoodPosturePercent, sessionStats.isVariableSession]);
+  let bubbleTop = 0, bubbleLeft = 0, lineLeft = 0;
+  if (activePopup) {
+    const { x, y } = activePopup.info;
+    const rawLeft  = x - POPUP_W / 2;
+    bubbleLeft = Math.max(16, Math.min(rawLeft, SCREEN_W - POPUP_W - 16));
+    bubbleTop  = Math.max(50, y - POPUP_H - LINE_H);
+    lineLeft   = x - bubbleLeft - 0.5;
+  }
 
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+      <BackgroundBlobs />
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={closePopup}
+        contentContainerStyle={{
+          paddingVertical: 8,
+          paddingBottom: scrollPaddingBottom,
+        }}
+      >
+        <HeaderBar />
+        <RangeSelector range={range} onChange={handleRangeChange} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Your posture health</Text>
-          <Text style={styles.headerSubtitle}>Based on daily wearable data</Text>
-        </View>
-
-        {tutorialStep === "stats-tip" && (
-          <View style={styles.tutorialTip}>
-            <Image
-              source={require("../../assets/images/mascot.png")}
-              style={styles.tutorialTipMascot}
-              resizeMode="contain"
-            />
-            <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                this is the stats page where you can see your weekly, monthly, and yearly data summarised to track your overall progress.
-              </Text>
-              <Pressable
-                onPress={() => {
-                  setTutorialStep("community-tip");
-                  router.replace("/leaderboard" as any);
-                }}
-              >
-                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {/* Date Range Selector */}
-        <View style={styles.dateRangeContainer}>
-          <Pressable style={[styles.dateRangeButton, dateRange === "today" && styles.dateRangeButtonActive]} onPress={() => setDateRange("today")}>
-            <Text style={[styles.dateRangeText, dateRange === "today" && styles.dateRangeTextActive]}>Today</Text>
-          </Pressable>
-          <Pressable style={[styles.dateRangeButton, dateRange === "last7days" && styles.dateRangeButtonActive]} onPress={() => setDateRange("last7days")}>
-            <Text style={[styles.dateRangeText, dateRange === "last7days" && styles.dateRangeTextActive]}>Last 7 days</Text>
-          </Pressable>
-        </View>
-
-        {/* Summary Cards */}
-        {hasHistoricalData ? (
-          dateRange === "today" && todayStatsDisplay ? (
-            <View style={styles.summaryCardsRow}>
-              <View style={styles.summaryMiniCard}>
-                <Text style={styles.summaryMiniEmoji}>⏱️</Text>
-                <Text style={styles.summaryMiniLabel}>Total Time</Text>
-                <AnimatedNumber value={todayStatsDisplay.totalMinutes} style={styles.summaryMiniScore} />
-                <Text style={styles.summaryMiniDate}>minutes</Text>
-              </View>
-              <View style={styles.summaryMiniCard}>
-                <Text style={styles.summaryMiniEmoji}>✨</Text>
-                <Text style={styles.summaryMiniLabel}>Good Posture</Text>
-                <AnimatedNumber value={todayStatsDisplay.goodPostureMinutes} style={styles.summaryMiniScore} />
-                <Text style={styles.summaryMiniDate}>minutes</Text>
-              </View>
-            </View>
+        {/* S'CORE TREND */}
+        <View style={[styles.card, styles.shadow]}>
+          {pages && pages.length > 0 ? (
+            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+              <>
+                <Text style={styles.cardTitle}>s'core trend</Text>
+                <BarChart
+                  data={p} prevData={prev} range={range} type="score"
+                  hasData={p.hasData}
+                  activeIndex={activePopup?.chartId === "score" ? (activePopup.index as number) : null}
+                  onOpenPopup={(i, info) => openPopup("score", i, info)}
+                  onClosePopup={closePopup}
+                />
+              </>
+            )} />
           ) : (
-            <View style={styles.summaryCardsRow}>
-              {bestDay && (
-                <View style={styles.summaryMiniCard}>
-                  <Text style={styles.summaryMiniEmoji}>🌟</Text>
-                  <Text style={styles.summaryMiniLabel}>Best Day</Text>
-                  <AnimatedNumber
-                    value={
-                      bestDay.totalMs > 0
-                        ? Math.round(((bestDay.states.upright ?? 0) / bestDay.totalMs) * 100)
-                        : 0
-                    }
-                    style={styles.summaryMiniScore}
-                  />
-                  <Text style={styles.summaryMiniDate}>{new Date(bestDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
-                </View>
-              )}
-              {worstDay && bestDay?.dateKey !== worstDay?.dateKey && (
-                <View style={styles.summaryMiniCard}>
-                  <Text style={styles.summaryMiniEmoji}>💪</Text>
-                  <Text style={styles.summaryMiniLabel}>Needs Work</Text>
-                  <AnimatedNumber
-                    value={
-                      worstDay.totalMs > 0
-                        ? Math.round(((worstDay.states.upright ?? 0) / worstDay.totalMs) * 100)
-                        : 0
-                    }
-                    style={styles.summaryMiniScore}
-                  />
-                  <Text style={styles.summaryMiniDate}>{new Date(worstDay.dateKey).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
-                </View>
-              )}
-            </View>
-          )
-        ) : (
-          <View style={styles.noDataCard}>
-            <Text style={styles.noDataText}>No data available for {dateRange === "today" ? "today" : "the last 7 days"}</Text>
-          </View>
-        )}
+            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+          )}
+        </View>
 
-        
+        {/* S'ESSION TIME */}
+        <View style={[styles.card, styles.shadow]}>
+          {pages && pages.length > 0 ? (
+            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+              <>
+                <Text style={styles.cardTitle}>s'ession time</Text>
+                <BarChart
+                  data={p} prevData={prev} range={range} type="session"
+                  hasData={p.hasData}
+                  activeIndex={activePopup?.chartId === "session" ? (activePopup.index as number) : null}
+                  onOpenPopup={(i, info) => openPopup("session", i, info)}
+                  onClosePopup={closePopup}
+                />
+              </>
+            )} />
+          ) : (
+            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+          )}
+        </View>
 
-      {/* Overall Score */}
-      <View style={styles.scoreCard}>
-        <Text style={styles.scoreLabel}>Spine Health Score</Text>
-        <Text style={styles.scoreValue}>
-          {hasEnoughData ? displaySessionStats.avgScore : hasData ? "--" : "0"}
-        </Text>
-        <Text style={styles.scoreHint}>
-          {!hasData
-            ? "Score appears after your first session"
-            : !hasEnoughData
-            ? "Use your s'pots to get insights"
-            : "From your latest IMU session"}
-        </Text>
-      </View>
+        {/* WHEN YOUR POSTURE SLIPS */}
+        {/* <View style={[styles.card, styles.shadow]}>
+          {pages && pages.length > 0 ? (
+            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={() => (
+              <>
+                <Text style={styles.cardTitle}>when your posture slips</Text>
+                <PostureHeatmap
+                  hourlyData={HOURLY_POSTURE} range={range}
+                  activeIndex={activePopup?.chartId === "heatmap" ? (activePopup.index as number) : null}
+                  onOpenPopup={(i, info) => openPopup("heatmap", i, info)}
+                  onClosePopup={closePopup}
+                />
+              </>
+            )} />
+          ) : (
+            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+          )}
+        </View> */}
 
-      {/* Metrics */}
-      <View style={styles.metrics}>
-        {/* Derive neck alignment from session data: slightly reduced from overall score */}
-        {hasData ? (
-          <MetricCard
-            label="Neck alignment"
-            goodPercent={
-              displayNeckPercent != null
-                ? Math.round(displayNeckPercent)
-                : Math.round(Math.max(0, displaySessionStats.goodPosturePercent - 5))
-            }
-            animationKey={dateRange}
-          />
-        ) : (
-          <MetricSkeleton label="Neck alignment" />
-        )}
-        {/* Derive shoulder balance from session data: slightly increased variance */}
-        {hasData ? (
-          <MetricCard
-            label="Shoulder balance"
-            goodPercent={
-              displayShoulderPercent != null
-                ? Math.round(displayShoulderPercent)
-                : Math.round(Math.min(100, displaySessionStats.goodPosturePercent + 3))
-            }
-            animationKey={dateRange}
-          />
-        ) : (
-          <MetricSkeleton label="Shoulder balance" />
-        )}
-        {hasData ? (
-          <UpperBackSessionCard stats={displaySessionStats} animationKey={dateRange} liveUpperBackPercent={displayUpperBackPercent} />
-        ) : (
-          <MetricSkeleton label="Upper back support" />
-        )}
-      </View>
-
-      {/* Weekly Summary */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Session summary</Text>
-        <Text style={styles.summaryText}>
-          {hasData
-            ? `Session: ${(displaySessionStats.totalMs / 1000).toFixed(2)}s total · ${displaySessionStats.goodPosturePercent.toFixed(0)}% good posture${displaySessionStats.isVariableSession ? " · Variable posture" : ""}`
-            : "Your weekly summary will appear here once you start wearing your s'pots"}
-        </Text>
-      </View>
+        {/* POSTURE BREAKDOWN */}
+        <View style={[styles.card, styles.shadow]}>
+          {pages && pages.length > 0 ? (
+            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
+              <>
+                <Text style={styles.cardTitle}>posture breakdown</Text>
+                <PostureBreakdown
+                  stateTotals={p.stateTotals} range={range}
+                  activeKey={activePopup?.chartId === "breakdown" ? (activePopup.index as string) : null}
+                  onOpenPopup={(k, info) => openPopup("breakdown", k, info)}
+                  onClosePopup={closePopup}
+                />
+              </>
+            )} />
+          ) : (
+            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+          )}
+        </View>
       </ScrollView>
-    </Animated.View>
-  );
-}
 
-// ── Preserved metric components ───────────────────────────────────────────────
-
-function MetricSkeleton({ label }: { label: string }) {
-  return (
-    <View style={styles.metricCard}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <View style={styles.metricBar} />
-      <Text style={styles.metricHint}>Tracking starts after your first session</Text>
+      {/* Global popup — Modal renders above everything, including the nav bar */}
+      {activePopup && (
+        <Modal transparent visible animationType="none" onRequestClose={closePopup}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closePopup}>
+            <Pressable
+              style={[popupStyles.bubble, { top: bubbleTop, left: bubbleLeft }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={popupStyles.dateText}>{activePopup.info.dateRange}</Text>
+              <Text style={popupStyles.valueText}>
+                {activePopup.info.value}
+                <Text style={popupStyles.unitText}> {activePopup.info.unit}</Text>
+              </Text>
+              <Text style={popupStyles.avgText}>{activePopup.info.avgLabel}</Text>
+              <View style={[popupStyles.line, { left: lineLeft }]} />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
 
-function MetricCard({ label, goodPercent, animationKey }: { label: string; goodPercent: number; animationKey?: string | number }) {
-  return (
-    <View style={styles.metricCard}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <AnimatedProgressBar goodPercent={goodPercent} animationKey={animationKey} />
-      <Text style={styles.metricHint}>Good: {goodPercent.toFixed(0)}% · Needs work: {(100 - goodPercent).toFixed(0)}%</Text>
-    </View>
-  );
-}
-
-function UpperBackSessionCard({ stats, animationKey, liveUpperBackPercent }: { stats: PostureSessionStats; animationKey?: string | number; liveUpperBackPercent?: number | null }) {
-  const sessionPercent = stats.totalMs > 0 ? stats.goodPosturePercent : 0;
-  const displayPercent = liveUpperBackPercent != null ? liveUpperBackPercent : sessionPercent;
-  const totalMinutes = (stats.totalMs / 60_000).toFixed(2);
-  return (
-    <View style={styles.metricCard}>
-      <Text style={styles.metricLabel}>Upper back support</Text>
-      <AnimatedProgressBar goodPercent={displayPercent} animationKey={animationKey} />
-      <Text style={styles.metricHint}>Good: {displayPercent.toFixed(0)}% · {sessionPercent.toFixed(0)}% (session) · {totalMinutes} min{stats.isVariableSession ? " · Variable session" : ""}</Text>
-    </View>
-  );
-}
-
-// ── Chart styles ──────────────────────────────────────────────────────────────
-
-const chartCard = StyleSheet.create({
-  container: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 16,
-    marginHorizontal: 16, marginBottom: 16,
-    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
-  },
-  title: { fontSize: 16, fontWeight: "700", color: "#222", marginBottom: 2 },
-  sub:   { fontSize: 12, color: "#999", marginBottom: 12 },
-});
-
-const ch = StyleSheet.create({
-  container: { marginTop: 4 },
-  insightHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 },
-  insightMain:   { gap: 3 },
-  avgLabel:      { fontSize: 11, color: "#999" },
-  avgValue:      { fontSize: 26, fontWeight: "800", color: "#222", lineHeight: 30 },
-  trendRow:      { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
-  trendText:     { fontSize: 12, fontWeight: "600" },
-  insightChips:  { flexDirection: "row", gap: 8 },
-  chip:          { backgroundColor: "#F5F3FF", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12, alignItems: "center" },
-  chipValue:     { fontSize: 15, fontWeight: "800", color: colours.primary },
-  chipLabel:     { fontSize: 10, color: "#999", marginTop: 1 },
-  chartArea:     { position: "relative", height: CHART_HEIGHT + 24, marginBottom: 8 },
-  gridLine:      { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: "#F0F0F0" },
-  barsRow:       { position: "absolute", bottom: 24, left: 0, right: 0, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-  barCol:        { flex: 1, alignItems: "center", gap: 6 },
-  barContainer:  { justifyContent: "flex-end" },
-  bar:           { width: 26, borderTopLeftRadius: 5, borderTopRightRadius: 5, overflow: "hidden", flexDirection: "column-reverse" },
-  emptyBar:      { width: 26, height: 3, backgroundColor: "#F0F0F0", borderRadius: 2, alignSelf: "center" },
-  dayLabel:      { fontSize: 10, color: "#999", textAlign: "center" },
-  dayLabelToday: { color: colours.primary, fontWeight: "700" },
-  xAxis:         { position: "absolute", bottom: 24, left: 0, right: 0, height: 1, backgroundColor: "#E0E0E0" },
-  legend:        { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4 },
-  legendItem:    { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendDot:     { width: 8, height: 8, borderRadius: 4 },
-  legendText:    { fontSize: 11, color: "#999" },
-});
-
-const pb = StyleSheet.create({
-  container: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 16,
-    marginHorizontal: 16, marginBottom: 16,
-    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
-  },
-  headerRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  heading:       { fontSize: 16, fontWeight: "700", color: "#222" },
-  filterRow:     { flexDirection: "row", gap: 6 },
-  pill:          { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 20, backgroundColor: "#F5F5F5" },
-  pillActive:    { backgroundColor: colours.primary },
-  pillText:      { fontSize: 12, fontWeight: "600", color: "#999" },
-  pillTextActive:{ color: "#fff" },
-  totalTime:     { fontSize: 13, color: "#999", marginBottom: 14, textAlign: "center" },
-  stackedBar:    { height: 10, borderRadius: 5, overflow: "hidden", flexDirection: "row", marginBottom: 14, backgroundColor: "#F0F0F0" },
-  empty:         { alignItems: "center", paddingVertical: 20 },
-  emptyText:     { fontSize: 13, color: "#bbb", textAlign: "center" },
-  list:          { gap: 10 },
-  row:           { flexDirection: "row", alignItems: "center", gap: 8 },
-  dot:           { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  stateLabel:    { flex: 1, fontSize: 13, color: "#444" },
-  statePct:      { fontSize: 13, fontWeight: "700", minWidth: 36, textAlign: "right" },
-  stateTime:     { fontSize: 12, color: "#999", minWidth: 40, textAlign: "right" },
-});
-
-// ── Preserved styles ──────────────────────────────────────────────────────────
+// Styles
 
 const styles = StyleSheet.create({
-  container:              { flex: 1, backgroundColor: "#EDE9FF" },
-  header:                 { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 12 },
-  headerTitle:            { fontSize: 22, fontWeight: "600", color: "#222" },
-  headerSubtitle:         { marginTop: 4, color: "#666" },
-  tutorialTip:            {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(30, 24, 46, 0.94)",
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 6,
+  scroll: { flex: 1 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 20, marginBottom: 16,
+    padding: 18, paddingTop: 16, borderRadius: 28,
   },
-  tutorialTipMascot:      { width: 34, height: 34 },
-  tutorialTipTextWrap:    { flex: 1 },
-  tutorialTipText: {
-    fontSize: 13,
-    color: "#FFFFFF",
-    lineHeight: 18,
-    marginBottom: 4,
+  shadow: {
+    shadowColor: "#1D014A", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1, shadowRadius: 10, elevation: 5,
   },
-  tutorialTipNext: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colours.primary,
-    textDecorationLine: "underline",
+  cardTitle: {
+    fontFamily: "Agrandir-GrandHeavy", fontSize: 14,
+    color: PRIMARY_TEXT, opacity: 0.75, marginBottom: 12,
   },
-  dateRangeContainer:     { flexDirection: "row", marginHorizontal: 16, marginBottom: 16, backgroundColor: "#E5E5EA", borderRadius: 12, padding: 4 },
-  dateRangeButton:        { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, alignItems: "center" },
-  dateRangeButtonActive:  { backgroundColor: "white", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  dateRangeText:          { fontSize: 14, fontWeight: "500", color: "#666" },
-  dateRangeTextActive:    { color: colours.primary, fontWeight: "600" },
-  summaryCardsRow:        { flexDirection: "row", paddingHorizontal: 16, gap: 12, marginBottom: 16 },
-  summaryMiniCard:        { flex: 1, backgroundColor: "white", padding: 16, borderRadius: 16, alignItems: "center", borderLeftWidth: 4, borderLeftColor: colours.primary },
-  summaryMiniEmoji:       { fontSize: 24, marginBottom: 8 },
-  summaryMiniLabel:       { fontSize: 12, color: "#666", marginBottom: 4 },
-  summaryMiniScore:       { fontSize: 28, fontWeight: "700", color: colours.primary },
-  summaryMiniDate:        { fontSize: 11, color: "#999", marginTop: 2 },
-  noDataCard:             { backgroundColor: "white", marginHorizontal: 16, marginBottom: 16, padding: 24, borderRadius: 16, alignItems: "center" },
-  noDataText:             { fontSize: 14, color: "#999", textAlign: "center" },
-  scoreCard:              { backgroundColor: colours.primary, margin: 16, padding: 24, borderRadius: 24 },
-  scoreLabel:             { color: "white", opacity: 0.9 },
-  scoreValue:             { color: "white", fontSize: 40, fontWeight: "700", marginVertical: 6 },
-  scoreHint:              { color: "white", opacity: 0.8, fontSize: 12 },
-  metrics:                { paddingHorizontal: 16, gap: 12 },
-  metricCard:             { backgroundColor: "white", padding: 16, borderRadius: 16 },
-  metricLabel:            { color: "#444", fontWeight: "500" },
-  metricBar:              { height: 10, backgroundColor: "#E5E5EA", borderRadius: 5, marginVertical: 10 },
-  metricBarRow:           { height: 10, borderRadius: 5, marginVertical: 10, overflow: "hidden", backgroundColor: "#E5E5EA" },
-  metricBarGood:          { backgroundColor: colours.primary, height: 10, borderRadius: 5 },
-  metricHint:             { fontSize: 12, color: "#888" },
-  summaryCard:            { backgroundColor: "white", margin: 16, padding: 16, borderRadius: 16 },
-  summaryTitle:           { fontWeight: "600", marginBottom: 12 },
-  summaryText:            { fontSize: 13, color: "#666", lineHeight: 20 },
-  disclaimer:             { textAlign: "center", fontSize: 12, color: "#777", padding: 20 },
 });

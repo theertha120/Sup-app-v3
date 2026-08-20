@@ -37,6 +37,10 @@ export interface DailyPosturePair {
   previous: DailyPostureRow | null;
 }
 
+export interface PosturePageRow extends DailyPostureRow {
+  date: string; // YYYY-MM-DD
+}
+
 const STALE_SESSION_MS = 30 * 60 * 1000;
 
 const ALL_STATES: DeskPostureState[] = [
@@ -452,6 +456,54 @@ export async function fetchDailyPosturePair(
   } catch (e) {
     console.warn("[postureSync] fetchDailyPosturePair threw", e);
     return empty;
+  }
+}
+
+/**
+ * Fetches all posture_daily rows for a user between startDateKey and
+ * endDateKey (inclusive). Mirrors fetchDailyPosturePair's shape/error
+ * handling, but returns a range instead of a single day + previous day.
+ */
+export async function fetchPosturePageRows(
+  userId: string | null,
+  startDateKey: string, // YYYY-MM-DD
+  endDateKey: string    // YYYY-MM-DD
+): Promise<PosturePageRow[]> {
+  if (!userId) {
+    console.warn("[postureSync] fetchPosturePageRows: no userId");
+    return [];
+  }
+
+  if (isNaN(new Date(`${startDateKey}T00:00:00.000Z`).getTime()) ||
+      isNaN(new Date(`${endDateKey}T00:00:00.000Z`).getTime())) {
+    console.warn("[postureSync] fetchPosturePageRows: invalid date range", { startDateKey, endDateKey });
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("posture_daily")
+      .select(DAILY_COLUMNS)
+      .eq("user_id", userId)
+      .gte("date", startDateKey)
+      .lte("date", endDateKey)
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.warn("[postureSync] fetchPosturePageRows query failed", error);
+      return [];
+    }
+
+    if (!data?.length) return [];
+
+    const rows = data as unknown as Array<Record<string, unknown> & { date: string }>;
+    return rows.map((r) => {
+      const mapped = mapRowToDailyPostureRow(r);
+      return mapped ? { date: r.date, ...mapped } : null;
+    }).filter(Boolean) as PosturePageRow[];
+  } catch (e) {
+    console.warn("[postureSync] fetchPosturePageRows threw", e);
+    return [];
   }
 }
 
