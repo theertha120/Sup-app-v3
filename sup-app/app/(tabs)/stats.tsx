@@ -10,11 +10,13 @@ import {
   Dimensions,
   PanResponder,
   Modal,
+  Image,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import BackgroundBlobs from "./backgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import {
@@ -23,6 +25,8 @@ import {
   type StateTotals,
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useTutorial } from "@/src/contexts/TutorialContext";
+import { colours } from "@/theme/colours";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -776,6 +780,7 @@ const bdStyles = StyleSheet.create({
 
 export default function StatsScreen() {
   const { isAuthenticated, userId } = useAuth();
+  const { tutorialStep, setTutorialStep } = useTutorial();
 
   const [range, setRange]             = useState<Range>("week");
   const [resetKey, setResetKey]       = useState("week");
@@ -837,6 +842,29 @@ export default function StatsScreen() {
       >
         <HeaderBar />
         <RangeSelector range={range} onChange={handleRangeChange} />
+
+        {tutorialStep === "stats-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                switch between weekly, monthly, and yearly data here. you can see your s'up score, session time, and posture snapshot for whichever period you pick.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setTutorialStep("community-tip");
+                  router.replace("/leaderboard" as any);
+                }}
+              >
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {/* S'CORE TREND */}
         <View style={[styles.card, styles.shadow]}>
@@ -952,6 +980,43 @@ const styles = StyleSheet.create({
   shadow: {
     shadowColor: "#1D014A", shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1, shadowRadius: 10, elevation: 5,
+  },
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
   cardTitle: {
     fontFamily: "Agrandir-GrandHeavy", fontSize: 14,
