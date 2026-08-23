@@ -1,0 +1,147 @@
+QR-code sensor pairing for pilot rollout
+=========================================
+
+CONTEXT
+-------
+For the ~30-person pilot, s'pots need to be pre-paired to each user's kit via
+a printed QR code instead of the current manual "scan and pick from a list"
+flow, since with dozens of sensors powered on simultaneously in one room,
+manual picking risks pairing someone's phone to a neighbor's sensor.
+
+Investigated the existing Python pairing script (generate_qr()) and found
+its QR payload encodes each sensor's bleak-scanned "address" -- but that
+script runs on macOS, where bleak (like all of CoreBluetooth) is subject to
+Apple's platform-wide restriction: no app, on iOS or macOS, can ever read a
+peripheral's real Bluetooth MAC address -- it's an OS-level privacy
+restriction with no workaround, not a library limitation. The IDs the script
+captured are macOS-specific CoreBluetooth UUIDs that won't match what an
+iPhone OR an Android phone sees scanning the same physical sensor. Real MAC
+addresses (which Android does expose) still can't be used on iOS regardless
+of how accurately they're captured, since react-native-ble-plx has no
+iOS-side API to connect by MAC.
+
+The one thing that IS identical across every scanning device -- Mac, iPhone,
+Android -- is a sensor's advertised local name (e.g. "WT901BLE67"), since
+that's literal bytes in the BLE advertisement packet, not OS-assigned
+metadata. No QR codes have been printed yet, so the plan is to fix the
+payload at the source and match by name in the app, with a mandatory
+on-screen confirmation step as the safety net against the rare case of two
+nearby sensors sharing a name.
+
+PART 1 -- Fix the pairing script
+---------------------------------
+New file: sup-app/scripts/witmotion_pairing_tool.py (repo doesn't have a
+scripts/ dir yet; this keeps the tool version-controlled instead of living
+only on someone's laptop). Based on the script already shared in
+conversation, with two changes:
+
+1. generate_qr(): payload becomes {"pair_id": N, "top": "<name>", "bottom":
+   "<name>"} -- advertised names, not bleak addresses. Keep "id" (address)
+   and "name" in the CSV/JSON log as today (useful for the operator's own
+   record-keeping), just stop putting "id" in the QR itself.
+2. select_sensor(): track a used_names set alongside the existing used_ids
+   one. If the operator's selected device's name was already used by an
+   earlier pair this session, print a loud warning before the confirm
+   prompt (mirrors the existing [ALREADY REGISTERED] id-collision flag) so
+   duplicate-name sensors get caught and can be manually renamed (WitMotion's
+   config app supports this) or flagged before printing.
+3. Update the module docstring to explain WHY the payload is name-based (the
+   iOS MAC restriction above) so this doesn't get "fixed" back to addresses
+   by someone later without that context.
+
+You re-run the script fresh to regenerate all QR codes with the new payload
+shape -- old log entries used the old (now-unused-for-QR) id scheme,
+simplest to just redo the registration pass.
+
+PART 2 -- App-side pairing flow
+---------------------------------
+New dependency: expo-camera (npx expo install expo-camera -- installs the
+SDK-54-matched version). Add NSCameraUsageDescription to app.json's
+ios.infoPlist and add expo-camera to the plugins array (its config plugin
+handles the Android CAMERA permission automatically, with an optional
+custom description string).
+
+New file: src/lib/qrPairing.ts -- pure logic, no React, matches the
+src/lib/ convention (imuParser.ts, supabase.ts):
+- parsePairingQR(raw: string): { pairId: number; topName: string;
+  bottomName: string } | null -- validates the decoded QR text is
+  well-formed JSON matching the expected shape; returns null (not a throw)
+  on anything malformed so the caller can show "not a valid s'up pairing
+  code" rather than crash.
+
+New file: src/components/modals/QRPairModal.tsx -- mirrors the existing
+CalibrationModal.tsx integration pattern (<QRPairModal visible={...}
+onClose={...} />, rendered from sensor-setup.tsx). Internal steps as a
+small state machine:
+
+1. Camera permission -- useCameraPermissions() from expo-camera; if not
+   granted, show the request UI before anything else (this IS the
+   "permissions wtv included" step from the request).
+2. Scan -- CameraView with barcodeScannerSettings={{ barcodeTypes: ["qr"] }},
+   onBarcodeScanned calls parsePairingQR. Invalid/unrecognized codes show an
+   inline error and let the user retry scanning -- never silently proceed.
+3. Live BLE match -- once a valid {pairId, topName, bottomName} is decoded,
+   call the existing bleService.scan() (already filters to SERVICE_UUID +
+   names starting "WT" -- general Bluetooth noise like AirPods is already
+   excluded at this layer). For each device found, keep only ones whose
+   device.name EXACTLY matches topName or bottomName -- this is what makes
+   "ignore any other s'pots/Bluetooth devices on at that moment" hold:
+   everything else is filtered out before the user ever sees it, not just
+   deprioritized.
+4. Collision guard -- if more than one discovered device exactly matches the
+   SAME expected name (two nearby sensors sharing a name -- the exact risk
+   the script's collision warning exists to catch), do NOT auto-connect
+   either. Surface both candidates sorted by signal strength (reusing the
+   existing device-list UI pattern from sensor-setup.tsx) and require
+   explicit manual selection.
+5. Mandatory confirm -- even in the unambiguous single-match case, show
+   "found: WT901BLE67 -- pair as your top s'pot?" with explicit
+   confirm/retry, one per slot, before connecting. No silent auto-connect
+   step anywhere in this flow, matching the trusted-confirm pattern the
+   Python script already uses operator-side.
+6. Connect -- on confirm, call the existing connect(device, slot) from
+   useIMUContext() and the existing saveDevice(slot, device) helper already
+   defined in sensor-setup.tsx (persists identity to AsyncStorage exactly as
+   manual pairing does today) -- sequential, top then bottom, same 500ms
+   stagger autoConnect() already uses, since parallel BLE connects cancel
+   each other on iOS (documented constraint already in BLEService.ts).
+7. Timeout / not found -- if a named device never appears within the scan
+   window (sensor not powered on, out of range), show a clear retry message
+   rather than hanging silently.
+
+Modified: app/sensor-setup.tsx -- add a prominent "s'can to pair" button
+(pairs both slots from one QR, the primary path for the pilot) alongside the
+existing per-slot manual "connect" buttons, which stay as a fallback (lost
+QR, damaged sticker, troubleshooting). New local state
+showQRPairModal/setShowQRPairModal, rendered next to the existing
+CalibrationModal usage.
+
+FILES
+-----
+- New: sup-app/scripts/witmotion_pairing_tool.py
+- New: src/lib/qrPairing.ts
+- New: src/components/modals/QRPairModal.tsx
+- Modified: app/sensor-setup.tsx (new button + modal wiring)
+- Modified: app.json (camera permission + expo-camera plugin)
+- Modified: package.json / lockfile (expo-camera dependency)
+- No changes needed: src/services/BLEService.ts, src/contexts/IMUContext.tsx
+  -- existing scan()/connect() are reused as-is.
+
+VERIFICATION
+------------
+1. Run the fixed Python script against a couple of real sensors, confirm
+   pairs_log.csv and the generated QR both show names (not addresses), and
+   that the name-collision warning fires if you deliberately re-select a
+   name already used.
+2. npx tsc --noEmit clean.
+3. On a dev-client device (needs real camera + BLE, not a simulator): tap
+   "s'can to pair," confirm camera permission prompt appears correctly on
+   first launch, scan a real generated QR, confirm both sensors are found
+   and require explicit confirm taps before connecting.
+4. Power on an EXTRA WT-named test sensor nearby with a name that doesn't
+   match the scanned QR -- confirm it's correctly ignored and never shown.
+5. If possible, simulate the collision case (two sensors temporarily set to
+   the same name) and confirm the app forces manual disambiguation instead
+   of guessing.
+6. Confirm the existing manual per-slot "connect" flow in sensor-setup.tsx
+   still works unchanged, as the fallback path.

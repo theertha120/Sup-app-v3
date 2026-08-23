@@ -29,6 +29,7 @@ import { bleService, SensorSlot } from "../src/services/BLEService";
 import { Device } from "react-native-ble-plx";
 import { useAuth } from "../src/contexts/AuthContext";
 import CalibrationModal from "../src/components/modals/CalibrationModal";
+import QRPairModal from "../src/components/modals/QRPairModal";
 
 // ── Device identity types ─────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export default function SensorSetupScreen() {
 
   const [assigningSlot,    setAssigningSlot]    = useState<SensorSlot | null>(null);
   const [showCalibModal,   setShowCalibModal]   = useState(false);
+  const [showQRPairModal,  setShowQRPairModal]  = useState(false);
   const [savedTop,         setSavedTop]         = useState<SavedDevice | null>(null);
   const [savedBottom,      setSavedBottom]      = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
@@ -307,6 +309,14 @@ export default function SensorSetupScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
+      <QRPairModal
+        visible={showQRPairModal}
+        onClose={() => setShowQRPairModal(false)}
+        onPaired={async (slot, device) => {
+          await connect(device, slot);
+          await saveDevice(slot, device);
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
@@ -340,6 +350,14 @@ export default function SensorSetupScreen() {
               : "connect both s'pots to start tracking"}
           </Text>
         </View>
+
+        {/* QR pairing — primary path for new s'pots */}
+        {!bothConnected && (
+          <Pressable style={styles.qrPairBtn} onPress={() => setShowQRPairModal(true)}>
+            <Ionicons name="qr-code-outline" size={18} color="#fff" />
+            <Text style={styles.qrPairBtnText}>s'can to pair</Text>
+          </Pressable>
+        )}
 
         {/* s'pot rows */}
         <View style={styles.card}>
@@ -560,6 +578,9 @@ const styles = StyleSheet.create({
 
   primaryBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, marginBottom: 16 },
   primaryBtnText: { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },
+
+  qrPairBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 16, marginBottom: 16 },
+  qrPairBtnText:  { fontSize: 16, fontWeight: "700", color: "#fff", fontFamily: "Agrandir-Regular" },
 
   deviceRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   deviceName: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, fontFamily: "Agrandir-Regular" },

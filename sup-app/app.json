@@ -12,7 +12,9 @@
       "bundleIdentifier": "com.supapp.app",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Sup uses your step count to track your daily activity.",
-        "NSHealthUpdateUsageDescription": "Sup uses your step count to track your daily activity."
+        "NSHealthUpdateUsageDescription": "Sup uses your step count to track your daily activity.",
+        "NSCameraUsageDescription": "Sup uses your camera to scan the QR code that pairs your s'pots.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -72,6 +74,12 @@
       ],
       "expo-web-browser",
       "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Sup uses your camera to scan the QR code that pairs your s'pots."
+        }
+      ],
       [
         "react-native-health-connect",
         {
