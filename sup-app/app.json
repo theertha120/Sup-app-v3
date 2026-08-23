@@ -15,7 +15,8 @@
         "NSHealthUpdateUsageDescription": "Sup uses your step count to track your daily activity.",
         "NSCameraUsageDescription": "Sup uses your camera to scan the QR code that pairs your s'pots.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "appleTeamId": "44T33LV95D"
     },
     "android": {
       "minSdkVersion": 26,
@@ -30,7 +31,9 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.supapp.app"
     },
