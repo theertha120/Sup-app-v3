@@ -27,8 +27,6 @@ const PRIMARY_TEXT = "#1D014A";
 const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "day", label: "Day" },
   { key: "week", label: "Week" },
-  { key: "month", label: "Month" },
-  { key: "all", label: "All time" },
 ];
 
 export default function FullLeaderboardScreen() {
@@ -168,7 +166,7 @@ function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
-          s'up score: {entry.avgSupScore.toFixed(2)}
+        s'up score: {entry.avgSupScore.toFixed(1)}
         </Text>
       </View>
     </View>

@@ -1,11 +1,11 @@
 import { fetchPosturePageRows } from "../posture/postureSyncService";
 import type { User } from "../../../constants/env";
 
-export type LeaderboardPeriod = "day" | "week" | "month" | "all";
+export type LeaderboardPeriod = "day" | "week";
 
 export interface LeaderboardEntry {
   user: User;
-  avgSupScore: number; // rounded to 2 decimal places
+  avgSupScore: number; // rounded to 1 decimal place
   sessionsCounted: number;
   rank: number; // 1-based, ties share the same rank (standard competition ranking)
 }
@@ -37,21 +37,19 @@ export function getDateRangeForPeriod(period: LeaderboardPeriod): {
       start.setDate(start.getDate() - 6); // last 7 days incl. today
       return { startDateKey: toDateKey(start), endDateKey };
     }
-    case "month": {
-      const start = new Date(today);
-      start.setDate(start.getDate() - 29); // last 30 days incl. today
-      return { startDateKey: toDateKey(start), endDateKey };
-    }
-    case "all":
-    default: {
-      // Far enough back to cover any account's history.
-      return { startDateKey: "2000-01-01", endDateKey };
-    }
   }
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Returns the display name used for a user, for sorting/tie-breaking purposes.
+ * Adjust this if `User` uses a different field (e.g. `displayName`, `username`).
+ */
+function getDisplayName(user: User): string {
+  return (user as any).name ?? (user as any).displayName ?? (user as any).username ?? "";
 }
 
 /**
@@ -92,7 +90,7 @@ export async function fetchLeaderboardForPeriod(
         const total = rows.reduce((sum, row: any) => sum + (row.supScore ?? 0), 0);
         return {
           user,
-          avgSupScore: round2(total / rows.length),
+          avgSupScore: round1(total / rows.length),
           sessionsCounted: rows.length,
         };
       } catch (err) {
@@ -102,6 +100,11 @@ export async function fetchLeaderboardForPeriod(
     })
   );
 
-  const sorted = entries.sort((a, b) => b.avgSupScore - a.avgSupScore);
+  const sorted = entries.sort((a, b) => {
+    if (b.avgSupScore !== a.avgSupScore) {
+      return b.avgSupScore - a.avgSupScore;
+    }
+    return getDisplayName(a.user).localeCompare(getDisplayName(b.user));
+  });
   return assignRanks(sorted);
 }
