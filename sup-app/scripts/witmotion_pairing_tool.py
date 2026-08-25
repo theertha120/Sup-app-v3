@@ -42,6 +42,15 @@ before printing QR codes, rename the physical unit via WitMotion's config
 app (if supported) or make a note to handle that pair's live app-side
 pairing manually.
 
+Confirmed against real hardware: a pair of WT9011DCL units can broadcast the
+byte-identical factory-default local name (both "WT901BLE67" here) -- not a
+bleak/script bug, just how these ship. The scan listing also shows each
+device's manufacturer-specific advertisement data (format_manufacturer_data())
+and, when two visible devices share a name, tells you whether their
+manufacturer_data differs -- if it does, that's a real per-unit identifier
+the app could match on instead of name; if it's also identical (or absent),
+renaming the physical units is the only fix.
+
 Design notes
 ------------
 - This does NOT connect/bond to the sensors. It just listens to BLE advertising
@@ -132,7 +141,10 @@ def save_log(records):
     with open(JSON_PATH, "w") as f:
         json.dump(records, f, indent=2)
 
-    fieldnames = ["pair_id", "top_id", "top_name", "bottom_id", "bottom_name", "timestamp"]
+    fieldnames = [
+        "pair_id", "top_id", "top_name", "top_mfg_data",
+        "bottom_id", "bottom_name", "bottom_mfg_data", "timestamp",
+    ]
     with open(CSV_PATH, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -141,8 +153,10 @@ def save_log(records):
                 "pair_id": r["pair_id"],
                 "top_id": r["top"]["id"],
                 "top_name": r["top"]["name"],
+                "top_mfg_data": r["top"].get("mfg_data", ""),
                 "bottom_id": r["bottom"]["id"],
                 "bottom_name": r["bottom"]["name"],
+                "bottom_mfg_data": r["bottom"].get("mfg_data", ""),
                 "timestamp": r["timestamp"],
             })
 
@@ -167,8 +181,25 @@ def already_used_names(records):
     return used
 
 
+def format_manufacturer_data(adv) -> str:
+    """Hex-dump of any manufacturer-specific advertisement data, keyed by
+    company ID. Cheap BLE IMU modules commonly ship with an identical
+    factory-default local name across the whole batch (confirmed: two units
+    both broadcasting exactly "WT901BLE67") — if there's a real per-unit
+    identifier at all, it's most likely to be sitting here rather than in
+    the name, since manufacturer data isn't shown/editable via the usual
+    "rename this device" config tools and often gets set at the factory."""
+    if not adv.manufacturer_data:
+        return ""
+    parts = []
+    for company_id, payload in adv.manufacturer_data.items():
+        parts.append(f"{company_id:04X}:{payload.hex()}")
+    return " ".join(parts)
+
+
 async def scan_devices():
-    """Scan for SCAN_SECONDS and return (name, address, rssi) sorted strongest first."""
+    """Scan for SCAN_SECONDS and return (name, address, rssi, mfg_data) sorted
+    strongest first."""
     kwargs = {"timeout": SCAN_SECONDS, "return_adv": True}
     if SERVICE_UUID_FILTER:
         kwargs["service_uuids"] = [SERVICE_UUID_FILTER]
@@ -180,7 +211,8 @@ async def scan_devices():
         if NAME_FILTER and not name.upper().startswith(NAME_FILTER.upper()):
             continue
         rssi = adv.rssi if adv.rssi is not None else -999
-        results.append((name, address, rssi))
+        mfg_data = format_manufacturer_data(adv)
+        results.append((name, address, rssi, mfg_data))
     results.sort(key=lambda x: x[2], reverse=True)  # strongest signal first
     return results
 
@@ -202,14 +234,38 @@ async def select_sensor(role_label, used_ids, used_names):
             continue
 
         print(f"\nFound {len(results)} device(s), strongest signal first:")
-        for i, (name, address, rssi) in enumerate(results):
+        for i, (name, address, rssi, mfg_data) in enumerate(results):
             flags = []
             if address in used_ids:
                 flags.append("ALREADY REGISTERED")
             if name in used_names:
                 flags.append("NAME COLLISION with an earlier pair")
             flag = f"  [{', '.join(flags)}]" if flags else ""
-            print(f"  [{i}] {name:<20} {address}  RSSI={rssi}{flag}")
+            mfg_suffix = f"  mfg_data={mfg_data}" if mfg_data else ""
+            print(f"  [{i}] {name:<20} {address}  RSSI={rssi}{mfg_suffix}{flag}")
+
+        # Same name broadcast by more than one device in THIS scan — the exact
+        # situation that breaks name-based matching at the app level. Check
+        # whether manufacturer data at least tells them apart, since that's
+        # the one thing the name-collision warning below can't see on its own.
+        by_name = {}
+        for name, address, rssi, mfg_data in results:
+            by_name.setdefault(name, []).append((address, mfg_data))
+        for name, entries in by_name.items():
+            if len(entries) > 1:
+                mfg_values = {mfg for _, mfg in entries}
+                if len(mfg_values) > 1:
+                    print(
+                        f"\n  NOTE: {len(entries)} devices are all broadcasting the name '{name}', "
+                        f"but their manufacturer_data differs — that's a usable unique identifier "
+                        f"if the app is ever updated to match on it instead of name."
+                    )
+                else:
+                    print(
+                        f"\n  NOTE: {len(entries)} devices are all broadcasting the name '{name}' "
+                        f"with {'identical' if mfg_values != {''} else 'no'} manufacturer_data too — "
+                        f"nothing here distinguishes them. Renaming the physical units is the only fix."
+                    )
 
         choice = input(
             f"\nSelect the {role_label} sensor by number (default 0 = strongest signal), "
@@ -223,7 +279,7 @@ async def select_sensor(role_label, used_ids, used_names):
 
         try:
             idx = int(choice)
-            name, address, rssi = results[idx]
+            name, address, rssi, mfg_data = results[idx]
         except (ValueError, IndexError):
             print("Invalid selection, try again.")
             continue
@@ -250,7 +306,7 @@ async def select_sensor(role_label, used_ids, used_names):
 
         confirm = input(f"Confirm: {role_label} = {name} ({address})? (Y/n): ").strip().lower()
         if confirm in ("", "y"):
-            return {"id": address, "name": name}
+            return {"id": address, "name": name, "mfg_data": mfg_data}
         # else loop back and rescan/reselect
 
 

@@ -113,9 +113,18 @@ class BLEService {
   // ── Scanning ──────────────────────────────────────────────────────────────
 
   /**
-   * Scan for nearby s'pots (WT9011DCL devices).
+   * Scan for nearby s'pots.
    * Fires onDeviceFound for each new device seen.
    * Automatically stops after timeoutMs.
+   *
+   * Filtering to s'pots is done by SERVICE_UUID alone (passed to
+   * startDeviceScan below) — that's the actual "is this our hardware" gate,
+   * since the FFE5 service is only advertised by s'pot firmware. There used
+   * to also be a `device.name?.startsWith("WT")` check here, back when every
+   * unit shipped with the factory-default "WT901BLE.." name — but pilot
+   * units now get renamed to unique per-pair names (e.g. "S01-TOP") to fix
+   * a BLE-name-collision issue, so a hardcoded prefix would silently exclude
+   * every renamed sensor. Don't reintroduce a name-prefix filter here.
    */
   scan(onDeviceFound: (device: Device) => void, timeoutMs = 10000): void {
     if (this.isScanning) return;
@@ -130,7 +139,7 @@ class BLEService {
           this.isScanning = false;
           return;
         }
-        if (device?.name?.startsWith("WT")) {
+        if (device?.name) {
           onDeviceFound(device);
         }
       }

@@ -36,12 +36,17 @@ import QRPairModal from "../src/components/modals/QRPairModal";
 interface SavedDevice {
   /** BLE device ID — used for reconnection */
   id: string;
-  /** Original hardware broadcast name (e.g. "WT901BLE67") */
+  /**
+   * Advertised BLE local name at pairing time (e.g. "S07-TOP" for a
+   * pilot-provisioned unit, or a factory-default "WT901BLE.." name).
+   * The app itself never renames a sensor — this is whatever it was already
+   * broadcasting, which for pilot units was set ahead of time via
+   * WitMotion's config tool (see scripts/witmotion_pairing_tool.py).
+   */
   hardwareName: string;
   /**
    * User-scoped display name shown in the app UI.
    * Format: "{userId}_top" or "{userId}_bottom"
-   * Software-side label only — hardware name is never changed.
    */
   displayName: string;
 }

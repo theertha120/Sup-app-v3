@@ -2,13 +2,17 @@
  * qrPairing.ts
  *
  * Decodes the QR payload printed by scripts/witmotion_pairing_tool.py:
- *   {"pair_id": 7, "top": "WT901BLE67", "bottom": "WT901BLE68"}
+ *   {"pair_id": 7, "top": "S07-TOP", "bottom": "S07-BTM"}
  *
  * "top"/"bottom" are the s'pots' advertised BLE local names — NOT MAC
  * addresses. iOS never exposes real Bluetooth MAC addresses to any app
  * (an OS-level privacy restriction, not a library limitation), so the only
  * identifier that's identical no matter which device scans a sensor is its
  * advertised name. See docs/qr-pairing-plan.txt for the full rationale.
+ *
+ * The exact name format isn't assumed anywhere in this file or in
+ * BLEService.ts's scan() — whatever each sensor gets renamed to (see the
+ * pilot provisioning step) is matched verbatim, no prefix/pattern check.
  */
 
 export interface PairingCode {
