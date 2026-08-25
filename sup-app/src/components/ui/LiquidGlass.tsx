@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Pressable, Dimensions, StyleSheet, Image } from "react-native";
 import { BlurView } from "expo-blur";
+import Svg, { Defs, Mask, Rect } from "react-native-svg";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,7 +21,27 @@ const ROUTE_TO_TAB: Record<string, NavbarTab> = {
   stats: "stats",
   leaderboard: "community",
   desk: "desk",
+  daily: "today_summary",
 };
+
+// Matches the solid-silhouette-with-cutouts style of the nav_*.png icons,
+// tinted the same way via `color` instead of Image's tintColor.
+function DailyIcon({ color }: { color: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Defs>
+        <Mask id="dailyMask" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+          <Rect x="0" y="0" width="24" height="24" fill="#fff" />
+          <Rect x="3" y="10" width="18" height="1.6" fill="#000" />
+          <Rect x="9.5" y="14" width="5" height="4" rx="1" fill="#000" />
+        </Mask>
+      </Defs>
+      <Rect x="3" y="6" width="18" height="15" rx="3" fill={color} mask="url(#dailyMask)" />
+      <Rect x="7" y="3" width="2.2" height="6" rx="1.1" fill={color} />
+      <Rect x="14.8" y="3" width="2.2" height="6" rx="1.1" fill={color} />
+    </Svg>
+  );
+}
 
 export default function LiquidGlass({
   state,
@@ -97,11 +118,15 @@ export default function LiquidGlass({
               style={styles.tab}
             >
               <Animated.View style={scaleStyle}>
-                <Image
-                  source={NAV_IMAGES[route.name]}
-                  style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
-                  resizeMode="contain"
-                />
+                {NAV_IMAGES[route.name] ? (
+                  <Image
+                    source={NAV_IMAGES[route.name]}
+                    style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <DailyIcon color={isFocused ? "#111" : "#888"} />
+                )}
               </Animated.View>
             </Pressable>
           );

@@ -18,7 +18,7 @@ import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
 import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
 import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
-import BackgroundBlobs from "./backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";

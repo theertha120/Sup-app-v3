@@ -1,10 +1,12 @@
 import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
+
+const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
 
 const GENDERS = ["male", "female", "other"];
 
@@ -111,11 +113,11 @@ export default function FinalScreen() {
           </TouchableOpacity>
           <Text style={styles.checkboxLabel}>
             i accept the s'uper{" "}
-            <Text style={styles.link}>terms and conditions</Text>
+            <Text style={styles.link} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+              privacy policy
+            </Text>
           </Text>
         </View>
-
-        <Text style={styles.privacyLink}>click here to read our privacy policy</Text>
       </View>
 
       <TouchableOpacity
@@ -285,13 +287,6 @@ const styles = StyleSheet.create({
     color: "#5222AE",
     textDecorationLine: "underline",
     fontFamily: "Agrandir-Regular",
-  },
-  privacyLink: {
-    fontSize: 13,
-    fontFamily: "Agrandir-Regular",
-    color: "#5222AE",
-    textDecorationLine: "underline",
-    textAlign: "center",
   },
   nextBtn: {
     backgroundColor: "#5222AE",
