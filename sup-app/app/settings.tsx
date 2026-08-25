@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -20,6 +21,7 @@ import {
 
 import { useTutorial } from "@/src/contexts/TutorialContext";
 
+const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
 
 export default function SettingsScreen() {
   const { logout } = useAuth();
@@ -95,16 +97,9 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
         
-        <Pressable style={styles.settingItem}>
+        <Pressable style={styles.settingItem} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-
-        <Pressable style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Terms of Service</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>

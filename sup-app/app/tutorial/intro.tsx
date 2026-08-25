@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
-import BackgroundBlobs from "../(tabs)/backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 
 export default function TutorialIntroScreen() {

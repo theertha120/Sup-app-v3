@@ -67,9 +67,15 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Hide non-tab files that Expo Router auto-discovers */}
-      <Tabs.Screen name="backgroundBlobs" options={{ href: null }} />
-      <Tabs.Screen name="daily" options={{ href: null }} />
+      <Tabs.Screen
+        name="daily"
+        options={{
+          title: "Daily Summary",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="today-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
