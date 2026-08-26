@@ -87,7 +87,7 @@ export default function VerifyEmailScreen() {
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
         <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Text style={styles.backText}> back</Text>
       </TouchableOpacity>
 
       <View style={styles.content}>

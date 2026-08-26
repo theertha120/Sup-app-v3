@@ -61,7 +61,7 @@ export default function ProfileModal({
       })
       .catch((err) => {
         console.error("[ProfileModal] Failed to fetch profile", err);
-        setError("Failed to load profile data");
+        setError("failed to load profile data");
       })
       .finally(() => setIsLoading(false));
   }, [visible, user?.id]);
@@ -85,12 +85,12 @@ export default function ProfileModal({
 
   const handleSave = async () => {
     if (!editedName.trim()) {
-      setError("Name cannot be empty");
+      setError("name cannot be empty");
       return;
     }
 
     if (!profileData || !isCurrentUser) {
-      setError("Cannot save: invalid user or not current user");
+      setError("cannot save: invalid user or not current user");
       return;
     }
 
@@ -106,7 +106,7 @@ export default function ProfileModal({
       const updatedProfile = await updateUserProfile(profileData.id, updates);
 
       if (!updatedProfile) {
-        throw new Error("Update returned null");
+        throw new Error("update returned null");
       }
 
       const updatedUser = userProfileToUser(updatedProfile);
@@ -122,7 +122,7 @@ export default function ProfileModal({
     } catch (err) {
       console.error("[ProfileModal] Save error", err);
       setError(
-        err instanceof Error ? err.message : "Failed to save changes. Please try again."
+        err instanceof Error ? err.message : "failed to save changes. please try again."
       );
     } finally {
       setIsSaving(false);
@@ -158,7 +158,7 @@ export default function ProfileModal({
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>
-                {isEditing ? "Edit Profile" : "User Profile"}
+                {isEditing ? "edit profile" : "user profile"}
               </Text>
               <Pressable onPress={handleClose} style={styles.closeButton}>
                 <Text style={styles.closeText}>✕</Text>
@@ -191,12 +191,12 @@ export default function ProfileModal({
                   {isEditing ? (
                     <>
                       <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Display Name</Text>
+                        <Text style={styles.label}>display name</Text>
                         <TextInput
                           style={styles.input}
                           value={editedName}
                           onChangeText={setEditedName}
-                          placeholder="Enter your name"
+                          placeholder="enter your name"
                           placeholderTextColor="#999"
                         />
                       </View>
@@ -209,7 +209,7 @@ export default function ProfileModal({
                     </>
                   ) : (
                     <>
-                      <Text style={styles.name}>{profileData?.name || "Loading..."}</Text>
+                      <Text style={styles.name}>{profileData?.name || "loading..."}</Text>
                       {isCurrentUser && (
                         <Pressable
                           style={styles.supsonaButton}
@@ -218,7 +218,7 @@ export default function ProfileModal({
                             router.push("/supsona-builder");
                           }}
                         >
-                          <Text style={styles.supsonaButtonText}>Customise Supsona</Text>
+                          <Text style={styles.supsonaButtonText}>customise s'upsona</Text>
                         </Pressable>
                       )}
                     </>
@@ -230,13 +230,13 @@ export default function ProfileModal({
                       <View style={styles.statBox}>
                         <Text style={styles.statValue}>{profileData.currentStreak ?? 0}</Text>
                         <Text style={styles.statLabel}>
-                          {(profileData.currentStreak ?? 0) === 1 ? "Day" : "Days"} Streak
+                          {(profileData.currentStreak ?? 0) === 1 ? "day" : "days"} streak
                         </Text>
                       </View>
 
                       <View style={styles.statBox}>
                         <Text style={styles.statValue}>{profileData.weeklyAvgPoints ?? 0}</Text>
-                        <Text style={styles.statLabel}>Weekly Points</Text>
+                        <Text style={styles.statLabel}>weekly points</Text>
                       </View>
                     </View>
                   )}
@@ -253,7 +253,7 @@ export default function ProfileModal({
                     onPress={handleCancel}
                     disabled={isSaving}
                   >
-                    <Text style={styles.buttonTextSecondary}>Cancel</Text>
+                    <Text style={styles.buttonTextSecondary}>cancel</Text>
                   </Pressable>
 
                   <Pressable
@@ -268,7 +268,7 @@ export default function ProfileModal({
                     {isSaving ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text style={styles.buttonTextPrimary}>Save</Text>
+                      <Text style={styles.buttonTextPrimary}>save</Text>
                     )}
                   </Pressable>
                 </>
@@ -279,7 +279,7 @@ export default function ProfileModal({
                       style={[styles.button, styles.buttonPrimary]}
                       onPress={handleEdit}
                     >
-                      <Text style={styles.buttonTextPrimary}>Edit Profile</Text>
+                      <Text style={styles.buttonTextPrimary}>edit profile</Text>
                     </Pressable>
                   )}
                 </>

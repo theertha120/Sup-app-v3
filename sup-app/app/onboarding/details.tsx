@@ -58,7 +58,7 @@ export default function DetailsScreen() {
     const res = await register(email.trim(), password);
     if (!res.success) {
       if (/email rate limit exceeded/i.test(res.error ?? "")) {
-        setError("We've hit the email sending limit for now, please try again in about an hour");
+        setError("we've hit the email sending limit for now, please try again in about an hour");
       } else {
         setError(res.error || "registration failed");
       }
@@ -81,7 +81,7 @@ export default function DetailsScreen() {
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
         <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Text style={styles.backText}> back</Text>
       </TouchableOpacity>
 
       <KeyboardAvoidingView

@@ -36,9 +36,9 @@ export default function Question6Screen() {
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}> Back</Text>
+          <Text style={styles.backText}> back</Text>
         </TouchableOpacity>
-        <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
+        <Text style={styles.questionCounter}>question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
       <View style={styles.progressTrack}>
@@ -46,7 +46,7 @@ export default function Question6Screen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.questionLabel}>Question {CURRENT_QUESTION}:</Text>
+        <Text style={styles.questionLabel}>question {CURRENT_QUESTION}:</Text>
         <Text style={styles.questionBody}>
           15 days into a Snapchat streak. Day 16 you completely forget. How does the next morning go?
         </Text>

@@ -144,19 +144,19 @@ export default function CoachingSetupModal({
     setError("");
 
     if (step === 0 && primaryGoals.length === 0) {
-      setError("Please select at least one goal.");
+      setError("please select at least one goal.");
       return;
     }
     if (step === 1 && activeTimePresets.length === 0) {
-      setError("Please select at least one time period.");
+      setError("please select at least one time period.");
       return;
     }
     if (step === 2 && preferredTones.length === 0) {
-      setError("Please select at least one reminder style.");
+      setError("please select at least one reminder style.");
       return;
     }
     if (step === 3 && weeklyGoals.length === 0) {
-      setError("Please select at least one weekly goal.");
+      setError("please select at least one weekly goal.");
       return;
     }
 
@@ -172,7 +172,7 @@ export default function CoachingSetupModal({
       await saveCurrentBehaviorProfile(profile);
       onComplete();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save your setup.");
+      setError(err instanceof Error ? err.message : "could not save your setup.");
     } finally {
       setSaving(false);
     }
@@ -185,8 +185,8 @@ export default function CoachingSetupModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={styles.kicker}>Coaching setup</Text>
-              <Text style={styles.title}>Set up your behaviour engine</Text>
+              <Text style={styles.kicker}>coaching setup</Text>
+              <Text style={styles.title}>set up your behaviour engine</Text>
             </View>
             <Pressable
               onPress={handleCancel}
@@ -194,7 +194,7 @@ export default function CoachingSetupModal({
               style={styles.cancelButton}
               hitSlop={8}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>cancel</Text>
             </Pressable>
           </View>
 
@@ -275,7 +275,7 @@ export default function CoachingSetupModal({
                   onPress={() => setStep((current) => (current - 1) as StepId)}
                   disabled={saving}
                 >
-                  <Text style={styles.backButtonText}>Back</Text>
+                  <Text style={styles.backButtonText}>back</Text>
                 </Pressable>
               )}
 
@@ -288,7 +288,7 @@ export default function CoachingSetupModal({
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {isLastStep ? "Done" : "Next"}
+                    {isLastStep ? "done" : "next"}
                   </Text>
                 )}
               </Pressable>
@@ -329,7 +329,6 @@ const styles = StyleSheet.create({
     fontFamily: "Agrandir-GrandHeavy",
     color: "#AB99FA",
     fontSize: 12,
-    textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 4,
   },

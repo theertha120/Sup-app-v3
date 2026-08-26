@@ -407,10 +407,10 @@ export default function DailyScreen() {
       if (updatedProfile) {
         setCurrentUser(userProfileToUser(updatedProfile));
       }
-      showToast("Username updated", "success");
+      showToast("username updated", "success");
     } catch (err) {
       console.error("[DailyScreen] Failed to update username", err);
-      showToast("Couldn't update username, try again", "error");
+      showToast("couldn't update username, try again", "error");
     }
   };
 
@@ -464,12 +464,12 @@ export default function DailyScreen() {
   }
 
   const POSTURE_STATS = [
-    { label: "Upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
-    { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
-    { label: "Slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
-    { label: "Severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
-    { label: "Tilted Left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
-    { label: "Tilted Right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
+    { label: "upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
+    { label: "forward lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
+    { label: "slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
+    { label: "severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
+    { label: "tilted left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
+    { label: "tilted right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
   ];
 
   const METRIC_INFO: Record<string, { title: string; body: string }> = {

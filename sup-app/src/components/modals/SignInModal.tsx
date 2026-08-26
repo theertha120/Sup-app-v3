@@ -66,18 +66,18 @@ export default function SignInModal() {
     setPasswordError(null);
 
     if (!validateEmail(email)) {
-      setEmailError("Please enter a valid email address");
+      setEmailError("please enter a valid email address");
       return;
     }
 
     if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+      setPasswordError("password must be at least 6 characters");
       return;
     }
 
     const res = await login(email, password);
     if (!res.success) {
-      Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please try again.");
+      Alert.alert("sign in failed", res.error || "Invalid credentials. Please try again.");
     } else {
       router.replace("/(tabs)/home" as any);
     }
@@ -95,7 +95,7 @@ export default function SignInModal() {
   const handleSendResetCode = async () => {
     setResetError(null);
     if (!validateEmail(resetEmail)) {
-      setResetError("Please enter a valid email address");
+      setResetError("please enter a valid email address");
       return;
     }
     setResetLoading(true);
@@ -103,9 +103,9 @@ export default function SignInModal() {
     setResetLoading(false);
     if (!res.success) {
       if (/email rate limit exceeded/i.test(res.error ?? "")) {
-        setResetError("We've hit the email sending limit for now, please try again in about an hour");
+        setResetError("we've hit the email sending limit for now, please try again in about an hour");
       } else {
-        setResetError(res.error || "Failed to send reset code");
+        setResetError(res.error || "failed to send reset code");
       }
       return;
     }
@@ -115,14 +115,14 @@ export default function SignInModal() {
   const handleVerifyResetCode = async () => {
     setResetError(null);
     if (resetCode.trim().length === 0) {
-      setResetError("Please enter the code from your email");
+      setResetError("please enter the code from your email");
       return;
     }
     setResetLoading(true);
     const res = await verifyPasswordResetOtp(resetEmail.trim(), resetCode.trim());
     setResetLoading(false);
     if (!res.success) {
-      setResetError(res.error || "Invalid or expired code");
+      setResetError(res.error || "invalid or expired code");
       return;
     }
     setStep("forgot-newpassword");
@@ -131,18 +131,18 @@ export default function SignInModal() {
   const handleSetNewPassword = async () => {
     setResetError(null);
     if (newPassword.length < 6) {
-      setResetError("Password must be at least 6 characters");
+      setResetError("password must be at least 6 characters");
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      setResetError("Passwords don't match");
+      setResetError("passwords don't match");
       return;
     }
     setResetLoading(true);
     const res = await updatePassword(newPassword);
     setResetLoading(false);
     if (!res.success) {
-      setResetError(res.error || "Failed to update password");
+      setResetError(res.error || "failed to update password");
       return;
     }
     setStep("signin");
@@ -166,11 +166,11 @@ export default function SignInModal() {
         <View style={styles.container}>
           {step === "signin" && (
             <>
-              <Text style={styles.title}>Welcome to s'up</Text>
-              <Text style={styles.subtitle}>Sign in to continue</Text>
+              <Text style={styles.title}>welcome to s'up</Text>
+              <Text style={styles.subtitle}>sign in to continue</Text>
 
               <View style={styles.form}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>email</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="user@test.com"
@@ -182,10 +182,10 @@ export default function SignInModal() {
                 />
                 {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-                <Text style={styles.label}>Password</Text>
+                <Text style={styles.label}>password</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter password"
+                  placeholder="enter password"
                   placeholderTextColor="#A0A0A0"
                   value={password}
                   onChangeText={setPassword}
@@ -199,11 +199,11 @@ export default function SignInModal() {
                     setStep("forgot-email");
                   }}
                 >
-                  <Text style={styles.linkText}>Forgot password?</Text>
+                  <Text style={styles.linkText}>forgot password?</Text>
                 </Pressable>
 
                 <Pressable style={styles.button} onPress={handleSignIn}>
-                  <Text style={styles.buttonText}>Sign In</Text>
+                  <Text style={styles.buttonText}>sign in</Text>
                 </Pressable>
 
                 <Pressable
@@ -213,7 +213,7 @@ export default function SignInModal() {
                     router.replace("/onboarding/intro" as any);
                   }}
                 >
-                  <Text style={[styles.buttonText, styles.secondaryText]}>Create account</Text>
+                  <Text style={[styles.buttonText, styles.secondaryText]}>create account</Text>
                 </Pressable>
               </View>
             </>
@@ -221,11 +221,11 @@ export default function SignInModal() {
 
           {step === "forgot-email" && (
             <>
-              <Text style={styles.title}>Reset password</Text>
-              <Text style={styles.subtitle}>Enter your email and we'll send you a code</Text>
+              <Text style={styles.title}>reset password</Text>
+              <Text style={styles.subtitle}>enter your email and we'll send you a code</Text>
 
               <View style={styles.form}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>email</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="user@test.com"
@@ -238,11 +238,11 @@ export default function SignInModal() {
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
                 <Pressable style={styles.button} onPress={handleSendResetCode} disabled={resetLoading}>
-                  <Text style={styles.buttonText}>{resetLoading ? "Sending..." : "Send code"}</Text>
+                  <Text style={styles.buttonText}>{resetLoading ? "sending..." : "send code"}</Text>
                 </Pressable>
 
                 <Pressable style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
-                  <Text style={[styles.buttonText, styles.secondaryText]}>Back to sign in</Text>
+                  <Text style={[styles.buttonText, styles.secondaryText]}>back to sign in</Text>
                 </Pressable>
               </View>
             </>
@@ -250,11 +250,11 @@ export default function SignInModal() {
 
           {step === "forgot-code" && (
             <>
-              <Text style={styles.title}>Check your email</Text>
-              <Text style={styles.subtitle}>Enter the code we sent to {resetEmail}</Text>
+              <Text style={styles.title}>check your email</Text>
+              <Text style={styles.subtitle}>enter the code we sent to {resetEmail}</Text>
 
               <View style={styles.form}>
-                <Text style={styles.label}>Code</Text>
+                <Text style={styles.label}>code</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="123456"
@@ -266,11 +266,11 @@ export default function SignInModal() {
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
                 <Pressable style={styles.button} onPress={handleVerifyResetCode} disabled={resetLoading}>
-                  <Text style={styles.buttonText}>{resetLoading ? "Verifying..." : "Verify code"}</Text>
+                  <Text style={styles.buttonText}>{resetLoading ? "verifying..." : "verify code"}</Text>
                 </Pressable>
 
                 <Pressable style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
-                  <Text style={[styles.buttonText, styles.secondaryText]}>Back to sign in</Text>
+                  <Text style={[styles.buttonText, styles.secondaryText]}>back to sign in</Text>
                 </Pressable>
               </View>
             </>
@@ -278,24 +278,24 @@ export default function SignInModal() {
 
           {step === "forgot-newpassword" && (
             <>
-              <Text style={styles.title}>Set a new password</Text>
-              <Text style={styles.subtitle}>Choose a new password for your account</Text>
+              <Text style={styles.title}>set a new password</Text>
+              <Text style={styles.subtitle}>choose a new password for your account</Text>
 
               <ScrollView style={styles.form} keyboardShouldPersistTaps="handled">
-                <Text style={styles.label}>New password</Text>
+                <Text style={styles.label}>new password</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter new password"
+                  placeholder="enter new password"
                   placeholderTextColor="#A0A0A0"
                   value={newPassword}
                   onChangeText={setNewPassword}
                   secureTextEntry
                 />
 
-                <Text style={styles.label}>Confirm password</Text>
+                <Text style={styles.label}>confirm password</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Confirm new password"
+                  placeholder="confirm new password"
                   placeholderTextColor="#A0A0A0"
                   value={confirmNewPassword}
                   onChangeText={setConfirmNewPassword}
@@ -304,7 +304,7 @@ export default function SignInModal() {
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
                 <Pressable style={styles.button} onPress={handleSetNewPassword} disabled={resetLoading}>
-                  <Text style={styles.buttonText}>{resetLoading ? "Saving..." : "Save new password"}</Text>
+                  <Text style={styles.buttonText}>{resetLoading ? "saving..." : "save new password"}</Text>
                 </Pressable>
               </ScrollView>
             </>

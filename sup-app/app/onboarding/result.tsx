@@ -39,7 +39,7 @@ export default function ResultScreen() {
     >
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          <Text style={styles.header}>~~RESULTS~~</Text>
+          <Text style={styles.header}>~~results~~</Text>
 
           <View style={styles.imageContainer}>
             <Image

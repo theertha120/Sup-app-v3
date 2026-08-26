@@ -214,13 +214,13 @@ async function getCurrentUserId(): Promise<string> {
       error,
     } = await supabase.auth.getUser();
     if (error || !user) {
-      throw new Error("No authenticated user");
+      throw new Error("no authenticated user");
     }
 
     return user.id;
   } catch (err) {
     console.warn("[profile] Auth check failed", err);
-    throw new Error("No authenticated user");
+    throw new Error("no authenticated user");
   }
 }
 
@@ -375,7 +375,7 @@ export async function updateCurrentUserProfile(
 
   if (Object.prototype.hasOwnProperty.call(updates, "name")) {
     if (typeof updates.name !== "string" || updates.name.trim().length === 0) {
-      throw new Error("Name must be a non-empty string");
+      throw new Error("name must be a non-empty string");
     }
     payload.name = updates.name.trim();
   }
@@ -387,7 +387,7 @@ export async function updateCurrentUserProfile(
     } else if (typeof updates.avatar === "string") {
       payload.avatar_url = updates.avatar.trim() || null;
     } else {
-      throw new Error("Avatar must be a string URL or null");
+      throw new Error("avatar must be a string URL or null");
     }
   }
 
@@ -434,7 +434,7 @@ export async function updateCurrentUserProfile(
     // Provide helpful error message for RLS policy issues
     if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
       throw new Error(
-        "Update blocked: You can only update your own profile. Authentication may be required."
+        "update blocked: you can only update your own profile. authentication may be required."
       );
     }
     throw error;
@@ -604,7 +604,7 @@ export async function updateUserProfile(
   
   if (invalidFields.length > 0) {
     throw new Error(
-      `Cannot update fields: ${invalidFields.join(", ")}. Only name and avatar can be updated.`
+      `cannot update fields: ${invalidFields.join(", ")}. only name and avatar can be updated.`
     );
   }
 
@@ -613,7 +613,7 @@ export async function updateUserProfile(
   
   if (updates.name !== undefined) {
     if (typeof updates.name !== "string" || updates.name.trim().length === 0) {
-      throw new Error("Name must be a non-empty string");
+      throw new Error("name must be a non-empty string");
     }
     updatePayload.name = updates.name.trim();
   }
@@ -625,7 +625,7 @@ export async function updateUserProfile(
     } else if (typeof updates.avatar === "string") {
       updatePayload.avatar_url = updates.avatar.trim() || null;
     } else {
-      throw new Error("Avatar must be a string URL or null");
+      throw new Error("avatar must be a string URL or null");
     }
   }
 
@@ -674,7 +674,7 @@ export async function updateUserProfile(
     // Provide helpful error message for RLS policy issues
     if (error.code === "42501" || error.message?.includes("permission denied") || error.message?.includes("policy")) {
       throw new Error(
-        "Update blocked: You can only update your own profile. Authentication may be required."
+        "update blocked: you can only update your own profile. authentication may be required."
       );
     }
     console.error("[profile] Failed to update user profile", error);

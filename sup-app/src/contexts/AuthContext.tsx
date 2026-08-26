@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error || !user) {
-        const msg = error?.message || "Sign in failed";
+        const msg = error?.message || "sign in failed";
         console.warn("[auth] signIn failed", error);
         return { success: false, error: msg };
       }
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!data.user) {
-        return { success: false, error: "No user returned from signUp" };
+        return { success: false, error: "no user returned from signUp" };
       }
 
       // Email confirmation is required, so no session exists yet — the caller
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error || !data.user) {
-        const msg = error?.message || "Invalid or expired code";
+        const msg = error?.message || "invalid or expired code";
         console.warn("[auth] verifyEmailOtp failed", error);
         return { success: false, error: msg };
       }
@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error || !data.user) {
-        const msg = error?.message || "Invalid or expired code";
+        const msg = error?.message || "invalid or expired code";
         console.warn("[auth] verifyPasswordResetOtp failed", error);
         return { success: false, error: msg };
       }

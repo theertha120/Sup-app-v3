@@ -52,7 +52,7 @@ export default function FinalScreen() {
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
         <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Text style={styles.backText}> back</Text>
       </TouchableOpacity>
 
       <Text style={styles.heading}>final s'tep!!</Text>

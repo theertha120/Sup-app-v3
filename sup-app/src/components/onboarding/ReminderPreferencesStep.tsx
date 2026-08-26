@@ -38,7 +38,7 @@ export default function ReminderPreferencesStep({
   return (
     <View style={styles.step}>
       <View style={styles.group}>
-        <Text style={styles.title}>What reminder style do you prefer?</Text>
+        <Text style={styles.title}>what reminder style do you prefer?</Text>
         <View style={styles.options}>
           {TONES.map((option) => (
             <Chip
@@ -58,7 +58,7 @@ export default function ReminderPreferencesStep({
       </View>
 
       <View style={styles.group}>
-        <Text style={styles.title}>How often do you want reminders?</Text>
+        <Text style={styles.title}>how often do you want reminders?</Text>
         <View style={styles.options}>
           {FREQUENCIES.map((option) => (
             <Chip

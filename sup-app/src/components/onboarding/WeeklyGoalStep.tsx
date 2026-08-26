@@ -26,7 +26,7 @@ export default function WeeklyGoalStep({
 
   return (
     <View style={styles.step}>
-      <Text style={styles.title}>What is your weekly goal?</Text>
+      <Text style={styles.title}>what is your weekly goal?</Text>
       <View style={styles.options}>
         {GOALS.map((option) => (
           <Chip

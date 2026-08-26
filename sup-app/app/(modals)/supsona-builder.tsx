@@ -35,34 +35,34 @@ import {
 } from "../../src/services/user/profileService";
 
 const OPTION_LABELS: Record<string, string> = {
-  round: "Round",
-  oval: "Oval",
-  "soft-square": "Soft square",
-  short: "Short",
-  bob: "Bob",
-  "long-straight": "Long",
-  curly: "Curly",
-  ponytail: "Ponytail",
-  messy: "Messy",
-  black: "Black",
-  brown: "Brown",
-  blonde: "Blonde",
-  auburn: "Auburn",
-  grey: "Grey",
-  blue: "Blue",
-  pink: "Pink",
-  "warm-light": "Warm light",
-  light: "Light",
-  medium: "Medium",
-  tan: "Tan",
-  deep: "Deep",
-  white: "White",
-  navy: "Navy",
-  red: "Red",
-  green: "Green",
-  yellow: "Yellow",
-  lavender: "Lavender",
-  coral: "Coral",
+  round: "round",
+  oval: "oval",
+  "soft-square": "soft square",
+  short: "short",
+  bob: "bob",
+  "long-straight": "long",
+  curly: "curly",
+  ponytail: "ponytail",
+  messy: "messy",
+  black: "black",
+  brown: "brown",
+  blonde: "blonde",
+  auburn: "auburn",
+  grey: "grey",
+  blue: "blue",
+  pink: "pink",
+  "warm-light": "warm light",
+  light: "light",
+  medium: "medium",
+  tan: "tan",
+  deep: "deep",
+  white: "white",
+  navy: "navy",
+  red: "red",
+  green: "green",
+  yellow: "yellow",
+  lavender: "lavender",
+  coral: "coral",
 };
 
 export default function SupsonaBuilderScreen() {
@@ -78,7 +78,7 @@ export default function SupsonaBuilderScreen() {
         const parsed = parseSupsona(profile.avatar);
         if (parsed) setSupsona(parsed);
       })
-      .catch(() => setError("Could not load your profile"))
+      .catch(() => setError("could not load your profile"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -87,12 +87,12 @@ export default function SupsonaBuilderScreen() {
     setError("");
     try {
       await updateCurrentUserProfile({ avatar: stringifySupsona(supsona) });
-      showToast("Supsona saved", "success");
+      showToast("s'upsona saved", "success");
       router.back();
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to save";
+      const message = e instanceof Error ? e.message : "failed to save";
       setError(message);
-      showToast("Could not save", "error");
+      showToast("could not save", "error");
     } finally {
       setSaving(false);
     }
@@ -112,8 +112,8 @@ export default function SupsonaBuilderScreen() {
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
-        <Text style={styles.title}>Create your Supsona</Text>
-        <Text style={styles.subtitle}>Customise your avatar</Text>
+        <Text style={styles.title}>create your s'upsona</Text>
+        <Text style={styles.subtitle}>customise your avatar</Text>
       </View>
 
       {/* Live preview */}
@@ -124,7 +124,7 @@ export default function SupsonaBuilderScreen() {
       </View>
 
       {/* Face shape */}
-      <Section title="Face shape">
+      <Section title="face shape">
         {FACE_SHAPES.map((id) => (
           <OptionChip
             key={id}
@@ -138,7 +138,7 @@ export default function SupsonaBuilderScreen() {
       </Section>
 
       {/* Hair style */}
-      <Section title="Hair style">
+      <Section title="hair style">
         {HAIR_STYLES.map((id) => (
           <OptionChip
             key={id}
@@ -152,7 +152,7 @@ export default function SupsonaBuilderScreen() {
       </Section>
 
       {/* Hair colour */}
-      <Section title="Hair colour">
+      <Section title="hair colour">
         {HAIR_COLOURS.map((id) => (
           <OptionChip
             key={id}
@@ -166,7 +166,7 @@ export default function SupsonaBuilderScreen() {
       </Section>
 
       {/* Skin tone */}
-      <Section title="Skin tone">
+      <Section title="skin tone">
         {SKIN_TONES.map((id) => (
           <OptionChip
             key={id}
@@ -180,7 +180,7 @@ export default function SupsonaBuilderScreen() {
       </Section>
 
       {/* Shirt colour */}
-      <Section title="Shirt colour">
+      <Section title="shirt colour">
         {SHIRT_COLOURS.map((id) => (
           <OptionChip
             key={id}
@@ -203,7 +203,7 @@ export default function SupsonaBuilderScreen() {
         {saving ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.saveButtonText}>Save Supsona</Text>
+          <Text style={styles.saveButtonText}>save s'upsona</Text>
         )}
       </Pressable>
 

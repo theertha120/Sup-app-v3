@@ -27,7 +27,7 @@ export default function HeardScreen() {
       style={styles.container}
     >
       <View style={styles.questionBubble}>
-        <Text style={styles.questionText}>How did you{"\n"}hear about s'up?</Text>
+        <Text style={styles.questionText}>how did you{"\n"}hear about s'up?</Text>
       </View>
 
       <View style={styles.options}>

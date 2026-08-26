@@ -37,9 +37,9 @@ export default function Question4Screen() {
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}> Back</Text>
+          <Text style={styles.backText}> back</Text>
         </TouchableOpacity>
-        <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
+        <Text style={styles.questionCounter}>question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
       <View style={styles.progressTrack}>
@@ -47,7 +47,7 @@ export default function Question4Screen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.questionLabel}>Question {CURRENT_QUESTION}:</Text>
+        <Text style={styles.questionLabel}>question {CURRENT_QUESTION}:</Text>
         <Text style={styles.questionBody}>
           Totally free day, no work, no plans. When is your brain actually locked in?
         </Text>
@@ -85,7 +85,7 @@ export default function Question4Screen() {
           <View>
             <TextInput
               style={styles.textInput}
-              placeholder="Type your answer..."
+              placeholder="type your answer..."
               placeholderTextColor="#aaa"
               value={otherText}
               onChangeText={setOtherText}
@@ -96,7 +96,7 @@ export default function Question4Screen() {
               style={[styles.doneBtn, !otherText.trim() && styles.doneBtnDisabled]}
               onPress={() => { if (otherText.trim()) router.push("/onboarding/question5" as any); }}
             >
-              <Text style={styles.doneBtnText}>Done</Text>
+              <Text style={styles.doneBtnText}>done</Text>
             </TouchableOpacity>
           </View>
         )}

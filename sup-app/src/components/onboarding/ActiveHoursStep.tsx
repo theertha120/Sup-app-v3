@@ -27,7 +27,7 @@ export default function ActiveHoursStep({
 
   return (
     <View style={styles.step}>
-      <Text style={styles.title}>When do you usually need reminders?</Text>
+      <Text style={styles.title}>when do you usually need reminders?</Text>
       <View style={styles.options}>
         {PRESETS.map((option) => (
           <Chip

@@ -37,9 +37,9 @@ export default function Question1Screen() {
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}> Back</Text>
+          <Text style={styles.backText}> back</Text>
         </TouchableOpacity>
-        <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
+        <Text style={styles.questionCounter}>question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
       {/* Progress bar */}
@@ -49,7 +49,7 @@ export default function Question1Screen() {
 
       {/* Question card */}
       <View style={styles.card}>
-        <Text style={styles.questionLabel}>Question {CURRENT_QUESTION}:</Text>
+        <Text style={styles.questionLabel}>question {CURRENT_QUESTION}:</Text>
         <Text style={styles.questionBody}>
           You told yourself you'd read every day. Three days in, you've missed all three. What's actually going on?
         </Text>

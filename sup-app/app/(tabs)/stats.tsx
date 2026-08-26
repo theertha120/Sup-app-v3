@@ -45,12 +45,12 @@ const SEGMENT_COLORS: Record<string, string> = {
 };
 
 const SEGMENT_LABELS: Record<string, string> = {
-  upright:      "Upright",
-  forward_lean: "Forward Lean",
-  slouched:     "Slouched",
-  severe:       "Severe",
-  tilted_left:  "Tilted Left",
-  tilted_right: "Tilted Right",
+  upright:      "upright",
+  forward_lean: "forward lean",
+  slouched:     "slouched",
+  severe:       "severe",
+  tilted_left:  "tilted left",
+  tilted_right: "tilted right",
 };
 
 // // to update: Constants [0 is if there is no session]
@@ -524,9 +524,9 @@ function avg(arr: number[]) {
 }
 
 function avgLabel(range: Range): string {
-  if (range === "week")  return "Daily avg";
-  if (range === "month") return "Weekly avg";
-  return "Monthly avg";
+  if (range === "week")  return "daily avg";
+  if (range === "month") return "weekly avg";
+  return "monthly avg";
 }
 
 // Bar chart

@@ -30,7 +30,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Home",
+          title: "home",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
@@ -40,7 +40,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: "Stats",
+          title: "stats",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
           ),
@@ -50,7 +50,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="leaderboard"
         options={{
-          title: "Leaderboard",
+          title: "leaderboard",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trophy-outline" size={size} color={color} />
           ),
@@ -60,7 +60,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="desk"
         options={{
-          title: "Desk Mode",
+          title: "desk mode",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="desktop-outline" size={size} color={color} />
           ),

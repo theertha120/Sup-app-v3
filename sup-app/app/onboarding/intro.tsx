@@ -45,7 +45,7 @@ export default function IntroScreen() {
         {/* Card */}
         <View style={styles.card}>
           <Text style={styles.heading}>
-            {"S'TIME TO\nGET\nS'TARTED\nON YOUR\nS'PINE\nCARE\nJOURNEY!"}
+            {"s'time to\nget\ns'tarted\non your\ns'pine\ncare\njourney!"}
           </Text>
         </View>
 
@@ -61,7 +61,7 @@ export default function IntroScreen() {
           style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
           onPress={() => router.push("/onboarding/heard" as any)}
         >
-          <Text style={styles.buttonText}>Let's gooooo</Text>
+          <Text style={styles.buttonText}>let's gooooo</Text>
         </Pressable>
       </View>
     </Animated.View>

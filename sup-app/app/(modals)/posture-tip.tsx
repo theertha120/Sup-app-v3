@@ -5,7 +5,7 @@ import { colours } from "@/theme/colours";
 export default function PostureTipScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Posture Tip</Text>
+      <Text style={styles.title}>posture tip</Text>
 
       <Text style={styles.body}>
         Gently lift your chest and allow your shoulders to soften downwards. Try
@@ -13,7 +13,7 @@ export default function PostureTipScreen() {
       </Text>
 
       <Pressable style={styles.button} onPress={() => router.back()}>
-        <Text style={styles.buttonText}>Done</Text>
+        <Text style={styles.buttonText}>done</Text>
       </Pressable>
     </View>
   );

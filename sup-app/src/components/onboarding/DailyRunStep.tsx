@@ -36,7 +36,7 @@ export default function DailyRunStep({
     return (
     <View style={styles.step}>
       <View style={styles.group}>
-        <Text style={styles.title}>When should your daily prompt appear?</Text>
+        <Text style={styles.title}>when should your daily prompt appear?</Text>
 
         {/* Trigger */}
         <Pressable

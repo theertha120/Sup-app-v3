@@ -42,13 +42,13 @@ export default function SettingsScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backIcon}>←</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>settings</Text>
         <View style={styles.placeholder} />
       </View>
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Text style={styles.sectionTitle}>preferences</Text>
 
         {tutorialStep === "settings-tip" && (
           <View style={styles.tutorialTip}>
@@ -80,8 +80,8 @@ export default function SettingsScreen() {
           }}
         >
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Coaching preferences</Text>
-            <Text style={styles.settingDescription}>Edit reminders, goals and active hours</Text>
+            <Text style={styles.settingLabel}>coaching preferences</Text>
+            <Text style={styles.settingDescription}>edit reminders, goals and active hours</Text>
           </View>
           {loadingCoachingProfile
             ? <ActivityIndicator size="small" color={colours.primary} />
@@ -93,18 +93,18 @@ export default function SettingsScreen() {
 
       {/* Data & Privacy Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Data & Privacy</Text>
-        
+        <Text style={styles.sectionTitle}>data & privacy</Text>
+
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Privacy Policy</Text>
+            <Text style={styles.settingLabel}>privacy policy</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Terms of Service</Text>
+            <Text style={styles.settingLabel}>terms of service</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -112,18 +112,18 @@ export default function SettingsScreen() {
 
       {/* About Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        
+        <Text style={styles.sectionTitle}>about</Text>
+
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>App Version</Text>
+            <Text style={styles.settingLabel}>app version</Text>
           </View>
           <Text style={styles.settingValue}>1.0.0</Text>
         </View>
 
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Help & Support</Text>
+            <Text style={styles.settingLabel}>help & support</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -131,7 +131,7 @@ export default function SettingsScreen() {
 
       {/* Help Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Help</Text>
+        <Text style={styles.sectionTitle}>help</Text>
 
         <Pressable
           style={styles.settingItem}
@@ -141,8 +141,8 @@ export default function SettingsScreen() {
           }}
         >
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Run tutorial again</Text>
-            <Text style={styles.settingDescription}>Replay the app walkthrough</Text>
+            <Text style={styles.settingLabel}>run tutorial again</Text>
+            <Text style={styles.settingDescription}>replay the app walkthrough</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
       {/* Logout Section */}
       <View style={styles.section}>
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>logout</Text>
         </Pressable>
       </View>
 
@@ -165,7 +165,7 @@ export default function SettingsScreen() {
         initialProfile={initialBehaviorProfile}
         onComplete={() => {
           setShowCoachingModal(false);
-          showToast("Coaching preferences saved", "success");
+          showToast("coaching preferences saved", "success");
           if (tutorialStep === "coaching-tip") {
             setTutorialStep("connect-tip");
             router.push("/sensor-setup" as any);
@@ -173,7 +173,7 @@ export default function SettingsScreen() {
         }}
         onSkip={() => {
           setShowCoachingModal(false);
-          showToast("Using default coaching setup", "success");
+          showToast("using default coaching setup", "success");
         }}
         onCancel={() => setShowCoachingModal(false)}
       />
@@ -224,7 +224,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#999",
-    textTransform: "uppercase",
     letterSpacing: 0.5,
     paddingTop: 16,
     paddingBottom: 8,

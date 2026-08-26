@@ -257,7 +257,7 @@ export default function LeaderboardScreen() {
       );
       setUsers(updatedUsers);
       setSelectedUser(updatedUser);
-      showToast("Profile glow-up saved", "success");
+      showToast("profile glow-up saved", "success");
     }
   };
 
@@ -267,7 +267,7 @@ export default function LeaderboardScreen() {
 
   const handleAcceptRequest = async (requestId: string) => {
     if (!authUserId) {
-      showToast("You must be signed in to accept requests", "error");
+      showToast("you must be signed in to accept requests", "error");
       return;
     }
     // Optimistically update UI
@@ -286,13 +286,13 @@ export default function LeaderboardScreen() {
         setFriends((prev) => prev.filter((id) => id !== fromId));
       }
     }
-    showToast(result.ok ? "New bestie unlocked" : result.message, result.ok ? "success" : "error");
+    showToast(result.ok ? "new bestie unlocked" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
   const handleRejectRequest = async (requestId: string) => {
     if (!authUserId) {
-      showToast("You must be signed in to reject requests", "error");
+      showToast("you must be signed in to reject requests", "error");
       return;
     }
     // Optimistically remove from incoming
@@ -307,12 +307,12 @@ export default function LeaderboardScreen() {
       // revert optimistic removal
       if (pending) setIncomingRequests((prev) => [pending, ...prev]);
     }
-    showToast(result.ok ? "Request declined" : result.message, result.ok ? "success" : "error");
+    showToast(result.ok ? "request declined" : result.message, result.ok ? "success" : "error");
     refreshFriendState();
   };
 
   const effectiveUserIdForHelpers = authUserId;
-  const currentUsername = effectiveUserIdForHelpers ? getUsernameForUser(effectiveUserIdForHelpers) ?? "Unknown User" : "Unknown User";
+  const currentUsername = effectiveUserIdForHelpers ? getUsernameForUser(effectiveUserIdForHelpers) ?? "unknown user" : "unknown user";
   const normalizedSearch = friendUsernameInput.trim().toLowerCase();
 
   const incomingFromSet = new Set(incomingRequests.map((request) => request.fromUserId));
@@ -346,10 +346,10 @@ export default function LeaderboardScreen() {
   };
 
   const getStatusLabel = (status: "friend" | "incoming" | "outgoing" | "none") => {
-    if (status === "friend") return "Friends";
-    if (status === "incoming") return "Sent you a request";
-    if (status === "outgoing") return "Request sent";
-    return "Not connected";
+    if (status === "friend") return "friends";
+    if (status === "incoming") return "sent you a request";
+    if (status === "outgoing") return "request sent";
+    return "not connected";
   };
 
   const searchMatches =
@@ -368,8 +368,8 @@ export default function LeaderboardScreen() {
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Community Leaderboard</Text>
-        <Text style={styles.headerSubtitle}>Global Community</Text>
+        <Text style={styles.headerTitle}>community leaderboard</Text>
+        <Text style={styles.headerSubtitle}>global community</Text>
       </View>
 
       {tutorialStep === "community-tip" && (
@@ -393,7 +393,7 @@ export default function LeaderboardScreen() {
       {/* Your Rank Card */}
       <View style={styles.rankCard}>
         <Text style={styles.rankLabel}>
-          Your {sortMode === "streak" ? "Streak" : "Weekly Points"} Rank
+          your {sortMode === "streak" ? "streak" : "weekly points"} rank
         </Text>
         {currentUserRank === 0 ? (
           <Text style={styles.rankNumber}>—</Text>
@@ -404,7 +404,7 @@ export default function LeaderboardScreen() {
           </View>
         )}
         <Text style={styles.rankSubtext}>
-          Keep going! You&apos;re doing great
+          keep going! you&apos;re doing great
         </Text>
       </View>
 
@@ -415,7 +415,7 @@ export default function LeaderboardScreen() {
           onPress={() => setShowInfo(!showInfo)}
         >
           <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>Current Streak</Text>
+            <Text style={styles.statLabel}>current streak</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -431,7 +431,7 @@ export default function LeaderboardScreen() {
           onPress={() => setShowInfo(!showInfo)}
         >
           <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>Weekly Average Points</Text>
+            <Text style={styles.statLabel}>weekly average points</Text>
             <Text style={styles.helpIcon}>?</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -444,17 +444,17 @@ export default function LeaderboardScreen() {
       {/* Info Card */}
       {showInfo && (
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Understanding your stats</Text>
+          <Text style={styles.infoTitle}>understanding your stats</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>⚡</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Current Streak:</Text> Consecutive days wearing your S&apos;pots
+              <Text style={styles.infoBold}>current streak:</Text> consecutive days wearing your s&apos;pots
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoBullet}>📊</Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoBold}>Weekly Average Points:</Text> Average of your daily s'up scores over the past week
+              <Text style={styles.infoBold}>weekly average points:</Text> average of your daily s'up scores over the past week
             </Text>
           </View>
         </View>
@@ -463,7 +463,7 @@ export default function LeaderboardScreen() {
       {/* Leaderboard Header + Sort Toggle */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          Top performers ranked by{" "}
+          top performers ranked by{" "}
           {sortMode === "streak" ? "streak" : "weekly points"}
         </Text>
 
@@ -481,7 +481,7 @@ export default function LeaderboardScreen() {
                 sortMode === "streak" && styles.sortButtonTextActive,
               ]}
             >
-              Streak
+              streak
             </Text>
           </Pressable>
 
@@ -498,7 +498,7 @@ export default function LeaderboardScreen() {
                 sortMode === "weekly" && styles.sortButtonTextActive,
               ]}
             >
-              Weekly Pts
+              weekly pts
             </Text>
           </Pressable>
         </View>
@@ -519,7 +519,7 @@ export default function LeaderboardScreen() {
 
       {/* Friends */}
       <View style={styles.friendSection}>
-        <Text style={styles.friendTitle}>Friends</Text>
+        <Text style={styles.friendTitle}>friends</Text>
 
         {tutorialStep === "add-friends-tip" && (
           <View style={styles.tutorialTip}>
@@ -543,7 +543,7 @@ export default function LeaderboardScreen() {
           <TextInput
             value={friendUsernameInput}
             onChangeText={setFriendUsernameInput}
-            placeholder="Add friend by username"
+            placeholder="add friend by username"
             autoCapitalize="none"
             style={styles.friendInput}
             placeholderTextColor="#9A9A9A"
@@ -553,7 +553,7 @@ export default function LeaderboardScreen() {
         {normalizedSearch.length > 0 && (
           <View style={styles.searchResultsContainer}>
             {searchMatches.length === 0 ? (
-              <Text style={styles.friendEmptyText}>No users found.</Text>
+              <Text style={styles.friendEmptyText}>no users found.</Text>
             ) : (
               searchMatches.map((user) => {
                 const status = getFriendStatusForUserId(user.id);
@@ -572,7 +572,7 @@ export default function LeaderboardScreen() {
                         style={[styles.requestActionBtn, styles.acceptBtn]}
                         onPress={async () => {
                           if (!effectiveUserIdForHelpers) {
-                            showToast("You must be signed in to send requests", "error");
+                            showToast("you must be signed in to send requests", "error");
                             return;
                           }
                           // Optimistically add to outgoingRequests
@@ -591,13 +591,13 @@ export default function LeaderboardScreen() {
                             setOutgoingRequests((prev) => prev.filter((r) => r.id !== tempId));
                           }
                           showToast(
-                            result.ok ? "Request sent" : result.message,
+                            result.ok ? "request sent" : result.message,
                             result.ok ? "success" : "error"
                           );
                           if (result.ok) refreshFriendState();
                         }}
                       >
-                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Send</Text>
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>send</Text>
                       </Pressable>
                     ) : status === "incoming" ? (
                       <Pressable
@@ -608,7 +608,7 @@ export default function LeaderboardScreen() {
                           handleAcceptRequest(pending.id);
                         }}
                       >
-                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
+                        <Text style={[styles.requestActionText, styles.requestActionTextLight]}>accept</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -618,9 +618,9 @@ export default function LeaderboardScreen() {
           </View>
         )}
 
-        <Text style={styles.friendBlockTitle}>Incoming Requests</Text>
+        <Text style={styles.friendBlockTitle}>incoming requests</Text>
         {incomingRequests.length === 0 ? (
-          <Text style={styles.friendEmptyText}>No incoming requests.</Text>
+          <Text style={styles.friendEmptyText}>no incoming requests.</Text>
         ) : (
           incomingRequests.map((request) => (
             <View key={request.id} style={styles.requestRow}>
@@ -631,27 +631,27 @@ export default function LeaderboardScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.requestName}>{getUserDisplayName(request.fromUserId)}</Text>
-                <Text style={styles.requestMeta}>Incoming friend request</Text>
+                <Text style={styles.requestMeta}>incoming friend request</Text>
               </View>
               <Pressable
                 style={[styles.requestActionBtn, styles.acceptBtn]}
                 onPress={() => handleAcceptRequest(request.id)}
               >
-                <Text style={[styles.requestActionText, styles.requestActionTextLight]}>Accept</Text>
+                <Text style={[styles.requestActionText, styles.requestActionTextLight]}>accept</Text>
               </Pressable>
               <Pressable
                 style={[styles.requestActionBtn, styles.rejectBtn]}
                 onPress={() => handleRejectRequest(request.id)}
               >
-                <Text style={styles.requestActionText}>Reject</Text>
+                <Text style={styles.requestActionText}>reject</Text>
               </Pressable>
             </View>
           ))
         )}
 
-        <Text style={styles.friendBlockTitle}>Pending Sent</Text>
+        <Text style={styles.friendBlockTitle}>pending sent</Text>
         {outgoingRequests.length === 0 ? (
-          <Text style={styles.friendEmptyText}>No pending outgoing requests.</Text>
+          <Text style={styles.friendEmptyText}>no pending outgoing requests.</Text>
         ) : (
           outgoingRequests.map((request) => (
             <View key={request.id} style={styles.friendUserRow}>
@@ -662,15 +662,15 @@ export default function LeaderboardScreen() {
               </View>
               <View style={styles.friendUserInfo}>
                 <Text style={styles.friendUserName}>{getUserDisplayName(request.toUserId)}</Text>
-                <Text style={styles.friendUserStatus}>Request sent</Text>
+                <Text style={styles.friendUserStatus}>request sent</Text>
               </View>
             </View>
           ))
         )}
 
-        <Text style={styles.friendBlockTitle}>Your Friends</Text>
+        <Text style={styles.friendBlockTitle}>your friends</Text>
         {friends.length === 0 ? (
-          <Text style={styles.friendEmptyText}>No friends yet.</Text>
+          <Text style={styles.friendEmptyText}>no friends yet.</Text>
         ) : (
           friends.map((friendId) => (
             <View key={friendId} style={styles.friendUserRow}>
@@ -681,7 +681,7 @@ export default function LeaderboardScreen() {
               </View>
               <View style={styles.friendUserInfo}>
                 <Text style={styles.friendUserName}>{getUserDisplayName(friendId)}</Text>
-                <Text style={styles.friendUserStatus}>Friends</Text>
+                <Text style={styles.friendUserStatus}>friends</Text>
               </View>
             </View>
           ))
@@ -699,7 +699,7 @@ export default function LeaderboardScreen() {
 
       {/* Footer */}
       <Text style={styles.footerText}>
-        Scores update every 24 hours • Supporting moms through recovery
+        scores update every 24 hours • supporting moms through recovery
       </Text>
     </ScrollView>
     </Animated.View>

@@ -143,11 +143,11 @@ export async function sendFriendRequestByUsername(
   if (users) ensureFriendDirectory(users);
 
   const username = normalizeUsername(usernameInput);
-  if (!username) return { ok: false, message: "Enter a username." };
+  if (!username) return { ok: false, message: "enter a username." };
 
   const toUserId = await resolveUserIdByUsername(username);
-  if (!toUserId) return { ok: false, message: "Username not found." };
-  if (toUserId === fromUserId) return { ok: false, message: "You can’t send a request to yourself." };
+  if (!toUserId) return { ok: false, message: "username not found." };
+  if (toUserId === fromUserId) return { ok: false, message: "you can’t send a request to yourself." };
 
   try {
     // Check for existing pending or accepted between the two users
@@ -162,8 +162,8 @@ export async function sendFriendRequestByUsername(
     if (exErr) throw exErr;
     if (existing && existing.length > 0) {
       const row = existing[0] as any;
-      if (row.status === "accepted") return { ok: false, message: "You are already friends." };
-      if (row.status === "pending") return { ok: false, message: "A pending request already exists." };
+      if (row.status === "accepted") return { ok: false, message: "you are already friends." };
+      if (row.status === "pending") return { ok: false, message: "a pending request already exists." };
     }
 
     const { data, error } = await supabase
@@ -186,7 +186,7 @@ export async function sendFriendRequestByUsername(
     return { ok: true, request: mapped };
   } catch (err: any) {
     console.warn("[friend] sendFriendRequest failed", err);
-    return { ok: false, message: err?.message ?? "Failed to send request" };
+    return { ok: false, message: err?.message ?? "failed to send request" };
   }
 }
 
@@ -202,9 +202,9 @@ export async function acceptFriendRequest(
       .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-    if (!req) return { ok: false, message: "Request not found." };
-    if (req.to_user_id !== actingUserId) return { ok: false, message: "You can only accept requests sent to you." };
-    if (req.status !== "pending") return { ok: false, message: "This request is no longer pending." };
+    if (!req) return { ok: false, message: "request not found." };
+    if (req.to_user_id !== actingUserId) return { ok: false, message: "you can only accept requests sent to you." };
+    if (req.status !== "pending") return { ok: false, message: "this request is no longer pending." };
 
     const { error } = await supabase
       .from("friend_requests")
@@ -215,7 +215,7 @@ export async function acceptFriendRequest(
     return { ok: true };
   } catch (err: any) {
     console.warn("[friend] acceptFriendRequest failed", err);
-    return { ok: false, message: err?.message ?? "Failed to accept request" };
+    return { ok: false, message: err?.message ?? "failed to accept request" };
   }
 }
 
@@ -231,9 +231,9 @@ export async function rejectFriendRequest(
       .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-    if (!req) return { ok: false, message: "Request not found." };
-    if (req.to_user_id !== actingUserId) return { ok: false, message: "You can only reject requests sent to you." };
-    if (req.status !== "pending") return { ok: false, message: "This request is no longer pending." };
+    if (!req) return { ok: false, message: "request not found." };
+    if (req.to_user_id !== actingUserId) return { ok: false, message: "you can only reject requests sent to you." };
+    if (req.status !== "pending") return { ok: false, message: "this request is no longer pending." };
 
     const { error } = await supabase
       .from("friend_requests")
@@ -244,6 +244,6 @@ export async function rejectFriendRequest(
     return { ok: true };
   } catch (err: any) {
     console.warn("[friend] rejectFriendRequest failed", err);
-    return { ok: false, message: err?.message ?? "Failed to reject request" };
+    return { ok: false, message: err?.message ?? "failed to reject request" };
   }
 }

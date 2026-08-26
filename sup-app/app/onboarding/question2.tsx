@@ -36,9 +36,9 @@ export default function Question2Screen() {
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}> Back</Text>
+          <Text style={styles.backText}> back</Text>
         </TouchableOpacity>
-        <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
+        <Text style={styles.questionCounter}>question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
       <View style={styles.progressTrack}>
@@ -46,7 +46,7 @@ export default function Question2Screen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.questionLabel}>Question {CURRENT_QUESTION}:</Text>
+        <Text style={styles.questionLabel}>question {CURRENT_QUESTION}:</Text>
         <Text style={styles.questionBody}>
           You just hit a new PR at the gym. What's the part that actually feels good?
         </Text>

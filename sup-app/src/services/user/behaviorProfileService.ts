@@ -245,12 +245,12 @@ export async function saveCurrentBehaviorProfile(
     }
 
     if (!data) {
-      throw new Error("No data returned from upsert");
+      throw new Error("no data returned from upsert");
     }
 
     const saved = mapRowToBehaviorProfile(data as BehaviorProfileRow);
     if (!saved) {
-      throw new Error("Saved profile row missing required fields");
+      throw new Error("saved profile row missing required fields");
     }
 
     return saved;

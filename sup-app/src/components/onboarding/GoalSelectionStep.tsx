@@ -27,7 +27,7 @@ export default function GoalSelectionStep({
 
   return (
     <View style={styles.step}>
-      <Text style={styles.title}>What do you want help with?</Text>
+      <Text style={styles.title}>what do you want help with?</Text>
       <View style={styles.options}>
         {GOALS.map((goal) => (
           <Chip

@@ -105,7 +105,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
   const handleSaveUsername = async () => {
     const trimmed = draftName.trim();
     if (trimmed.length === 0) {
-      Alert.alert("Username can't be empty");
+      Alert.alert("username can't be empty");
       return;
     }
     try {
