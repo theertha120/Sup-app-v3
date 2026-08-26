@@ -25,9 +25,23 @@ import { Ionicons } from "@expo/vector-icons";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot } from "../../services/BLEService";
 import { parsePairingQR, PairingCode } from "../../lib/qrPairing";
+import { parseSpotName } from "../../lib/spotNaming";
 import { colours } from "../../../theme/colours";
 
 const SCAN_TIMEOUT_MS = 8000;
+
+/**
+ * Non-blocking sanity check: does this candidate's parsed role (from its
+ * s'pot_top_/s'pot_bot_ name) match the slot it's being reviewed for? A
+ * mismatch usually means the QR's declared top/bottom names got swapped
+ * during registration — surfaced as a warning, not a block, since the
+ * exact-name match already found this device for a reason.
+ */
+function roleMismatchWarning(device: Device, expectedSlot: SensorSlot): string | null {
+  const parsed = device.name ? parseSpotName(device.name) : null;
+  if (!parsed || parsed.role === expectedSlot) return null;
+  return `heads up — this sensor's name looks like a ${parsed.role} s'pot, not ${expectedSlot}`;
+}
 
 interface SlotOutcome {
   candidates: Device[];
@@ -190,6 +204,7 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
           {phase === "review" && pairing && (
             <View style={s.reviewWrap}>
               <SlotReview
+                slot="top"
                 label="top s'pot"
                 expectedName={pairing.topName}
                 outcome={top}
@@ -197,12 +212,26 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
                 onRetry={() => retrySlot("top")}
               />
               <SlotReview
+                slot="bottom"
                 label="bottom s'pot"
                 expectedName={pairing.bottomName}
                 outcome={bottom}
                 onSelect={(d) => setBottom((prev) => ({ ...prev, selected: d }))}
                 onRetry={() => retrySlot("bottom")}
               />
+              {top.selected && bottom.selected && (() => {
+                const topCode = parseSpotName(top.selected.name ?? "")?.code;
+                const bottomCode = parseSpotName(bottom.selected.name ?? "")?.code;
+                if (!topCode || !bottomCode || topCode === bottomCode) return null;
+                return (
+                  <View style={s.slotRow}>
+                    <Ionicons name="warning-outline" size={18} color="#E65100" />
+                    <Text style={s.slotNotFound}>
+                      these two sensors have different kit codes ({topCode} vs {bottomCode}) — make sure they're from the same kit
+                    </Text>
+                  </View>
+                );
+              })()}
               <Pressable
                 style={[s.primaryBtn, (!top.selected || !bottom.selected) && s.primaryBtnDisabled]}
                 onPress={handleConfirmPair}
@@ -241,7 +270,8 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
 // Every path here — single match or several — ends in an explicit tap.
 // Nothing about a sensor is ever auto-selected.
 
-function SlotReview({ label, expectedName, outcome, onSelect, onRetry }: {
+function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
+  slot: SensorSlot;
   label: string;
   expectedName: string;
   outcome: SlotOutcome;
@@ -266,18 +296,23 @@ function SlotReview({ label, expectedName, outcome, onSelect, onRetry }: {
       )}
 
       {candidates.length === 1 && (
-        <Pressable
-          style={[s.candidateRow, selected?.id === candidates[0].id && s.candidateRowSelected]}
-          onPress={() => onSelect(candidates[0])}
-        >
-          <Ionicons
-            name={selected?.id === candidates[0].id ? "checkmark-circle" : "radio-button-off"}
-            size={20}
-            color={selected?.id === candidates[0].id ? "#4CAF50" : colours.primary}
-          />
-          <Text style={s.candidateText}>found: {candidates[0].name}</Text>
-          {selected?.id !== candidates[0].id && <Text style={s.confirmHint}>tap to confirm</Text>}
-        </Pressable>
+        <>
+          <Pressable
+            style={[s.candidateRow, selected?.id === candidates[0].id && s.candidateRowSelected]}
+            onPress={() => onSelect(candidates[0])}
+          >
+            <Ionicons
+              name={selected?.id === candidates[0].id ? "checkmark-circle" : "radio-button-off"}
+              size={20}
+              color={selected?.id === candidates[0].id ? "#4CAF50" : colours.primary}
+            />
+            <Text style={s.candidateText}>found: {candidates[0].name}</Text>
+            {selected?.id !== candidates[0].id && <Text style={s.confirmHint}>tap to confirm</Text>}
+          </Pressable>
+          {roleMismatchWarning(candidates[0], slot) && (
+            <Text style={s.roleWarning}>⚠️ {roleMismatchWarning(candidates[0], slot)}</Text>
+          )}
+        </>
       )}
 
       {candidates.length > 1 && (
@@ -289,18 +324,22 @@ function SlotReview({ label, expectedName, outcome, onSelect, onRetry }: {
             </Text>
           </View>
           {candidates.map((d) => (
-            <Pressable
-              key={d.id}
-              style={[s.candidateRow, selected?.id === d.id && s.candidateRowSelected]}
-              onPress={() => onSelect(d)}
-            >
-              <Ionicons
-                name={selected?.id === d.id ? "checkmark-circle" : "radio-button-off"}
-                size={20}
-                color={selected?.id === d.id ? "#4CAF50" : colours.primary}
-              />
-              <Text style={s.candidateText}>{d.name} · signal {d.rssi ?? "?"}</Text>
-            </Pressable>
+            <View key={d.id}>
+              <Pressable
+                style={[s.candidateRow, selected?.id === d.id && s.candidateRowSelected]}
+                onPress={() => onSelect(d)}
+              >
+                <Ionicons
+                  name={selected?.id === d.id ? "checkmark-circle" : "radio-button-off"}
+                  size={20}
+                  color={selected?.id === d.id ? "#4CAF50" : colours.primary}
+                />
+                <Text style={s.candidateText}>{d.name} · signal {d.rssi ?? "?"}</Text>
+              </Pressable>
+              {roleMismatchWarning(d, slot) && (
+                <Text style={s.roleWarning}>⚠️ {roleMismatchWarning(d, slot)}</Text>
+              )}
+            </View>
           ))}
         </View>
       )}
@@ -359,4 +398,5 @@ const s = StyleSheet.create({
   candidateRowSelected: { borderColor: "#4CAF50", backgroundColor: "#F0FAF4" },
   candidateText: { fontSize: 13, color: colours.textPrimary, flex: 1 },
   confirmHint: { fontSize: 11, color: colours.primary, fontWeight: "600" },
+  roleWarning: { fontSize: 11, color: "#E65100", marginTop: 2, marginLeft: 4 },
 });

@@ -127,6 +127,29 @@ FILES
 - No changes needed: src/services/BLEService.ts, src/contexts/IMUContext.tsx
   -- existing scan()/connect() are reused as-is.
 
+ADDENDUM -- finalized naming convention + validation layer
+------------------------------------------------------------
+Pilot units get renamed to: s'pot_<role>_<code>.<batch>-<n>, e.g.
+s'pot_top_0048.05-08 / s'pot_bot_0048.05-08 (role = top/bot, code = 4-digit
+kit id meant to be unique, batch = 2-digit batch number, n = trailing 2
+digits). This didn't require changing the matching logic above -- exact
+string equality already works with any name format -- but a validation
+layer was added on top of it since the new format is self-describing:
+
+- src/lib/spotNaming.ts: parseSpotName() parses the convention (accepts
+  either a straight or curly apostrophe, since it's hand-typed into
+  WitMotion's rename tool). Returns null, never throws, on anything that
+  doesn't match -- callers treat that as "not parseable," not an error.
+- QRPairModal.tsx: for each matched candidate, warns (non-blocking) if its
+  parsed role disagrees with the slot it's being reviewed for (e.g. a
+  "bot"-named device turning up in the "top" review), and separately warns
+  if the confirmed top/bottom pair's 4-digit kit codes don't match. Neither
+  warning blocks pairing -- the exact-name match already found the device
+  for a reason, so this is a second pair of eyes, not a gate.
+- witmotion_pairing_tool.py: mirrors the same two checks at registration
+  time (role vs role_label, top/bottom kit-code match) so a mismatch gets
+  caught before a QR is ever printed, not just live at the event.
+
 VERIFICATION
 ------------
 1. Run the fixed Python script against a couple of real sensors, confirm

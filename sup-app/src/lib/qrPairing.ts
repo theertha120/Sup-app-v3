@@ -2,7 +2,7 @@
  * qrPairing.ts
  *
  * Decodes the QR payload printed by scripts/witmotion_pairing_tool.py:
- *   {"pair_id": 7, "top": "S07-TOP", "bottom": "S07-BTM"}
+ *   {"pair_id": 7, "top": "s'pot_top_0007.05-08", "bottom": "s'pot_bot_0007.05-08"}
  *
  * "top"/"bottom" are the s'pots' advertised BLE local names — NOT MAC
  * addresses. iOS never exposes real Bluetooth MAC addresses to any app
@@ -13,6 +13,9 @@
  * The exact name format isn't assumed anywhere in this file or in
  * BLEService.ts's scan() — whatever each sensor gets renamed to (see the
  * pilot provisioning step) is matched verbatim, no prefix/pattern check.
+ * spotNaming.ts separately parses the s'pot_<role>_<code>.<batch>-<n>
+ * convention for validation warnings (role/kit-code mismatches) — that's a
+ * sanity-check layer on top of this exact-match logic, not a replacement.
  */
 
 export interface PairingCode {

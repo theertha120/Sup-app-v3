@@ -87,6 +87,7 @@ import asyncio
 import csv
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -120,6 +121,34 @@ NAME_FILTER = None
 # it here to cut noise from phones/earbuds/etc. Leave as None if unsure —
 # not all peripherals include the service UUID in the advertisement itself.
 SERVICE_UUID_FILTER = None   # e.g. "0000ffe5-0000-1000-8000-00805f9b34fb"
+
+
+# ----------------------------- Naming convention ------------------------------
+# Physical s'pots get renamed (via WitMotion's config app) to:
+#   s'pot_top_0048.05-08 / s'pot_bot_0048.05-08
+# i.e. s'pot_<role>_<4-digit kit code>.<2-digit batch>-<2 digits>. This is a
+# sanity-check layer on top of the exact-name matching the app and this
+# script's used_names collision guard already do -- parsing here never blocks
+# anything, it just lets select_sensor() warn if a device's parsed role
+# doesn't match the slot you're registering it for, or if a pair's two
+# halves don't share the same kit code. Mirrors src/lib/spotNaming.ts.
+SPOT_NAME_RE = re.compile(r"^s['’]pot_(top|bot)_(\d{4})\.(\d{2})-(\d{2})$", re.IGNORECASE)
+
+
+def parse_spot_name(name):
+    """Returns {"role": "top"|"bottom", "code", "batch", "suffix"} or None
+    if the name doesn't match the s'pot_<role>_<code>.<batch>-<n> convention
+    (e.g. a unit that hasn't been renamed from its factory default yet)."""
+    m = SPOT_NAME_RE.match(name.strip())
+    if not m:
+        return None
+    role_token, code, batch, suffix = m.groups()
+    return {
+        "role": "top" if role_token.lower() == "top" else "bottom",
+        "code": code,
+        "batch": batch,
+        "suffix": suffix,
+    }
 
 
 # ----------------------------- Helpers ---------------------------------------
@@ -304,6 +333,24 @@ async def select_sensor(role_label, used_ids, used_names):
             if confirm != "y":
                 continue
 
+        parsed = parse_spot_name(name)
+        if parsed is None:
+            print(
+                f"\n  NOTE: '{name}' doesn't match the s'pot_<role>_<code>.<batch>-<n> "
+                f"naming convention — has this unit been renamed yet in WitMotion's "
+                f"config app? Proceeding anyway; the QR/app match by exact name "
+                f"regardless of format."
+            )
+        elif parsed["role"] != role_label.lower():
+            print(
+                f"\n  *** WARNING: '{name}' looks like a {parsed['role'].upper()} sensor "
+                f"by its name, but you're registering it as {role_label}. ***\n"
+                f"  Double-check you grabbed the right physical unit before confirming.\n"
+            )
+            confirm = input(f"Proceed anyway? (y/N): ").strip().lower()
+            if confirm != "y":
+                continue
+
         confirm = input(f"Confirm: {role_label} = {name} ({address})? (Y/n): ").strip().lower()
         if confirm in ("", "y"):
             return {"id": address, "name": name, "mfg_data": mfg_data}
@@ -350,6 +397,16 @@ async def main():
         bottom = await select_sensor("BOTTOM", used_ids, used_names)
         used_ids.add(bottom["id"])
         used_names.add(bottom["name"])
+
+        top_parsed = parse_spot_name(top["name"])
+        bottom_parsed = parse_spot_name(bottom["name"])
+        if top_parsed and bottom_parsed and top_parsed["code"] != bottom_parsed["code"]:
+            print(
+                f"\n  *** WARNING: kit codes don't match — TOP is {top_parsed['code']}, "
+                f"BOTTOM is {bottom_parsed['code']}. ***\n"
+                f"  These might not be from the same physical kit. Double-check before "
+                f"continuing — this pair will still be logged and QR'd as entered.\n"
+            )
 
         record = {
             "pair_id": next_pair_id,

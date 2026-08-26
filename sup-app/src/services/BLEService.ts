@@ -122,9 +122,10 @@ class BLEService {
    * since the FFE5 service is only advertised by s'pot firmware. There used
    * to also be a `device.name?.startsWith("WT")` check here, back when every
    * unit shipped with the factory-default "WT901BLE.." name — but pilot
-   * units now get renamed to unique per-pair names (e.g. "S01-TOP") to fix
-   * a BLE-name-collision issue, so a hardcoded prefix would silently exclude
-   * every renamed sensor. Don't reintroduce a name-prefix filter here.
+   * units now get renamed to unique per-kit names (e.g. "s'pot_top_0048.05-08",
+   * see src/lib/spotNaming.ts) to fix a BLE-name-collision issue, so a
+   * hardcoded prefix would silently exclude every renamed sensor. Don't
+   * reintroduce a name-prefix filter here.
    */
   scan(onDeviceFound: (device: Device) => void, timeoutMs = 10000): void {
     if (this.isScanning) return;
