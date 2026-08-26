@@ -15,7 +15,6 @@ import { colours } from "../../theme/colours";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import type { User } from "../../constants/env";
 import { supabase } from "../../src/lib/supabase";
-import { hasGoodPosture, updateStreak } from "../../src/services/posture/streakService";
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
   subscribeToProfileUpdates,

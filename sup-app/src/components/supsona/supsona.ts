@@ -85,3 +85,23 @@ export function parseSupsona(avatar: string | undefined | null): Supsona | null 
 export function isSupsonaAvatar(avatar: string | undefined | null): boolean {
   return Boolean(avatar && typeof avatar === "string" && avatar.startsWith(SUPSONA_JSON_PREFIX));
 }
+
+function pickRandom<T>(options: readonly T[]): T {
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+/** Builds a supsona with a random option for every field. */
+export function randomSupsona(): Supsona {
+  return {
+    faceShape: pickRandom(FACE_SHAPES),
+    hairStyle: pickRandom(HAIR_STYLES),
+    hairColour: pickRandom(HAIR_COLOURS),
+    skinTone: pickRandom(SKIN_TONES),
+    shirtColour: pickRandom(SHIRT_COLOURS),
+  };
+}
+
+/** Serialised random supsona, ready to store directly in `avatar_url`. */
+export function randomAvatarUrl(): string {
+  return stringifySupsona(randomSupsona());
+}

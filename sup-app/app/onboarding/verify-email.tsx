@@ -6,6 +6,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { createDefaultBehaviorProfile } from "@/src/services/user/behaviorProfileService";
+import { randomAvatarUrl } from "@/src/components/supsona/supsona";
 import { useFonts } from "expo-font";
 
 const CODE_LENGTH = 6;
@@ -50,7 +51,7 @@ export default function VerifyEmailScreen() {
         id: user.id,
         name: pendingSignup.firstName,
         last_name: pendingSignup.lastName,
-        avatar_url: null,
+        avatar_url: randomAvatarUrl(),
         current_streak: 0,
         weekly_avg_points: 0,
         how_heard: answers.howHeard,
