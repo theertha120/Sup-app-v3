@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/src/lib/supabase";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
+import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
+        if (user) await checkStreakOnLogin(user.id);
       } catch (err) {
         if (!mounted) return;
         setIsAuthenticated(false);
@@ -57,10 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     checkAuth();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session?.user);
       setUserId(session?.user?.id ?? null);
-      if (session?.user) setRegistrationMode(false);
+      if (session?.user) {
+        setRegistrationMode(false);
+        if (event === "SIGNED_IN") checkStreakOnLogin(session.user.id);
+      }
     });
 
     return () => {

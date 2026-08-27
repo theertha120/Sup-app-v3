@@ -14,6 +14,12 @@ import HeaderBar from "@/src/components/ui/HeaderBar";
 import BackgroundBlobs from "./backgroundBlobs";
 import { useAuth } from "@/src/contexts/AuthContext";
 import type { User } from "../../constants/env";
+import { supabase } from "../../src/lib/supabase";
+import ProfileModal from "../../src/components/modals/ProfileModal";
+import {
+  subscribeToProfileUpdates,
+  userProfileToUser,
+} from "../../src/services/user/profileService";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
 import {
   fetchLeaderboardForPeriod,
