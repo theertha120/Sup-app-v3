@@ -19,37 +19,41 @@ import {
   updateCurrentUserProfile,
 } from "../../../src/services/user/profileService";
 import { useToast } from "../../../src/contexts/ToastContext";
-
+import FriendsModal from "../modals/FriendsModal";
+ 
 const PRIMARY_TEXT = "#1D014A";
 const DROPDOWN_BG = "#FFFFFF";
 const DIVIDER = "#CBCBF7";
 const STREAK_COLOUR = "#EC555E";
-
+ 
 interface HeaderBarProps {
   suffix?: string;
   logoSize?: number;
 }
-
+ 
 export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarProps) {
   const router = useRouter();
   const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
   const { logout } = useAuth();
-
+ 
   const [streakDays, setStreakDays] = useState(0);
   const [weeklyPoints, setWeeklyPoints] = useState(0);
   const [username, setUsername] = useState("you");
-
+ 
   // Profile dropdown
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const profileButtonRef = useRef<View>(null);
   const [dropdownY, setDropdownY] = useState(0);
   const [dropdownX, setDropdownX] = useState(0);
-
+ 
   // Username edit modal
   const [editingUsername, setEditingUsername] = useState(false);
   const [draftName, setDraftName] = useState(username);
-
+ 
+  // Friends modal
+  const [friendsModalVisible, setFriendsModalVisible] = useState(false);
+ 
   // Load profile data
   const loadProfile = () => {
     fetchCurrentUserProfileWithStats()
@@ -63,7 +67,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
         console.error("[HeaderBar] Failed to load profile", err);
       });
   };
-
+ 
   useEffect(() => {
     if (!isAuthenticated) {
       setUsername("you");
@@ -73,7 +77,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     }
     loadProfile();
   }, [isAuthenticated]);
-
+ 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
       if (!userId || updatedProfile.id !== userId) return;
@@ -82,10 +86,10 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     });
     return unsubscribe;
   }, [userId]);
-
+ 
   const streakActive = streakDays > 1;
   const streakColor = streakActive ? STREAK_COLOUR : PRIMARY_TEXT;
-
+ 
   const openDropdown = () => {
     profileButtonRef.current?.measure((_fx, _fy, _w, _h, px, py) => {
       setDropdownX(px);
@@ -93,15 +97,15 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
       setDropdownVisible(true);
     });
   };
-
+ 
   const closeDropdown = () => setDropdownVisible(false);
-
+ 
   const handleEditUsername = () => {
     setDraftName(username);
     setEditingUsername(true);
     closeDropdown();
   };
-
+ 
   const handleSaveUsername = async () => {
     const trimmed = draftName.trim();
     if (trimmed.length === 0) {
@@ -120,15 +124,20 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     }
     setEditingUsername(false);
   };
-
+ 
   const handleLogOut = () => {
     closeDropdown();
     logout();
     router.replace("/home");
   };
-
+ 
   const handleSettingsPress = () => {
     router.push("/settings");
+  };
+ 
+  const handleOpenFriends = () => {
+    closeDropdown();
+    setFriendsModalVisible(true);
   };
  
   return (
@@ -141,11 +150,11 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
  
         {/* Icon row */}
         <View style={styles.headerButtons}>
-
+ 
           <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
             <Ionicons name="settings-outline" size={22} color={PRIMARY_TEXT} />
           </Pressable>
-
+ 
           <Pressable
             style={styles.iconButton}
             onPress={() => router.push("/sensor-setup")}
@@ -202,6 +211,14 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
  
                 <View style={styles.divider} />
  
+                {/* Friends */}
+                <Pressable style={styles.dropdownRow} onPress={handleOpenFriends}>
+                  <Text style={styles.dropdownLabel}>friends</Text>
+                  <Ionicons name="people-outline" size={18} color={PRIMARY_TEXT} />
+                </Pressable>
+ 
+                <View style={styles.divider} />
+ 
                 {/* Log out */}
                 <Pressable style={styles.dropdownRow} onPress={handleLogOut}>
                   <Text style={styles.dropdownLogout}>log out</Text>
@@ -211,6 +228,13 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+ 
+      {/* ── Friends modal (search / requests / friends list) ── */}
+      <FriendsModal
+        visible={friendsModalVisible}
+        onClose={() => setFriendsModalVisible(false)}
+        currentUserId={userId ?? null}
+      />
  
       {/* ── Username edit modal ── */}
       <Modal
