@@ -11,7 +11,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 import HeaderBar from "../src/components/ui/HeaderBar";
-import BackgroundBlobs from "./(tabs)/backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useAuth } from "../src/contexts/AuthContext";
 import type { User } from "../constants/env";
 import { fetchLeaderboardByStreak } from "../src/services/social/leaderboardService";

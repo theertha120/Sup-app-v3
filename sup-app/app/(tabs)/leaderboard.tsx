@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import BackgroundBlobs from "./backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useAuth } from "@/src/contexts/AuthContext";
 import type { User } from "../../constants/env";
 import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
