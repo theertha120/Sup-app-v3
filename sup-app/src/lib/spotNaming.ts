@@ -2,11 +2,17 @@
  * spotNaming.ts
  *
  * Parses the s'pot physical naming convention used for BLE advertised
- * (local) names, e.g.:
- *   s'pot_top_0048.05-08
- *   s'pot_bot_0048.05-08
+ * (local) names. The apostrophe and the "."/"-" separators from the
+ * original convention aren't reliably typeable/supported when renaming via
+ * WitMotion's app, so the convention actually used in the field is plain
+ * underscores throughout, e.g.:
+ *   spot_top_0048_05_01
+ *   spot_bot_0048_05_01
+ * The apostrophe and "."/"-" separators are still accepted too (in case an
+ * earlier-provisioned unit used them), so this parser is deliberately
+ * forgiving about punctuation rather than tied to one exact convention.
  *
- * Breakdown: s'pot_<role>_<4-digit kit code>.<2-digit batch>-<2 digits>
+ * Breakdown: [s']pot_<role>_<4-digit kit code>[._]<2-digit batch>[-_]<2 digits>
  *   - role  — "top" or "bot", which half of the kit this sensor is
  *   - code  — 4-digit kit identifier. Meant to be unique per kit, but the
  *             actual protection against a duplicate is the QR pairing
@@ -32,13 +38,14 @@ export interface ParsedSpotName {
   role: SpotRole;
   code: string; // 4-digit kit code, e.g. "0048"
   batch: string; // 2-digit batch number, e.g. "05"
-  suffix: string; // trailing 2 digits, e.g. "08"
+  suffix: string; // trailing 2 digits, e.g. "01"
 }
 
-// Accepts either a straight (') or curly (’) apostrophe — this gets typed
-// by hand into WitMotion's rename tool, so either could end up in the
-// actual BLE name depending on who's provisioning and what autocorrected.
-const SPOT_NAME_RE = /^s['’]pot_(top|bot)_(\d{4})\.(\d{2})-(\d{2})$/i;
+// Apostrophe is optional (either straight ' or curly ’, or dropped entirely
+// — BLE rename tools/hand-typing often can't produce it). The code/batch and
+// batch/suffix separators accept "." or "-" (the original convention) as
+// well as "_" (what renaming via WitMotion's app actually produces).
+const SPOT_NAME_RE = /^s?['’]?pot_(top|bot)_(\d{4})[._](\d{2})[-_](\d{2})$/i;
 
 /** Parses a s'pot's advertised name. Returns null (never throws) if it doesn't match the convention. */
 export function parseSpotName(name: string): ParsedSpotName | null {
