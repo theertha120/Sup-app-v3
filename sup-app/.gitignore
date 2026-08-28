@@ -42,3 +42,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local output from scripts/witmotion_pairing_tool.py (QR images, pairing logs)
+/pairing_output
+__pycache__/
