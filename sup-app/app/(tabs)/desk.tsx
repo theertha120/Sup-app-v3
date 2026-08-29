@@ -412,7 +412,7 @@ export default function DeskScreen() {
       setUpdateMessage(result.message);
       setUpdateColor(result.color);
     } catch {
-      setUpdateMessage("couldn't reach s'kipper right now — try again in a moment!");
+      setUpdateMessage("couldn't reach s'kipper right now, try again in a moment!");
       setUpdateColor("yellow");
     } finally {
       setIsLoadingUpdate(false);
@@ -434,7 +434,7 @@ export default function DeskScreen() {
       setSummaryMessage(result.message);
       setSummaryColor(result.color);
     } catch {
-      setSummaryMessage("great session! keep up the good work — every minute of good posture counts.");
+      setSummaryMessage("great session! keep up the good work, every minute of good posture counts.");
       setSummaryColor("yellow");
     } finally {
       setIsLoadingSummary(false);
