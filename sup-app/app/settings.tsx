@@ -20,6 +20,7 @@ import {
 } from "../src/services/user/behaviorProfileService";
 
 import { useTutorial } from "@/src/contexts/TutorialContext";
+import React from "react";
 
 const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
 
@@ -165,10 +166,6 @@ export default function SettingsScreen() {
             setTutorialStep("connect-tip");
             router.push("/sensor-setup" as any);
           }
-        }}
-        onSkip={() => {
-          setShowCoachingModal(false);
-          showToast("Using default coaching setup", "success");
         }}
         onCancel={() => setShowCoachingModal(false)}
       />
