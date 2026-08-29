@@ -4,7 +4,7 @@ import { useFonts } from "expo-font";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import BackgroundBlobs from "../(tabs)/backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { supabase } from "../../src/lib/supabase";
 
 export default function IntroScreen() {

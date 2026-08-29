@@ -17,7 +17,7 @@ import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import BackgroundBlobs from "./backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import {
   fetchPosturePageRows,

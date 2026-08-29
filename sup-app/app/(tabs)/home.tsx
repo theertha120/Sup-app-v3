@@ -16,9 +16,7 @@ import {
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 import { useToast } from "../../src/contexts/ToastContext";
-import CoachingSetupModal from "../../src/components/onboarding/CoachingSetupModal";
-import { fetchCurrentBehaviorProfile } from "../../src/services/user/behaviorProfileService";
-import BackgroundBlobs from "./backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
@@ -63,7 +61,6 @@ export default function HomeScreen() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showCoachingSetupModal, setShowCoachingSetupModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   // ─── Bubble entrance animations ────────────────────────────────────────────
@@ -172,18 +169,11 @@ export default function HomeScreen() {
     if (!isAuthenticated) {
       setCurrentUser(null);
       setShowProfileModal(false);
-      setShowCoachingSetupModal(false);
       setIsLoadingProfile(true);
       return;
     }
 
-    Promise.all([
-      loadProfile(),
-      fetchCurrentBehaviorProfile()
-        .then((profile) => setShowCoachingSetupModal(profile == null))
-        .catch(() => setShowCoachingSetupModal(false)),
-    ]);
-
+    loadProfile();
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -240,16 +230,6 @@ export default function HomeScreen() {
   const handleSaveProfile = async (updatedUser: User) => {
     setCurrentUser(updatedUser);
     showToast("profile glow-up saved", "success");
-  };
-
-  const handleCoachingSetupComplete = () => {
-    setShowCoachingSetupModal(false);
-    showToast("coaching setup saved", "success");
-  };
-
-  const handleCoachingSetupSkip = () => {
-    setShowCoachingSetupModal(false);
-    showToast("using default coaching setup", "success");
   };
 
   const handleUsernameChange = async (newName: string) => {

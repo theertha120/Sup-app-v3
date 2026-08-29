@@ -18,7 +18,7 @@ import React, { useRef, useCallback, useState, useEffect } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStepCount } from "../../src/hooks/useStepCount";
-import BackgroundBlobs from "./backgroundBlobs";
+import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useToast } from "@/src/contexts/ToastContext";
