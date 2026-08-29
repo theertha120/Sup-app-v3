@@ -387,7 +387,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (!sessionId) return;
 
     const tickCount = sessionShsTickCountRef.current;
-    const todayDK   = new Date().toISOString().slice(0, 10);
+    const todayDK   = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
     const uid       = userIdRef.current;
 
     postureSync.endSession(sessionId, {

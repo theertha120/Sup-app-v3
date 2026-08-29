@@ -201,19 +201,22 @@ export async function upsertDailyRollup(
  */
 export async function rebuildDailyFromSessions(
   userId: string,
-  dateKey: string  // YYYY-MM-DD (UTC)
+  dateKey: string  // YYYY-MM-DD (SGT)
 ): Promise<void> {
   try {
-    const nextDay = new Date(dateKey);
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-    const nextDayKey = nextDay.toISOString().slice(0, 10);
+    // dateKey is an SGT calendar date (SGT = UTC+8, no DST).
+    // The SGT day [00:00, 24:00) maps to this UTC range:
+    const startUtc = new Date(`${dateKey}T00:00:00.000Z`);
+    startUtc.setUTCHours(startUtc.getUTCHours() - 8);
+    const endUtc = new Date(startUtc);
+    endUtc.setUTCDate(endUtc.getUTCDate() + 1);
 
     const { data: sessions, error } = await supabase
       .from("posture_sessions")
       .select("total_duration_ms, state_totals, avg_shs, min_shs, max_cpl")
       .eq("user_id", userId)
-      .gte("started_at", `${dateKey}T00:00:00.000Z`)
-      .lt("started_at",  `${nextDayKey}T00:00:00.000Z`)
+      .gte("started_at", startUtc.toISOString())
+      .lt("started_at",  endUtc.toISOString())
       .not("ended_at", "is", null);
 
     if (error) { console.warn("[postureSync] rebuildDailyFromSessions query failed", error); return; }
