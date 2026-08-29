@@ -8,6 +8,7 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   Alert,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -19,6 +20,8 @@ import {
   updateCurrentUserProfile,
 } from "../../../src/services/user/profileService";
 import { useToast } from "../../../src/contexts/ToastContext";
+import { useTutorial } from "../../../src/contexts/TutorialContext";
+import { colours } from "../../../theme/colours";
 import FriendsModal from "../modals/FriendsModal";
  
 const PRIMARY_TEXT = "#1D014A";
@@ -36,6 +39,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
   const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
   const { logout } = useAuth();
+  const { tutorialStep, dismissTutorial } = useTutorial();
  
   const [streakDays, setStreakDays] = useState(0);
   const [weeklyPoints, setWeeklyPoints] = useState(0);
@@ -178,7 +182,28 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
           </View>
         </View>
       </View>
- 
+
+      {tutorialStep === "add-friends-tip" && (
+        <View style={styles.tutorialTipAnchor}>
+          <View style={styles.tutorialTipCaret} />
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                tap the profile icon at the headerbar and pick 'friends' to search for people and add them.
+              </Text>
+              <Pressable onPress={dismissTutorial}>
+                <Text style={styles.tutorialTipNext}>got it!</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* ── Profile dropdown ── */}
       <Modal
         visible={dropdownVisible}
@@ -307,6 +332,58 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
+  },
+
+  /* Tutorial tip — anchored under the profile icon (last icon, right-aligned) */
+  tutorialTipAnchor: {
+    alignItems: "flex-end",
+    paddingHorizontal: 24,
+    marginBottom: 14,
+  },
+  tutorialTipCaret: {
+    width: 14,
+    height: 14,
+    marginRight: 12,
+    marginBottom: -7,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 3,
+    transform: [{ rotate: "45deg" }],
+  },
+  tutorialTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    maxWidth: 260,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
 
   dropdown: {
