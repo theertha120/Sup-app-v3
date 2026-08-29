@@ -76,7 +76,7 @@ You are a friendly posture coach reviewing a user's last 7 days of posture track
 ${summary}
 
 Respond in EXACTLY this format with no other text:
-Answer 1: <A 2-3 sentence personalised insight based on trends across the 7 days. Warm, motivating tone. No bullet points.>
+Answer 1: <A 2-3 sentence personalised insight based on trends across the 7 days. Warm, motivating tone. No bullet points. No em dashes.>
 Answer 2: <Concise sentences summarising the user's posture status over the past 7 days. This will be used to generate future insights so be specific about the data and progress over the past 7 days for the different statistics.>
   `.trim();
 }
