@@ -58,6 +58,8 @@ import {
   INTERVENTION_MESSAGES,
   SHS_RATES,
   SHS_GRACE_PERIODS_MS,
+  DEFAULT_SAGITTAL_SIGN,
+  DEFAULT_LATERAL_SIGN,
 } from "../lib/imuParser";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 
@@ -73,6 +75,14 @@ const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
+
+// Minimum raw angle delta (deg) during calibration steps 2 (lean forward) and
+// 4 (lean right) before we trust its SIGN as evidence of the kit's mounting
+// orientation. Below this, the delta is close enough to sensor noise that a
+// "backwards" reading could just be an unclear/incomplete lean rather than a
+// genuinely reversed s'pot — so we keep the previous/default sign and flag
+// the step as low-confidence instead (CalibrationModal prompts to redo it).
+const MIN_RELIABLE_ORIENTATION_DEG = 5;
 
 // ── Cumulative Postural Load (CPL) ────────────────────────────────────────────
 //
@@ -122,6 +132,14 @@ export interface CalibrationState {
   countdown: number | null;
   stepComplete: boolean[];
   isComplete: boolean;
+  /**
+   * Set to the step number (2 or 4) right after a capture whose lean was too
+   * small to reliably tell which way the s'pot kit is oriented — the sign
+   * used for that axis falls back to the previous/default value instead.
+   * Cleared to null whenever a new step starts. CalibrationModal uses this
+   * to prompt "lean further and redo this step."
+   */
+  lowConfidenceStep: number | null;
 }
 
 export interface InterventionAlert {
@@ -196,6 +214,7 @@ const defaultCalibration: CalibrationState = {
   currentStep: null, countdown: null,
   stepComplete: [false, false, false, false, false],
   isComplete: false,
+  lowConfidenceStep: null,
 };
 
 interface EMAState {
@@ -269,7 +288,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     neutral: NeutralOffset | null;
     maxForward: number | null; maxBackward: number | null;
     maxRight: number | null;   maxLeft: number | null;
-  }>({ neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null });
+    // Detected during steps 2/4 from the sign of the raw lean — null until a
+    // reliable (>= MIN_RELIABLE_ORIENTATION_DEG) lean has been captured.
+    sagittalSign: 1 | -1 | null;
+    lateralSign:  1 | -1 | null;
+  }>({
+    neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null,
+    sagittalSign: null, lateralSign: null,
+  });
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
 
@@ -581,7 +607,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // ── 5-position calibration ────────────────────────────────────────────────
 
   const startCalibrationStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => {
-    setCalibration((prev) => ({ ...prev, currentStep: step, countdown: 3 }));
+    // Clear any stale low-confidence warning from a previous attempt at this
+    // (or another) step — it only applies to the capture that's about to happen.
+    setCalibration((prev) => ({ ...prev, currentStep: step, countdown: 3, lowConfidenceStep: null }));
     const t1 = setTimeout(() => setCalibration((prev) => ({ ...prev, countdown: 2 })), 1000);
     const t2 = setTimeout(() => setCalibration((prev) => ({ ...prev, countdown: 1 })), 2000);
 
@@ -605,6 +633,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       const bottomPitch = avg((s) => s.bottom.angle.pitch);
       const bottomRoll  = avg((s) => s.bottom.angle.roll);
 
+      // Set when a step's lean was too small to trust its sign as evidence
+      // of mounting orientation — see MIN_RELIABLE_ORIENTATION_DEG above.
+      let lowConfidence = false;
+
       if (step === 1) {
         const offset: NeutralOffset = { topPitch, topRoll, bottomPitch, bottomRoll };
         captureRef.current.neutral   = offset;
@@ -617,7 +649,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
         const bRoll = neutral ? bottomRoll - neutral.bottomRoll : bottomRoll;
-        captureRef.current.maxForward  = Math.max(Math.abs(tRoll - bRoll), 10);
+        const rawDiff = tRoll - bRoll;
+        captureRef.current.maxForward  = Math.max(Math.abs(rawDiff), 10);
+
+        // Orientation detection: in the DEFAULT_SAGITTAL_SIGN mounting, a real
+        // forward lean makes (topRoll - bottomRoll) negative (see imuParser.ts
+        // classifySpinePosture doc comment). If it comes out positive instead,
+        // this kit's sagittal axis is mounted the other way around for this
+        // session — flip the sign we'll use instead of forcing the user to
+        // physically remount the kit.
+        if (Math.abs(rawDiff) >= MIN_RELIABLE_ORIENTATION_DEG) {
+          captureRef.current.sagittalSign = rawDiff < 0 ? -1 : 1;
+        } else {
+          lowConfidence = true;
+        }
       } else if (step === 3) {
         const neutral = captureRef.current.neutral;
         const tRoll = neutral ? topRoll    - neutral.topRoll    : topRoll;
@@ -627,7 +672,16 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const neutral = captureRef.current.neutral;
         const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
         const bPitch = neutral ? bottomPitch - neutral.bottomPitch : bottomPitch;
-        captureRef.current.maxRight    = Math.max(Math.abs(tPitch - bPitch), 5);
+        const rawDiff = tPitch - bPitch;
+        captureRef.current.maxRight    = Math.max(Math.abs(rawDiff), 5);
+
+        // Same idea as step 2, for the lateral axis: in the DEFAULT_LATERAL_SIGN
+        // mounting, leaning right makes (topPitch - bottomPitch) positive.
+        if (Math.abs(rawDiff) >= MIN_RELIABLE_ORIENTATION_DEG) {
+          captureRef.current.lateralSign = rawDiff > 0 ? 1 : -1;
+        } else {
+          lowConfidence = true;
+        }
       } else if (step === 5) {
         const neutral = captureRef.current.neutral;
         const tPitch = neutral ? topPitch    - neutral.topPitch    : topPitch;
@@ -640,11 +694,16 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         updated[step - 1] = true;
         const allDone = updated.every(Boolean);
         if (allDone) {
-          const { neutral, maxForward, maxBackward, maxRight, maxLeft } = captureRef.current;
+          const { neutral, maxForward, maxBackward, maxRight, maxLeft, sagittalSign, lateralSign } = captureRef.current;
           if (neutral && maxForward !== null && maxBackward !== null && maxRight !== null && maxLeft !== null) {
             const baseline: ClinicalBaseline = {
               neutral, maxForwardDeg: maxForward, maxBackwardDeg: maxBackward,
               maxRightDeg: maxRight, maxLeftDeg: maxLeft, capturedAt: new Date().toISOString(),
+              // Fall back to the historical defaults if steps 2/4 never got a
+              // reliable lean (e.g. user skipped straight through) — matches
+              // the app's pre-detection behaviour rather than guessing.
+              sagittalSign: sagittalSign ?? DEFAULT_SAGITTAL_SIGN,
+              lateralSign:  lateralSign  ?? DEFAULT_LATERAL_SIGN,
             };
             baselineRef.current = baseline;
             setClinicalBaseline(baseline);
@@ -652,7 +711,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
               .catch((e) => console.warn("[IMUContext] Failed to save baseline:", e));
           }
         }
-        return { ...prev, stepComplete: updated, isComplete: allDone, countdown: 0, currentStep: allDone ? null : step };
+        return {
+          ...prev, stepComplete: updated, isComplete: allDone, countdown: 0,
+          currentStep: allDone ? null : step,
+          lowConfidenceStep: lowConfidence ? step : null,
+        };
       });
 
       setTimeout(() =>
@@ -663,7 +726,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetCalibration = useCallback(() => {
-    captureRef.current     = { neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null };
+    captureRef.current = {
+      neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null,
+      sagittalSign: null, lateralSign: null,
+    };
     baselineRef.current    = null; neutralOffsetRef.current = null;
     emaRef.current.initialised = false;
     setClinicalBaseline(null); setIsNeutralCalibrated(false);

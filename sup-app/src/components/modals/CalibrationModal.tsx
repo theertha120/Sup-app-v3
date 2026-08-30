@@ -285,6 +285,9 @@ export default function CalibrationModal({ visible, onClose }: Props) {
   const isCaptured = stepsCaptured[viewingStep - 1];
   const stepDone   = calibration.stepComplete[viewingStep - 1];
   const allDone    = calibration.isComplete;
+  // Only ever set for steps 2/4 — the lean was too small to reliably tell
+  // which way this s'pot kit is mounted (see IMUContext.tsx's startCalibrationStep).
+  const lowConfidence = calibration.lowConfidenceStep === viewingStep;
 
   useEffect(() => {
     if (isDone) {
@@ -427,13 +430,26 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                 {/* Action area */}
                 {isCaptured ? (
                   <View style={s.capturedContainer}>
-                    <View style={s.capturedRow}>
-                      <Ionicons name="checkmark-circle" size={28} color="#4CAF50" />
-                      <View>
-                        <Text style={s.capturedText}>reading saved</Text>
-                        <Text style={s.capturedSub}>you can move freely now</Text>
+                    {lowConfidence ? (
+                      <View style={s.capturedRowWarning}>
+                        <Ionicons name="warning-outline" size={28} color="#E65100" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.capturedTextWarning}>that lean looked pretty small</Text>
+                          <Text style={s.capturedSubWarning}>
+                            we couldn't clearly tell which way your s'pots are facing from that —
+                            redo this step and lean further so we can tell for sure.
+                          </Text>
+                        </View>
                       </View>
-                    </View>
+                    ) : (
+                      <View style={s.capturedRow}>
+                        <Ionicons name="checkmark-circle" size={28} color="#4CAF50" />
+                        <View>
+                          <Text style={s.capturedText}>reading saved</Text>
+                          <Text style={s.capturedSub}>you can move freely now</Text>
+                        </View>
+                      </View>
+                    )}
                     <View style={s.actionRow}>
                       <Pressable style={s.backBtn} onPress={handleRedo}>
                         <Text style={s.backBtnText}>redo this step</Text>
@@ -530,6 +546,14 @@ const s = StyleSheet.create({
   },
   capturedText: { fontSize: 15, fontWeight: "700", color: "#2E7D32" },
   capturedSub:  { fontSize: 12, color: "#4CAF50", marginTop: 2 },
+
+  capturedRowWarning: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 12, paddingHorizontal: 16,
+    backgroundColor: "#FFF3E0", borderRadius: 14,
+  },
+  capturedTextWarning: { fontSize: 15, fontWeight: "700", color: "#E65100" },
+  capturedSubWarning:  { fontSize: 12, color: "#B25400", marginTop: 2, lineHeight: 17 },
 
   actionRow:    { flexDirection: "row", gap: 10, marginTop: 12 },
   backBtn:      { flex: 1, paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center" },
