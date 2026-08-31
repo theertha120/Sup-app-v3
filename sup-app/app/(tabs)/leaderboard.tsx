@@ -6,13 +6,17 @@ import {
   Pressable,
   Animated,
   Dimensions,
+  Image,
 } from "react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useFonts } from "expo-font";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useTutorial } from "@/src/contexts/TutorialContext";
+import { colours } from "@/theme/colours";
 import type { User } from "../../constants/env";
 import { supabase } from "../../src/lib/supabase";
 import ProfileModal from "../../src/components/modals/ProfileModal";
@@ -30,6 +34,11 @@ import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
 
+// Matches the floating tab bar (LiquidGlass): height 72, offset 25 from the
+// bottom, plus the device's safe-area inset — see stats.tsx for the same pattern.
+const NAV_BAR_HEIGHT = 72;
+const NAV_BOTTOM_OFFSET = 25;
+
 // Fixed window for the at-a-glance summary screen. The full, filterable
 // leaderboard (Day / Week / Month / All time) lives on /leaderboard-full.
 const SUMMARY_PERIOD = "day" as const;
@@ -45,7 +54,10 @@ const BADGE_COLORS = {
 export default function LeaderboardScreen() {
   const router = useRouter();
   const { userId } = useAuth();
+  const { tutorialStep, setTutorialStep } = useTutorial();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const scrollPaddingBottom = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
 
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../../assets/fonts/Agrandir-Regular.otf"),
@@ -96,8 +108,30 @@ export default function LeaderboardScreen() {
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
+      >
         <HeaderBar />
+
+        {tutorialStep === "community-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                here's the summarised view of the leaderboard: your top scorers at a glance. tap 'see full leaderboard' below to see everyone and where you're placed.
+              </Text>
+              <Pressable onPress={() => setTutorialStep("add-friends-tip")}>
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
@@ -172,8 +206,6 @@ export default function LeaderboardScreen() {
             </Pressable>
           </>
         )}
-
-        <View style={{ height: 24 }} />
       </ScrollView>
     </Animated.View>
   );
@@ -252,6 +284,46 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     textAlign: "center",
     marginTop: 40,
+  },
+
+  /* Tutorial tip */
+  tutorialTip: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tutorialTipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tutorialTipTextWrap: {
+    flex: 1,
+  },
+  tutorialTipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  tutorialTipNext: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    fontWeight: "700",
+    color: colours.primary,
+    textDecorationLine: "underline",
   },
 
   /* Podium */
