@@ -322,7 +322,7 @@ export const POSTURE_LABELS: Record<PostureState, string> = {
   transition:   "slight forward shift",
   forward_lean: "leaning forward",
   slouched:     "spine rounding",
-  severe:       "high spinal load",
+  severe:       "high s'train",
   tilted_left:  "shifting left",
   tilted_right: "shifting right",
 };
@@ -337,7 +337,7 @@ export const POSTURE_CUES: Record<PostureState, string> = {
   slouched:
     "your upper back is rounding. try a gentle chest lift — imagine a thread pulling the crown of your head upward.",
   severe:
-    "your spinal load is elevated. a small position change now significantly reduces disc pressure.",
+    "you're in a significantly slouched position. a small position change now significantly reduces disc pressure.",
   tilted_left:
     "your weight is shifting left. try redistributing evenly across both sit bones.",
   tilted_right:
@@ -345,10 +345,10 @@ export const POSTURE_CUES: Record<PostureState, string> = {
 };
 
 export const SEVERITY_DESCRIPTIONS: Record<PostureSeverity, string> = {
-  minimal:  "minimal spinal load — neutral curve maintained.",
-  mild:     "mild spinal loading — a small adjustment will help.",
-  moderate: "moderate loading — your disc pressure is elevated.",
-  severe:   "high spinal loading — adjust your position now.",
+  minimal:  "minimal deviation — neutral curve maintained.",
+  mild:     "mild deviation — a small adjustment will help.",
+  moderate: "moderate deviation — your disc pressure is elevated.",
+  severe:   "significant deviation — adjust your position now.",
 };
 
 export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
@@ -365,7 +365,7 @@ export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
     cue:   "sit tall — imagine a thread pulling the crown of your head upward. your discs will thank you.",
   },
   severe: {
-    title: "high spinal load — please adjust now",
+    title: "high s'train — please adjust now",
     body:  "your spine is under significant load and your posterior ligaments are approaching their elastic limit.",
     cue:   "shift your position now — even a small change redistributes the load significantly.",
   },

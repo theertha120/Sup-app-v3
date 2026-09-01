@@ -32,7 +32,7 @@ You are s'kipper, the friendly posture coach in the s'up posture tracking app. T
 Session data so far:
 - Total session time: ${toMin(data.sessionDurationMs)} minutes
 - Currently in: ${stateLabel[data.currentState] ?? data.currentState} for ${toMin(data.timeInCurrentStateMs)} minutes
-- Cumulative spinal load: ${data.cpl} (${cplLabel})
+- Cumulative s'train: ${data.cpl} (${cplLabel})
 - Session breakdown:
 ${breakdown || "  - no posture data recorded yet"}
 ${previousSection}
@@ -98,7 +98,7 @@ You are s'kipper, the friendly posture coach in the s'up posture tracking app. T
 
 Full session data:
 - Total session time: ${toMin(data.sessionDurationMs)} minutes
-- Cumulative spinal load: ${data.cpl} (${cplLabel})
+- Cumulative s'train: ${data.cpl} (${cplLabel})
 - Session breakdown:
 ${breakdown || "  - no posture data recorded"}
 ${updatesSection}

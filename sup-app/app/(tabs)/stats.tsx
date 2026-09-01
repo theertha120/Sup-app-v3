@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
+import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -51,6 +52,24 @@ const SEGMENT_LABELS: Record<string, string> = {
   severe:       "Severe",
   tilted_left:  "Tilted Left",
   tilted_right: "Tilted Right",
+};
+
+// "?" popup content for the three cards below — same content regardless of
+// which range tab (week/month/year) is selected, since it's explaining what
+// the card shows, not the data itself.
+const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
+  trend: {
+    title: "s'core trend",
+    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or week's, or month's) score out of 100 — tap a bar to see that period's exact score.",
+  },
+  session: {
+    title: "s'ession time",
+    body: "how long you tracked posture sessions in each period. more tracked time contributes to your s'up s'core's \"showing up\" component.",
+  },
+  breakdown: {
+    title: "posture breakdown",
+    body: "the share of your tracked time spent in each posture state over the selected period — upright, forward lean, slouched, and so on.",
+  },
 };
 
 // // to update: Constants [0 is if there is no session]
@@ -576,7 +595,7 @@ function BarChart({
         x: x + width / 2,
         y,
         value: type === "session" ? Number(values[i].toFixed(2)) : values[i], //fix to 2 decimal places for session time
-        unit: type === "session" ? "min" : "score",
+        unit: type === "session" ? "min" : "pts",
         dateRange: data.pointDates[i] ?? data.labels[i],
         avgLabel:  avgLabel(range),
       });
@@ -586,10 +605,13 @@ function BarChart({
   return (
     <View>
       <View style={barStyles.statRow}>
-        <Text style={barStyles.statText}>avg {fmtMinsLong(curAvgMins)}</Text>
+        <Text style={barStyles.statText}>
+          avg {type === "session" ? fmtMinsLong(curAvgMins) : `${curAvgMins} pts`}
+        </Text>
         {diffMins !== null && (
           <Text style={[barStyles.statText, { color: diffMins >= 0 ? "#6DC96D" : "#EC555E" }]}>
-            {"  "}{diffMins >= 0 ? "↑" : "↓"} {fmtMins(Math.abs(diffMins))}
+            {"  "}{diffMins >= 0 ? "↑" : "↓"}{" "}
+            {type === "session" ? fmtMins(Math.abs(diffMins)) : `${Math.abs(diffMins)} pts`}
           </Text>
         )}
       </View>
@@ -785,6 +807,7 @@ export default function StatsScreen() {
   const [range, setRange]             = useState<Range>("week");
   const [resetKey, setResetKey]       = useState("week");
   const [activePopup, setActivePopup] = useState<ActivePopup | null>(null);
+  const [activeMetricInfo, setActiveMetricInfo] = useState<string | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
   const [pages, setPages] = useState<PageData[]>([]);
@@ -868,6 +891,7 @@ export default function StatsScreen() {
 
         {/* S'CORE TREND */}
         <View style={[styles.card, styles.shadow]}>
+          <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
@@ -888,6 +912,7 @@ export default function StatsScreen() {
 
         {/* S'ESSION TIME */}
         <View style={[styles.card, styles.shadow]}>
+          <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
@@ -927,6 +952,7 @@ export default function StatsScreen() {
 
         {/* POSTURE BREAKDOWN */}
         <View style={[styles.card, styles.shadow]}>
+          <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
               <>
@@ -943,6 +969,13 @@ export default function StatsScreen() {
             <Text style={styles.cardTitle}>loading…</Text> // or a spinner
           )}
         </View>
+
+        <InfoModal
+          metricKey={activeMetricInfo}
+          onClose={() => setActiveMetricInfo(null)}
+          metricInfo={STATS_METRIC_INFO}
+          accentColor={PRIMARY_TEXT}
+        />
       </ScrollView>
 
       {/* Global popup — Modal renders above everything, including the nav bar */}
