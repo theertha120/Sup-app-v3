@@ -38,6 +38,7 @@ import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
 import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
+import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -106,6 +107,13 @@ const STRAIN_INFO: Record<string, InfoModalEntry> = {
       "degree of posture deviation detected relative to your personal calibrated range. it does " +
       "not measure physical force, tissue strain, injury, pain, or a medical condition.",
   },
+};
+
+// Shown on the s'update and end-of-session summary pop-ups, both of which
+// are s'kipper's AI-generated text — same disclaimer as the home screen's
+// "s'kipper says" bubble, sourced from aiProvider.ts so the copy lives once.
+const SKIPPER_INFO: Record<string, InfoModalEntry> = {
+  skipper: SKIPPER_DISCLAIMER,
 };
 
 // ── Session stats row ─────────────────────────────────────────────────────────
@@ -348,6 +356,8 @@ export default function DeskScreen() {
   const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
+  const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+
   const handleCloseUpdateModal = () => {
     setUpdateHistory(prev => [{ text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() }, ...prev]);
     setShowUpdateModal(false);
@@ -502,6 +512,7 @@ export default function DeskScreen() {
             <Pressable style={su.closeBtn} onPress={handleCloseUpdateModal}>
               <Text style={su.closeText}>×</Text>
             </Pressable>
+            <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={su.title}>s'update!</Text>
             <Image source={INSIGHT_MASCOT[updateColor]} style={su.mascot} resizeMode="contain" />
             <Text style={su.body}>
@@ -520,6 +531,7 @@ export default function DeskScreen() {
             <Pressable style={su.closeBtn} onPress={handleCloseSummaryModal}>
               <Text style={su.closeText}>×</Text>
             </Pressable>
+            <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
             <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
             <Text style={su.body}>
@@ -530,6 +542,12 @@ export default function DeskScreen() {
           </View>
         </View>
       </Modal>
+
+      <InfoModal
+        metricKey={showSkipperInfo ? "skipper" : null}
+        onClose={() => setShowSkipperInfo(false)}
+        metricInfo={SKIPPER_INFO}
+      />
 
       {/*<InterventionModal />*/}
       {/*<MovementNudgeModal />*/}

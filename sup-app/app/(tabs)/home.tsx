@@ -21,6 +21,8 @@ import HeaderBar from "@/src/components/ui/HeaderBar";
 import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
+import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
+import { SKIPPER_DISCLAIMER } from "@/src/services/ai/aiProvider";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -30,6 +32,10 @@ const GREETING_DELAY_MS        = 400;  // delay before greeting bubble starts
 const TYPEWRITER_CHAR_DELAY_MS = 150;   // delay between each typed character
 const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before status bubble
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
+
+const SKIPPER_INFO: Record<string, InfoModalEntry> = {
+  skipper: SKIPPER_DISCLAIMER,
+};
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getLocalDateKey = () => {
@@ -196,6 +202,7 @@ export default function HomeScreen() {
   const [aiSummary, setAiSummary] = useState<{ insight: string; concised_summary: string } | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [hasSummaryData, setHasSummaryData] = useState<boolean | null>(null); // null = unknown
+  const [showSkipperInfo, setShowSkipperInfo] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -292,9 +299,16 @@ export default function HomeScreen() {
 
           {/* Status bubble */}
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
-            <Text style={styles.bubbleText}>
-              s'kipper says:
-            </Text>
+            <View style={styles.skipperHeaderRow}>
+              <Text style={styles.bubbleText}>
+                s'kipper says:
+              </Text>
+              <InfoButton
+                onPress={() => setShowSkipperInfo(true)}
+                color={PRIMARY_TEXT}
+                style={styles.skipperInfoBtn}
+              />
+            </View>
             <Text style={styles.bubbleSubtext}>
               {isLoadingSummary
                 ? "Pop on your s'pot today and give me a hot second..."
@@ -303,6 +317,13 @@ export default function HomeScreen() {
                   : aiSummary?.insight}
             </Text>
           </Animated.View>
+
+          <InfoModal
+            metricKey={showSkipperInfo ? "skipper" : null}
+            onClose={() => setShowSkipperInfo(false)}
+            metricInfo={SKIPPER_INFO}
+            accentColor={PRIMARY_TEXT}
+          />
 
           {/* Action bubble — navigate to daily summary */}
           <View style={styles.actionBubbleWrap}>
@@ -432,6 +453,18 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     color: PRIMARY_TEXT,
     fontWeight: "600",
+  },
+  skipperHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  // Overrides InfoButton's default absolute top-right positioning — sits
+  // inline right next to "s'kipper says:" instead.
+  skipperInfoBtn: {
+    position: "relative",
+    top: 0,
+    right: 0,
   },
   bubbleHeadline: {
     fontFamily: "Agrandir-Regular",
