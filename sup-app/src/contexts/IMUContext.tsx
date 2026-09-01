@@ -70,7 +70,7 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STATIC_NUDGE_THRESHOLD_MS = 20 * 60 * 1000; // 1 min testing → 1 * 60 * 1000 prod
+const STATIC_NUDGE_THRESHOLD_MS = 15 * 60 * 1000; // 15 min — fires regardless of posture quality, just staying static too long
 const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
 const EMA_ALPHA                 = 0.15;
