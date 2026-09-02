@@ -37,6 +37,7 @@ import {
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
+import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -126,118 +127,9 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
-/** Tiny '?' button */
-function InfoButton({ onPress }: { onPress: () => void }) {
-  return (
-    <TouchableOpacity style={infoStyles.button} onPress={onPress} hitSlop={8}>
-      <Text style={infoStyles.label}>?</Text>
-    </TouchableOpacity>
-  );
-}
-
-const infoStyles = StyleSheet.create({
-  button: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(63, 36, 131, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: PRIMARY_TEXT,
-    lineHeight: 14,
-  },
-});
-
-/** Info popup modal */
-function InfoModal({
-  metricKey,
-  onClose,
-  metricInfo
-}: {
-  metricKey: string | null;
-  onClose: () => void;
-  metricInfo?: Record<string, { title: string; body: string; stats?: { label: string; value: string; color?: string }[] }>;
-}) {
-  if (!metricKey) return null;
-  const info = metricInfo?.[metricKey];
-  if (!info) return null;
-
-  return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={modalStyles.overlay}>
-          <TouchableWithoutFeedback>
-            <View style={modalStyles.sheet}>
-              <Text style={modalStyles.title}>{info.title}</Text>
-              <Text style={modalStyles.body}>{info.body}</Text>
-
-              <TouchableOpacity style={modalStyles.closeBtn} onPress={onClose}>
-                <Text style={modalStyles.closeBtnText}>got it</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-  );
-}
-
-const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 28,
-  },
-  sheet: {
-    backgroundColor: "rgba(255,255,255,0.97)",
-    borderRadius: 28,
-    padding: 28,
-    width: "100%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  title: {
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 20,
-    color: PRIMARY_TEXT,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  body: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 14,
-    color: PRIMARY_TEXT,
-    lineHeight: 22,
-    opacity: 0.85,
-    textAlign: "center",
-  },
-  closeBtn: {
-    marginTop: 20,
-    alignSelf: "center",
-    backgroundColor: "#AB99FA",
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  closeBtnText: {
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 14,
-    color: "white",
-  },
-});
+// InfoButton / InfoModal now live in src/components/ui/InfoModal.tsx — shared
+// with desk.tsx's s'train explainer so every metric popup consistently
+// includes a "view sources & methodology" link.
 
 /** Posture breakdown list shown inside the snapshot card */
 function PostureBreakdown({ stats }: { stats: { label: string; value: string; color?: string }[] }) {
@@ -475,7 +367,7 @@ export default function DailyScreen() {
   const METRIC_INFO: Record<string, { title: string; body: string }> = {
     snapshot: {
       title: "s'napshot",
-      body: `a real-time summary of your posture health. the bar shows how your spine health score averaged across your sessions today.\ntips below are personalised to your current posture patterns.\n\ngo into Desk Mode to see the data from each session.`,
+      body: `a real-time summary of today's posture activity. the bar shows your average posture quality across today's sessions.\ntips below are personalised to your current posture patterns.\n\ngo into desk mode to see the data from each session.`,
     },
     session: {
       title: "s'ession",
@@ -484,7 +376,7 @@ export default function DailyScreen() {
     score: {
       title: "s'core",
       body:
-        "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average spine health score.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts per consecutive day, capped at 20.",
+        "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average posture quality for the day.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts for every consecutive day you keep it going.",
     },
   };
 
@@ -494,7 +386,12 @@ export default function DailyScreen() {
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <InfoModal metricKey={activeInfo} onClose={() => setActiveInfo(null)} metricInfo={METRIC_INFO} />
+      <InfoModal
+        metricKey={activeInfo}
+        onClose={() => setActiveInfo(null)}
+        metricInfo={METRIC_INFO}
+        accentColor={PRIMARY_TEXT}
+      />
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Top bar */}
@@ -533,7 +430,7 @@ export default function DailyScreen() {
 
         {/* S'napshot card */}
         <View style={[styles.card, styles.shadow]}>
-          <InfoButton onPress={() => setActiveInfo("snapshot")} />
+          <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
           <Text style={styles.statLabel}>s'napshot</Text>
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
           <PostureBreakdown stats={POSTURE_STATS} />
@@ -543,7 +440,7 @@ export default function DailyScreen() {
         <View style={styles.grid}>
           {/* S'ession */}
           <View style={[styles.card, styles.gridCell, styles.shadow]}>
-            <InfoButton onPress={() => setActiveInfo("session")} />
+            <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
             {showBadges && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
             <Text style={styles.statValue}>
@@ -553,7 +450,7 @@ export default function DailyScreen() {
 
           {/* S'core */}
           <View style={[styles.card, styles.gridCell, styles.shadow]}>
-            <InfoButton onPress={() => setActiveInfo("score")} />
+            <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
             {showBadges && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
             <Text style={styles.statValue}>{supScore}</Text>

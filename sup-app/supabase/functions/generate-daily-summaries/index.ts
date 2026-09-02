@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -76,7 +76,7 @@ You are a friendly posture coach reviewing a user's last 7 days of posture track
 ${summary}
 
 Respond in EXACTLY this format with no other text:
-Answer 1: <A 2-3 sentence personalised insight based on trends across the 7 days. Warm, motivating tone. No bullet points. No em dashes. Use only lowercase, unless using a proper noun or 'I'.>
+Answer 1: <Write a warm and motivating personalised insight in 2-3 sentences based on trends across the past 7 days. Keep it conversational and encouraging. Lowercase only, except for proper nouns and the standalone word "I", which should always be capitalized. No em dashes. No bullet points or headers.>
 Answer 2: <Concise sentences summarising the user's posture status over the past 7 days. This will be used to generate future insights so be specific about the data and progress over the past 7 days for the different statistics.>
   `.trim();
 }

@@ -9,7 +9,8 @@
  *   - Session duration (time s'pots have been connected)
  *   - Time in current state
  *   - Session posture breakdown (upright %, forward %, etc.)
- *   - CPL indicator (cumulative postural load)
+ *   - s'train indicator (branded UI name for CPL, cumulative postural load —
+ *     see the "?" button beside it, and app/sources-methodology.tsx)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -37,6 +38,8 @@ import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
 import { useTutorial } from "../../src/contexts/TutorialContext";
+import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
+import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -71,7 +74,7 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
   transition:   { label: "slight forward shift",  icon: "arrow-forward-circle" },
   forward_lean: { label: "leaning forward",       icon: "trending-up" },
   slouched:     { label: "spine rounding",        icon: "warning" },
-  severe:       { label: "high spinal load",      icon: "alert-circle" },
+  severe:       { label: "high s'train",          icon: "alert-circle" },
   tilted_left:  { label: "shifting left",         icon: "arrow-back-circle" },
   tilted_right: { label: "shifting right",        icon: "arrow-forward-circle" },
 };
@@ -93,6 +96,27 @@ const INSIGHT_MASCOT = {
   red:    require("../../assets/images/red_mascot.png"),
 };
 
+// ── s'train explainer ─────────────────────────────────────────────────────────
+// s'train is the branded UI name for CPL (cumulative postural load). This is
+// the one required definition — reused verbatim anywhere s'train is explained.
+
+const STRAIN_INFO: Record<string, InfoModalEntry> = {
+  strain: {
+    title: "what is s'train?",
+    body:
+      "s'train is s'up's proprietary posture-awareness indicator. it reflects the duration and " +
+      "degree of posture deviation detected relative to your personal calibrated range. it does " +
+      "not measure physical force, tissue strain, injury, pain, or a medical condition.",
+  },
+};
+
+// Shown on the s'update and end-of-session summary pop-ups, both of which
+// are s'kipper's AI-generated text — same disclaimer as the home screen's
+// "s'kipper says" bubble, sourced from aiProvider.ts so the copy lives once.
+const SKIPPER_INFO: Record<string, InfoModalEntry> = {
+  skipper: SKIPPER_DISCLAIMER,
+};
+
 // ── Session stats row ─────────────────────────────────────────────────────────
 
 function SessionStatsRow({
@@ -106,10 +130,12 @@ function SessionStatsRow({
   currentState: DeskPostureState;
   cpl: number;
 }) {
-  // CPL bar — max display at 1500 (above that is red zone regardless)
+  const [showStrainInfo, setShowStrainInfo] = useState(false);
+
+  // s'train bar — max display at 1500 (above that is red zone regardless)
   const cplPct    = Math.min(cpl / 1500, 1);
   const cplColor  = cpl < 600 ? "#4CAF50" : cpl < 1000 ? "#FF9800" : "#F44336";
-  const cplLabel  = cpl < 600 ? "low load" : cpl < 1000 ? "building up" : "high load";
+  const cplLabel  = cpl < 600 ? "low s'train" : cpl < 1000 ? "building s'train" : "high s'train";
 
   return (
     <View style={ss.container}>
@@ -128,19 +154,28 @@ function SessionStatsRow({
         </View>
       </View>
 
-      {/* CPL bar */}
+      {/* s'train bar */}
       <View style={ss.cplSection}>
         <View style={ss.cplHeader}>
-          <Text style={ss.cplLabel}>cumulative spinal load</Text>
+          <View style={ss.cplLabelRow}>
+            <Text style={ss.cplLabel}>cumulative s'train</Text>
+            <InfoButton onPress={() => setShowStrainInfo(true)} style={ss.strainInfoBtn} />
+          </View>
           <Text style={[ss.cplValue, { color: cplColor }]}>{cplLabel}</Text>
         </View>
         <View style={ss.cplBarBg}>
           <View style={[ss.cplBarFill, { width: `${Math.round(cplPct * 100)}%` as any, backgroundColor: cplColor }]} />
         </View>
         <Text style={ss.cplHint}>
-          accumulates across posture bouts — short breaks barely reset it
+          s'train accumulates across posture bouts — short breaks barely reset it
         </Text>
       </View>
+
+      <InfoModal
+        metricKey={showStrainInfo ? "strain" : null}
+        onClose={() => setShowStrainInfo(false)}
+        metricInfo={STRAIN_INFO}
+      />
     </View>
   );
 }
@@ -321,6 +356,8 @@ export default function DeskScreen() {
   const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
+  const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+
   const handleCloseUpdateModal = () => {
     setUpdateHistory(prev => [{ text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() }, ...prev]);
     setShowUpdateModal(false);
@@ -475,6 +512,7 @@ export default function DeskScreen() {
             <Pressable style={su.closeBtn} onPress={handleCloseUpdateModal}>
               <Text style={su.closeText}>×</Text>
             </Pressable>
+            <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={su.title}>s'update!</Text>
             <Image source={INSIGHT_MASCOT[updateColor]} style={su.mascot} resizeMode="contain" />
             <Text style={su.body}>
@@ -493,6 +531,7 @@ export default function DeskScreen() {
             <Pressable style={su.closeBtn} onPress={handleCloseSummaryModal}>
               <Text style={su.closeText}>×</Text>
             </Pressable>
+            <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
             <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
             <Text style={su.body}>
@@ -504,8 +543,14 @@ export default function DeskScreen() {
         </View>
       </Modal>
 
-      <InterventionModal />
-      <MovementNudgeModal />
+      <InfoModal
+        metricKey={showSkipperInfo ? "skipper" : null}
+        onClose={() => setShowSkipperInfo(false)}
+        metricInfo={SKIPPER_INFO}
+      />
+
+      {/*<InterventionModal />*/}
+      {/*<MovementNudgeModal />*/}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <HeaderBar suffix="it up" logoSize={28} />
@@ -722,8 +767,12 @@ const ss = StyleSheet.create({
   timeDivider: { width: 1, height: 36, backgroundColor: "#E0E0E0" },
   cplSection:  { gap: 6 },
   cplHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cplLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cplLabel:    { fontSize: 12, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
   cplValue:    { fontSize: 12, fontFamily: "Agrandir-Regular" },
+  // Overrides InfoButton's default absolute top-right positioning — here it
+  // sits inline right next to the "cumulative s'train" label instead.
+  strainInfoBtn: { position: "relative", top: 0, right: 0 },
   cplBarBg:    { height: 8, backgroundColor: "#F0F0F0", borderRadius: 4, overflow: "hidden" },
   cplBarFill:  { height: 8, borderRadius: 4 },
   cplHint:     { fontSize: 11, color: "#bbb", fontFamily: "Agrandir-Regular" },

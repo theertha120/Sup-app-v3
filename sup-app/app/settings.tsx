@@ -7,9 +7,10 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Alert,
 } from "react-native";
+import React, { useState } from "react";
 import { router } from "expo-router";
-import { useState } from "react";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useToast } from "../src/contexts/ToastContext";
@@ -20,21 +21,48 @@ import {
 } from "../src/services/user/behaviorProfileService";
 
 import { useTutorial } from "@/src/contexts/TutorialContext";
-import React from "react";
 
 const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
 
 export default function SettingsScreen() {
-  const { logout } = useAuth();
+  const { logout, deleteAccount } = useAuth();
   const { showToast } = useToast();
   const { tutorialStep, setTutorialStep } = useTutorial();
   const [showCoachingModal, setShowCoachingModal] = useState(false);
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace("/home");
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your account and app data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeletingAccount(true);
+            const result = await deleteAccount();
+            setIsDeletingAccount(false);
+
+            if (!result.success) {
+              Alert.alert("Delete failed", result.error || "Please try again.");
+              return;
+            }
+
+            showToast("Account deleted", "success");
+            router.replace("/home");
+          },
+        },
+      ]
+    );
   };
 
 
@@ -104,6 +132,22 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={handleDeleteAccount}
+          disabled={isDeletingAccount}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={[styles.settingLabel, styles.dangerLabel]}>Delete Account</Text>
+            <Text style={styles.settingDescription}>Permanently remove your account and data</Text>
+          </View>
+          {isDeletingAccount ? (
+            <ActivityIndicator size="small" color="#D32F2F" />
+          ) : (
+            <Text style={styles.chevron}>›</Text>
+          )}
+        </Pressable>
       </View>
 
       {/* About Section */}
@@ -114,12 +158,25 @@ export default function SettingsScreen() {
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>App Version</Text>
           </View>
-          <Text style={styles.settingValue}>1.0.0</Text>
+          <Text style={styles.settingValue}>2.0.1</Text>
         </View>
 
         <Pressable style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Help & Support</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={() => router.push("/sources-methodology" as any)}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>sources & methodology</Text>
+            <Text style={styles.settingDescription}>
+              how s'train and your s'up s'core are calculated, and the research behind them
+            </Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -263,6 +320,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#222",
     marginBottom: 2,
+  },
+  dangerLabel: {
+    color: "#D32F2F",
   },
   settingDescription: {
     fontSize: 13,

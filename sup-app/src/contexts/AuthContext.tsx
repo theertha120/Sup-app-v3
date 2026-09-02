@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
 import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
@@ -26,6 +28,7 @@ interface AuthContextType {
     token: string
   ) => Promise<{ success: boolean; error?: string }>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -49,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
         if (user) await checkStreakOnLogin(user.id);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setIsAuthenticated(false);
       } finally {
@@ -251,6 +254,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function clearLocalAppData(): Promise<void> {
+    try {
+      await AsyncStorage.clear();
+    } catch (err) {
+      console.warn("[auth] Failed to clear local app data", err);
+    }
+  }
+
+  async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        return { success: false, error: "Missing Supabase app configuration" };
+      }
+
+      if (!accessToken) {
+        return { success: false, error: "You must be signed in to delete your account" };
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+      });
+
+      const responseText = await response.text();
+      let payload: { success?: boolean; error?: string } | null = null;
+
+      try {
+        payload = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const message = payload?.error || responseText || `Delete failed with status ${response.status}`;
+        console.warn("[auth] delete-account function failed", response.status, message);
+        return { success: false, error: message };
+      }
+
+      if (!payload?.success) {
+        return { success: false, error: payload?.error ?? "Failed to delete account" };
+      }
+
+      await clearLocalAppData();
+
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.warn("[auth] signOut after delete failed", signOutError);
+      }
+
+      setIsAuthenticated(false);
+      setUserId(null);
+      setRegistrationMode(false);
+      return { success: true };
+    } catch (err) {
+      console.error("[auth] deleteAccount error", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
   async function logout(): Promise<void> {
     try {
       await supabase.auth.signOut();
@@ -263,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
       {children}
     </AuthContext.Provider>
   );
