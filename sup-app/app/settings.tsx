@@ -167,6 +167,19 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={() => router.push("/sources-methodology" as any)}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>sources & methodology</Text>
+            <Text style={styles.settingDescription}>
+              how s'train and your s'up s'core are calculated, and the research behind them
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
       </View>
 
       {/* Help Section */}

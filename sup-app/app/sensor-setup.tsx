@@ -31,6 +31,7 @@ import { useAuth } from "../src/contexts/AuthContext";
 import CalibrationModal from "../src/components/modals/CalibrationModal";
 import QRPairModal from "../src/components/modals/QRPairModal";
 import { useTutorial } from "../src/contexts/TutorialContext";
+import { parseSpotName } from "../src/lib/spotNaming";
 
 // ── Device identity types ─────────────────────────────────────────────────────
 
@@ -299,9 +300,19 @@ export default function SensorSetupScreen() {
     const saved     = slot === "top" ? savedTop     : savedBottom;
     const connected = sensor.state.connected;
 
-    const displayName = saved?.displayName
-      ?? sensor.state.deviceName
-      ?? "not paired";
+    // Prefer the s'pot's own kit code (parsed from its advertised name, e.g.
+    // "s'pot_top_0048.05-08" → "48_top") over the userId-based displayName —
+    // that's still what's saved to AsyncStorage/backend, just not what's
+    // shown on screen. Falls back to the old displayName for any sensor
+    // whose name doesn't match the s'pot_<role>_<code>.<batch>-<n> convention
+    // (e.g. a factory-default unit that hasn't been renamed yet).
+    const rawHardwareName = saved?.hardwareName ?? sensor.state.deviceName ?? null;
+    const parsedSpot = rawHardwareName ? parseSpotName(rawHardwareName) : null;
+    const displayName = parsedSpot
+      ? `${parseInt(parsedSpot.code, 10)}_${parsedSpot.role}`
+      : saved?.displayName
+        ?? sensor.state.deviceName
+        ?? "not paired";
 
     const hasSavedOrConnected = connected || saved !== null;
 
