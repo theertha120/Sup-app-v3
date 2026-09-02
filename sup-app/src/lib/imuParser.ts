@@ -96,7 +96,27 @@ export interface ClinicalBaseline {
   maxRightDeg:    number;
   maxLeftDeg:     number;
   capturedAt:     string;
+  /**
+   * Auto-detected sensor mounting orientation, sagittal (forward/back) axis.
+   * Derived from the SIGN of (topRoll − bottomRoll) during calibration step 2
+   * (lean forward) — see IMUContext.tsx's startCalibrationStep(). A s'pot kit
+   * worn "backwards" flips this sign relative to DEFAULT_SAGITTAL_SIGN, and
+   * classifySpinePosture() below uses whatever was actually detected instead
+   * of assuming one fixed physical mounting orientation.
+   * Optional so baselines saved before this field existed still load fine —
+   * classifySpinePosture() falls back to DEFAULT_SAGITTAL_SIGN when absent.
+   */
+  sagittalSign?: 1 | -1;
+  /** Same idea for the lateral (left/right) axis, detected during step 4 (lean right). */
+  lateralSign?: 1 | -1;
 }
+
+// Fixed sign convention this app shipped with before per-kit orientation
+// detection existed — kept as the fallback for baselines that predate
+// sagittalSign/lateralSign, and as the starting assumption a fresh
+// calibration corrects if it turns out to be wrong for a given kit.
+export const DEFAULT_SAGITTAL_SIGN: 1 | -1 = -1;
+export const DEFAULT_LATERAL_SIGN:  1 | -1 =  1;
 
 // ── Biomechanical thresholds ──────────────────────────────────────────────────
 //
@@ -193,10 +213,20 @@ function computeInstantScore(state: PostureState): number {
  *
  * Axis mapping (confirmed from physical device testing on WT9011DCL):
  *   sagittal flex → roll axis  (mounted vertically; roll = forward/back)
- *   lateral tilt  → pitch axis (negated for correct L/R direction)
+ *   lateral tilt  → pitch axis
  *
  * IMPORTANT: Classification uses SIGNED pitchDiff, not absolute value.
  * This correctly treats backward lean as upright rather than forward lean.
+ *
+ * Orientation is CALIBRATED, not hardcoded: which sign of the raw roll/pitch
+ * diff means "forward" or "right" depends on which way the physical s'pot
+ * kit is mounted, which can vary (e.g. a kit worn backwards). Rather than
+ * assume one fixed mounting orientation for every kit, calibration step 2
+ * (lean forward) and step 4 (lean right) detect the actual sign for THIS
+ * kit from the direction the user just leaned, and store it as
+ * sagittalSign/lateralSign on the ClinicalBaseline (see IMUContext.tsx's
+ * startCalibrationStep()). DEFAULT_SAGITTAL_SIGN/DEFAULT_LATERAL_SIGN below
+ * are only the fallback for baselines that predate this detection.
  */
 export function classifySpinePosture(
   topSensor:    ParsedIMU,
@@ -208,6 +238,16 @@ export function classifySpinePosture(
   const neutral = baseline
     ? ("neutral" in baseline ? baseline.neutral : baseline)
     : null;
+
+  // Orientation signs only exist on a full ClinicalBaseline (they're detected
+  // across calibration steps 2 and 4) — a bare step-1-only NeutralOffset, or
+  // a baseline saved before this field existed, falls back to the defaults.
+  const sagittalSign = (baseline && "sagittalSign" in baseline && baseline.sagittalSign)
+    ? baseline.sagittalSign
+    : DEFAULT_SAGITTAL_SIGN;
+  const lateralSign = (baseline && "lateralSign" in baseline && baseline.lateralSign)
+    ? baseline.lateralSign
+    : DEFAULT_LATERAL_SIGN;
 
   // Apply neutral offset — without this, raw mounting offsets corrupt all thresholds
   const topAngle = neutral ? {
@@ -222,13 +262,12 @@ export function classifySpinePosture(
     yaw:   bottomSensor.angle.yaw,
   } : bottomSensor.angle;
 
-  // Inter-s'pot relative angles (offset-corrected, sign-corrected)
-  // Negations confirmed by physical testing: sensor convention is inverted on both axes.
-  // pitchDiff POSITIVE = forward flexion  (negate roll diff: top.roll > bottom.roll when leaning back)
-  // pitchDiff NEGATIVE = backward extension
-  // rollDiff  POSITIVE = right lateral    (no negate: top.pitch < bottom.pitch when tilting left)
-  const pitchDiff = -(topAngle.roll   - bottomAngle.roll);   // sagittal: negated for correct sign
-  const rollDiff  =   topAngle.pitch  - bottomAngle.pitch;   // lateral:  no negation
+  // Inter-s'pot relative angles (offset-corrected, sign-corrected).
+  // pitchDiff POSITIVE = forward flexion, NEGATIVE = backward extension.
+  // rollDiff  POSITIVE = right lateral,   NEGATIVE = left lateral.
+  // Signs come from calibration (see above), not a fixed assumption.
+  const pitchDiff = sagittalSign * (topAngle.roll  - bottomAngle.roll); // sagittal
+  const rollDiff  = lateralSign  * (topAngle.pitch - bottomAngle.pitch); // lateral
 
   const absRoll = Math.abs(rollDiff);
 

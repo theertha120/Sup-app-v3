@@ -29,6 +29,7 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
 import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
+import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { useFocusEffect } from "@react-navigation/native";
@@ -277,23 +278,22 @@ function InterventionModal() {
 // ── Movement Nudge Modal ──────────────────────────────────────────────────────
 
 function MovementNudgeModal() {
-  const { shouldNudge, confirmMovement } = useIMUContext();
-  if (!shouldNudge) return null;
+  const { shouldNudge, confirmMovement, activeIntervention } = useIMUContext();
+  // A posture-quality intervention takes priority — don't stack this on top
+  // of it if CPL crosses a threshold around the same moment the static timer
+  // elapses. InterventionModal takes over; this re-fires next time the static
+  // timer elapses on its own.
+  if (!shouldNudge || activeIntervention) return null;
   return (
     <Modal visible transparent animationType="fade">
       <View style={mv.overlay}>
         <View style={mv.card}>
           <Text style={mv.emoji}>🚶</Text>
-          <Text style={mv.title}>time to move</Text>
-          <Text style={mv.body}>
-            you've been in the same position for a while. even a small shift significantly preserves lumbar and pelvic mobility.
-          </Text>
-          <Text style={mv.cue}>stand up, roll your shoulders, or just shift your weight.</Text>
+          <Text style={mv.title}>{MOVEMENT_NUDGE.title}</Text>
+          <Text style={mv.body}>{MOVEMENT_NUDGE.body}</Text>
+          <Text style={mv.cue}>{MOVEMENT_NUDGE.cue}</Text>
           <Pressable style={mv.btn} onPress={confirmMovement}>
             <Text style={mv.btnText}>yes, i moved ✓</Text>
-          </Pressable>
-          <Pressable style={mv.skipBtn} onPress={confirmMovement}>
-            <Text style={mv.skipText}>remind me later</Text>
           </Pressable>
         </View>
       </View>
@@ -828,8 +828,6 @@ const mv = StyleSheet.create({
   cue:      { fontSize: 13, color: colours.primary, textAlign: "center", marginBottom: 20, fontFamily: "Agrandir-Regular" },
   btn:      { backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, paddingHorizontal: 32, marginBottom: 10 },
   btnText:  { fontSize: 14, color: "#fff", fontFamily: "Agrandir-Regular" },
-  skipBtn:  { paddingVertical: 8 },
-  skipText: { fontSize: 13, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 });
 
 // ── Screen styles ─────────────────────────────────────────────────────────────
