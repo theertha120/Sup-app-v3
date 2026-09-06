@@ -18,12 +18,15 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Modal, View, Text, Pressable, StyleSheet, ScrollView,
+  Modal, View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator,
 } from "react-native";
-import Svg, { Circle, Path, Line } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { useIMUContext } from "../../contexts/IMUContext";
 import { colours } from "../../../theme/colours";
+import CalibrationFigure from "./CalibrationFigure";
+import {
+  UPRIGHT, FORWARD_LEAN, BACKWARD_LEAN, TILTED_RIGHT, TILTED_LEFT, Joints,
+} from "../desk/DeskPostureFigure";
 
 // ── Step config ───────────────────────────────────────────────────────────────
 
@@ -88,119 +91,17 @@ const STEP_COLORS: Record<number, string> = {
 };
 
 // ── Posture diagrams ──────────────────────────────────────────────────────────
+// Animated stick-figure demos (CalibrationFigure) replace the old static
+// hand-drawn SVGs — each one loops upright → target pose → upright so the
+// motion itself is the instruction. Target poses are shared with
+// DeskPostureFigure's joint system rather than redefined here.
 
-function UprightDiagram() {
-  const c = colours.primary;
-  return (
-    <Svg width={120} height={165} viewBox="0 0 160 220">
-      <Line x1="30" y1="148" x2="90"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Line x1="30" y1="90"  x2="30"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Path d="M 80 68 L 80 148"    stroke={c} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <Path d="M 80 148 L 130 155"  stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 130 155 L 130 210" stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 130 210 L 148 210" stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Path d="M 80 76 L 60 110"    stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 60 110 L 95 145"   stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 80 50 L 80 68"     stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Circle cx="80" cy="32" r="20" fill="white" stroke={c} strokeWidth={3.5} />
-      <Circle cx="89" cy="34" r="2.5" fill={c} />
-      <Line x1="100" y1="80"  x2="115" y2="80"  stroke="#4CAF50" strokeWidth={1.5} strokeLinecap="round" />
-      <Line x1="100" y1="108" x2="115" y2="108" stroke="#4CAF50" strokeWidth={1.5} strokeLinecap="round" />
-      <Line x1="100" y1="136" x2="115" y2="136" stroke="#4CAF50" strokeWidth={1.5} strokeLinecap="round" />
-      <Line x1="115" y1="80"  x2="115" y2="136" stroke="#4CAF50" strokeWidth={1.5} strokeLinecap="round" opacity={0.4} />
-    </Svg>
-  );
-}
-
-function ForwardLeanDiagram() {
-  const c = "#BA7517";
-  return (
-    <Svg width={120} height={165} viewBox="0 0 160 220">
-      <Line x1="30" y1="148" x2="90"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Line x1="30" y1="90"  x2="30"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Path d="M 100 80 Q 112 115 120 148"  stroke={c} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <Path d="M 120 148 L 155 155"          stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 155 155 L 155 210"          stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 155 210 L 172 210"          stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Path d="M 105 90 L 85 122"            stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 85 122 L 118 148"           stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 110 65 L 100 80"            stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Circle cx="118" cy="48" r="20" fill="white" stroke={c} strokeWidth={3.5} />
-      <Circle cx="128" cy="50" r="2.5" fill={c} />
-      <Line x1="80" y1="40" x2="80" y2="160" stroke={c} strokeWidth={1} strokeDasharray="4 3" opacity={0.25} />
-    </Svg>
-  );
-}
-
-function BackwardLeanDiagram() {
-  const c = "#7B5EA7";
-  return (
-    <Svg width={120} height={165} viewBox="0 0 160 220">
-      <Line x1="30" y1="148" x2="90"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Line x1="30" y1="90"  x2="30"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      {/* Spine leaning backward */}
-      <Path d="M 62 75 Q 70 115 76 148"  stroke={c} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <Path d="M 76 148 L 124 155"        stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 124 155 L 124 210"       stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 124 210 L 142 210"       stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Path d="M 65 85 L 48 118"          stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 48 118 L 76 148"         stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 58 60 L 62 75"           stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Circle cx="52" cy="42" r="20" fill="white" stroke={c} strokeWidth={3.5} />
-      <Circle cx="62" cy="44" r="2.5" fill={c} />
-      <Line x1="80" y1="40" x2="80" y2="160" stroke={c} strokeWidth={1} strokeDasharray="4 3" opacity={0.25} />
-    </Svg>
-  );
-}
-
-function RightLeanDiagram() {
-  const c = "#993C56";
-  return (
-    <Svg width={120} height={165} viewBox="0 0 160 220">
-      <Line x1="30" y1="148" x2="90"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Line x1="30" y1="90"  x2="30"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Path d="M 80 68 L 96 148"    stroke={c} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <Path d="M 96 148 L 144 155"  stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 144 155 L 144 210" stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 144 210 L 162 210" stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Path d="M 82 76 L 66 108"    stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 66 108 L 96 148"   stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 80 50 L 80 68"     stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Circle cx="88" cy="32" r="20" fill="white" stroke={c} strokeWidth={3.5} />
-      <Circle cx="97" cy="34" r="2.5" fill={c} />
-      <Line x1="80" y1="20" x2="80" y2="160" stroke={c} strokeWidth={1} strokeDasharray="4 3" opacity={0.25} />
-      <Line x1="110" y1="100" x2="126" y2="100" stroke={c} strokeWidth={2} strokeLinecap="round" opacity={0.6} />
-    </Svg>
-  );
-}
-
-function LeftLeanDiagram() {
-  const c = "#1D7A6E";
-  return (
-    <Svg width={120} height={165} viewBox="0 0 160 220">
-      <Line x1="30" y1="148" x2="90"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Line x1="30" y1="90"  x2="30"  y2="148" stroke={c} strokeWidth={4} strokeLinecap="round" opacity={0.3} />
-      <Path d="M 80 68 L 64 148"    stroke={c} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <Path d="M 64 148 L 112 155"  stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 112 155 L 112 210" stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 112 210 L 130 210" stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Path d="M 78 76 L 62 108"    stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 62 108 L 64 148"   stroke={c} strokeWidth={10} strokeLinecap="round" fill="none" />
-      <Path d="M 80 50 L 80 68"     stroke={c} strokeWidth={8}  strokeLinecap="round" fill="none" />
-      <Circle cx="72" cy="32" r="20" fill="white" stroke={c} strokeWidth={3.5} />
-      <Circle cx="81" cy="34" r="2.5" fill={c} />
-      <Line x1="80" y1="20" x2="80" y2="160" stroke={c} strokeWidth={1} strokeDasharray="4 3" opacity={0.25} />
-      <Line x1="50" y1="100" x2="34" y2="100" stroke={c} strokeWidth={2} strokeLinecap="round" opacity={0.6} />
-    </Svg>
-  );
-}
-
-const DIAGRAMS = [
-  UprightDiagram,
-  ForwardLeanDiagram,
-  BackwardLeanDiagram,
-  RightLeanDiagram,
-  LeftLeanDiagram,
+const CALIBRATION_TARGETS: Joints[] = [
+  UPRIGHT,
+  FORWARD_LEAN,
+  BACKWARD_LEAN,
+  TILTED_RIGHT,
+  TILTED_LEFT,
 ];
 
 // ── Live angle readout ────────────────────────────────────────────────────────
@@ -235,22 +136,30 @@ const live = StyleSheet.create({
 
 // ── Step progress dots ────────────────────────────────────────────────────────
 
-function StepDots({ currentStep, stepComplete }: {
-  currentStep: number | null;
+function StepDots({ viewingStep, stepComplete, onSelect }: {
+  viewingStep: number;
   stepComplete: boolean[];
+  onSelect: (step: 1 | 2 | 3 | 4 | 5) => void;
 }) {
   return (
     <View style={{ flexDirection: "row", gap: 6, justifyContent: "center", marginBottom: 20 }}>
       {[1, 2, 3, 4, 5].map((n) => {
         const done   = stepComplete[n - 1];
-        const active = currentStep === n;
+        const active = viewingStep === n;
         const color  = STEP_COLORS[n];
         return (
-          <View key={n} style={{
-            width: done ? 24 : 8, height: 8, borderRadius: 4,
-            backgroundColor: done || active ? color : "#E0E0E0",
-            opacity: active ? 1 : done ? 0.8 : 0.4,
-          }} />
+          <Pressable
+            key={n}
+            onPress={() => onSelect(n as 1 | 2 | 3 | 4 | 5)}
+            hitSlop={8}
+            style={{ paddingVertical: 6 }}
+          >
+            <View style={{
+              width: done ? 24 : 8, height: 8, borderRadius: 4,
+              backgroundColor: done || active ? color : "#E0E0E0",
+              opacity: active ? 1 : done ? 0.8 : 0.4,
+            }} />
+          </Pressable>
         );
       })}
     </View>
@@ -267,15 +176,26 @@ interface Props {
 export default function CalibrationModal({ visible, onClose }: Props) {
   const {
     calibration, clinicalBaseline,
-    startCalibrationStep, resetCalibration, bothConnected,
+    startCalibrationStep, resetCalibration, bothConnected, sensorsReady,
   } = useIMUContext();
+
+  // Calibration can't meaningfully start until real data is flowing from
+  // both s'pots — starting a step's 3s sampling window before then risks
+  // capturing zero packets and silently failing (see IMUContext.tsx).
+  const canCalibrate = bothConnected && sensorsReady;
 
   const [viewingStep,    setViewingStep]    = useState<1|2|3|4|5>(1);
   const [stepsCaptured, setStepsCaptured]  = useState<boolean[]>([false,false,false,false,false]);
+  // True while dipping into a single step's edit view from the "all done"
+  // summary screen (via "recalibrate a specific step") — lets the render
+  // fall through to the normal per-step UI instead of the summary, without
+  // otherwise disturbing calibration.isComplete (redoing one already-done
+  // step doesn't un-complete the others).
+  const [reviewingSteps, setReviewingSteps] = useState(false);
 
-  const stepConfig = STEPS[viewingStep - 1];
-  const Diagram    = DIAGRAMS[viewingStep - 1];
-  const stepColor  = STEP_COLORS[viewingStep];
+  const stepConfig    = STEPS[viewingStep - 1];
+  const diagramTarget = CALIBRATION_TARGETS[viewingStep - 1];
+  const stepColor     = STEP_COLORS[viewingStep];
 
   const isRunning  = calibration.currentStep === viewingStep
                      && calibration.countdown !== null
@@ -302,10 +222,11 @@ export default function CalibrationModal({ visible, onClose }: Props) {
       setViewingStep(1);
       setStepsCaptured([false,false,false,false,false]);
     }
+    if (visible) setReviewingSteps(false);
   }, [visible]);
 
   const handleStart = () => {
-    if (!bothConnected) return;
+    if (!canCalibrate) return;
     setStepsCaptured((prev) => { const u=[...prev]; u[viewingStep-1]=false; return u; });
     startCalibrationStep(viewingStep);
   };
@@ -324,15 +245,31 @@ export default function CalibrationModal({ visible, onClose }: Props) {
   const handleClose = () => {
     setViewingStep(1);
     setStepsCaptured([false,false,false,false,false]);
+    setReviewingSteps(false);
     onClose();
   };
 
   const goNext = () => {
     if (viewingStep < 5) setViewingStep((v) => (v + 1) as 1|2|3|4|5);
+    else if (reviewingSteps) setReviewingSteps(false); // step 5's "finish" while reviewing → back to summary
   };
 
   const goBack = () => {
     if (viewingStep > 1) setViewingStep((v) => (v - 1) as 1|2|3|4|5);
+  };
+
+  // Jump directly to any step — from the tappable step dots, or from the
+  // "recalibrate a specific step" picker on the all-done summary. Blocked
+  // while a capture is actively running, same as the existing back/next
+  // buttons (which are hidden, not just disabled, during a countdown).
+  const jumpToStep = (step: 1 | 2 | 3 | 4 | 5) => {
+    if (isRunning) return;
+    setViewingStep(step);
+  };
+
+  const startReviewingStep = (step: 1 | 2 | 3 | 4 | 5) => {
+    setReviewingSteps(true);
+    setViewingStep(step);
   };
 
   return (
@@ -350,7 +287,7 @@ export default function CalibrationModal({ visible, onClose }: Props) {
             </View>
 
             {/* All-done */}
-            {allDone ? (
+            {allDone && !reviewingSteps ? (
               <View style={s.allDoneContainer}>
                 <Ionicons name="checkmark-circle" size={56} color="#4CAF50" />
                 <Text style={s.allDoneTitle}>calibration complete</Text>
@@ -383,47 +320,77 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                     <Text style={s.doneBtnText}>done</Text>
                   </Pressable>
                 </View>
+
+                <Text style={s.recalOneLabel}>or recalibrate just one step:</Text>
+                <View style={s.recalOneRow}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Pressable
+                      key={n}
+                      style={[s.recalOneChip, { borderColor: STEP_COLORS[n] }]}
+                      onPress={() => startReviewingStep(n as 1 | 2 | 3 | 4 | 5)}
+                    >
+                      <Text style={[s.recalOneChipText, { color: STEP_COLORS[n] }]}>{n}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
 
             ) : (
               <>
+                {reviewingSteps && (
+                  <Pressable onPress={() => setReviewingSteps(false)} style={s.backToSummary} hitSlop={8}>
+                    <Ionicons name="arrow-back" size={14} color={colours.primary} />
+                    <Text style={s.backToSummaryText}>back to summary</Text>
+                  </Pressable>
+                )}
+
                 <StepDots
-                  currentStep={calibration.currentStep}
+                  viewingStep={viewingStep}
                   stepComplete={calibration.stepComplete}
+                  onSelect={jumpToStep}
                 />
 
                 <Text style={[s.stepTitle, { color: stepColor }]}>
                   {stepConfig.title}
                 </Text>
 
-                <View style={s.diagramWrap}><Diagram /></View>
-
-                <Text style={s.instruction}>{stepConfig.instruction}</Text>
-                <Text style={s.subtext}>{stepConfig.subtext}</Text>
-
-                {stepConfig.liveAngle && !isCaptured && (
-                  <LiveAngleReadout
-                    angleKey={stepConfig.liveAngle}
-                    label={stepConfig.liveLabel}
-                    color={stepColor}
-                  />
-                )}
-
-                {viewingStep === 1 && !isCaptured && (
-                  <View style={s.checklist}>
-                    {["feet flat on the floor","back straight, shoulders relaxed","eyes level with your screen","head directly above shoulders"].map((item) => (
-                      <View key={item} style={s.checkRow}>
-                        <Ionicons name="checkmark-circle" size={15} color="#4CAF50" />
-                        <Text style={s.checkText}>{item}</Text>
-                      </View>
-                    ))}
+                <View style={{ opacity: canCalibrate ? 1 : 0.4 }} pointerEvents={canCalibrate ? "auto" : "none"}>
+                  <View style={s.diagramWrap}>
+                    <CalibrationFigure target={diagramTarget} color={stepColor} />
                   </View>
-                )}
 
-                {!bothConnected && (
+                  <Text style={s.instruction}>{stepConfig.instruction}</Text>
+                  <Text style={s.subtext}>{stepConfig.subtext}</Text>
+
+                  {stepConfig.liveAngle && !isCaptured && (
+                    <LiveAngleReadout
+                      angleKey={stepConfig.liveAngle}
+                      label={stepConfig.liveLabel}
+                      color={stepColor}
+                    />
+                  )}
+
+                  {viewingStep === 1 && !isCaptured && (
+                    <View style={s.checklist}>
+                      {["feet flat on the floor","back straight, shoulders relaxed","eyes level with your screen","head directly above shoulders"].map((item) => (
+                        <View key={item} style={s.checkRow}>
+                          <Ionicons name="checkmark-circle" size={15} color="#4CAF50" />
+                          <Text style={s.checkText}>{item}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {!bothConnected ? (
                   <View style={s.warningBanner}>
                     <Ionicons name="warning-outline" size={16} color="#E65100" />
                     <Text style={s.warningText}>connect both s'pots before calibrating</Text>
+                  </View>
+                ) : !sensorsReady && (
+                  <View style={s.waitingBanner}>
+                    <ActivityIndicator size="small" color={colours.primary} />
+                    <Text style={s.waitingText}>waiting for your s'pots to get ready…</Text>
                   </View>
                 )}
 
@@ -455,12 +422,16 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                         <Text style={s.backBtnText}>redo this step</Text>
                       </Pressable>
                       {viewingStep < 5 ? (
-                        <Pressable style={[s.startBtn, { flex: 2, backgroundColor: "#4CAF50" }]} onPress={goNext}>
+                        <Pressable style={[s.startBtn, { backgroundColor: "#4CAF50" }]} onPress={goNext}>
                           <Text style={s.startBtnText}>next step →</Text>
                         </Pressable>
+                      ) : reviewingSteps ? (
+                        <Pressable style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={() => setReviewingSteps(false)}>
+                          <Text style={s.startBtnText}>back to summary</Text>
+                        </Pressable>
                       ) : (
-                        <Pressable style={[s.startBtn, { flex: 2, backgroundColor: colours.primary }]} onPress={handleClose}>
-                          <Text style={s.startBtnText}>finish calibration</Text>
+                        <Pressable style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={handleClose}>
+                          <Text style={s.startBtnText}>finish ✓</Text>
                         </Pressable>
                       )}
                     </View>
@@ -484,11 +455,11 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                     <Pressable
                       style={[
                         s.startBtn,
-                        { backgroundColor: bothConnected ? stepColor : "#ccc" },
+                        { backgroundColor: canCalibrate ? stepColor : "#ccc" },
                         { flex: viewingStep > 1 ? 2 : 1 },
                       ]}
                       onPress={handleStart}
-                      disabled={!bothConnected}
+                      disabled={!canCalibrate}
                     >
                       <Text style={s.startBtnText}>
                         {stepDone ? "redo this step" : "start — hold for 3 seconds"}
@@ -533,6 +504,8 @@ const s = StyleSheet.create({
 
   warningBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF3E0", borderRadius: 10, padding: 10, marginBottom: 12 },
   warningText:   { fontSize: 12, color: "#E65100", flex: 1 },
+  waitingBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F5F3FF", borderRadius: 10, padding: 12, marginBottom: 12 },
+  waitingText:   { fontSize: 12, color: colours.textSecondary, flex: 1 },
 
   countdownWrap:   { alignItems: "center", paddingVertical: 8 },
   countdownNumber: { fontSize: 80, fontWeight: "800", lineHeight: 88 },
@@ -555,11 +528,16 @@ const s = StyleSheet.create({
   capturedTextWarning: { fontSize: 15, fontWeight: "700", color: "#E65100" },
   capturedSubWarning:  { fontSize: 12, color: "#B25400", marginTop: 2, lineHeight: 17 },
 
-  actionRow:    { flexDirection: "row", gap: 10, marginTop: 12 },
-  backBtn:      { flex: 1, paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center" },
-  backBtnText:  { fontSize: 14, fontWeight: "600", color: colours.textSecondary },
-  startBtn:     { paddingVertical: 14, borderRadius: 30, alignItems: "center" },
-  startBtnText: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  // minHeight + justifyContent keep both buttons in a row the same height even
+  // if one's text wraps to two lines on a narrower device or with larger
+  // accessibility text — was the cause of the mismatched/"broken"-looking
+  // buttons (a 1:2 flex split forced "redo this step" to wrap while its
+  // similarly-long neighbour didn't, at fixed heights that no longer matched).
+  actionRow:    { flexDirection: "row", gap: 10, marginTop: 12, alignItems: "stretch" },
+  backBtn:      { flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 8, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center", justifyContent: "center" },
+  backBtnText:  { fontSize: 14, fontWeight: "600", color: colours.textSecondary, textAlign: "center" },
+  startBtn:     { flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 8, borderRadius: 30, alignItems: "center", justifyContent: "center" },
+  startBtnText: { fontSize: 14, fontWeight: "700", color: "#fff", textAlign: "center" },
 
   skipRow:  { alignItems: "center", marginTop: 16 },
   skipText: { fontSize: 13, color: colours.textSecondary },
@@ -574,9 +552,17 @@ const s = StyleSheet.create({
   summaryLabel: { fontSize: 14, color: colours.textPrimary },
   summaryValue: { fontSize: 14, fontWeight: "700", color: colours.primary },
 
-  allDoneButtons: { flexDirection: "row", gap: 10, alignSelf: "stretch", marginTop: 8 },
-  redoBtn:     { flex: 1, paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center" },
-  redoBtnText: { fontSize: 14, fontWeight: "600", color: colours.textSecondary },
-  doneBtn:     { flex: 2, paddingVertical: 14, borderRadius: 30, backgroundColor: colours.primary, alignItems: "center" },
-  doneBtnText: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  allDoneButtons: { flexDirection: "row", gap: 10, alignSelf: "stretch", marginTop: 8, alignItems: "stretch" },
+  redoBtn:     { flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 8, borderRadius: 30, borderWidth: 1.5, borderColor: colours.border, alignItems: "center", justifyContent: "center" },
+  redoBtnText: { fontSize: 14, fontWeight: "600", color: colours.textSecondary, textAlign: "center" },
+  doneBtn:     { flex: 1, minHeight: 50, paddingVertical: 14, paddingHorizontal: 8, borderRadius: 30, backgroundColor: colours.primary, alignItems: "center", justifyContent: "center" },
+  doneBtnText: { fontSize: 14, fontWeight: "700", color: "#fff", textAlign: "center" },
+
+  recalOneLabel: { fontSize: 12, color: colours.textSecondary, textAlign: "center", marginTop: 18 },
+  recalOneRow:   { flexDirection: "row", gap: 8, justifyContent: "center", marginTop: 10 },
+  recalOneChip:  { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  recalOneChipText: { fontSize: 14, fontWeight: "700" },
+
+  backToSummary:     { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", marginBottom: 8 },
+  backToSummaryText: { fontSize: 13, fontWeight: "600", color: colours.primary },
 });

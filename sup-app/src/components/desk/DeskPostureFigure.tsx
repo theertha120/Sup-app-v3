@@ -24,7 +24,7 @@ import { DeskPostureState, getScoreColor } from "./mockDeskPostureData";
  * All mutable joint positions for a single posture key-frame.
  * Legs/feet are intentionally fixed — posture variations live in the trunk.
  */
-type Joints = {
+export type Joints = {
   // Head
   hx: number; hy: number;
 
@@ -60,7 +60,7 @@ type Joints = {
 //   → ctrl points RIGHT of spine = forward bow (leaning forward)
 //   → ctrl points inline = straight / upright
 
-const UPRIGHT: Joints = {
+export const UPRIGHT: Joints = {
   // Straight spine, head above hips, neutral arm rest on lap
   hx: 100, hy: 26,
   n1x:  98, n1y: 46,   n2x:  97, n2y: 64,
@@ -90,7 +90,7 @@ const SLOUCHED: Joints = {
 };
 
 // Whole trunk tilts forward from the hips (craning at screen)
-const FORWARD_LEAN: Joints = {
+export const FORWARD_LEAN: Joints = {
   hx: 122, hy: 42,
   n1x: 114, n1y: 62,   n2x: 110, n2y: 77,
   sx: 110,  sy:  77,
@@ -102,8 +102,24 @@ const FORWARD_LEAN: Joints = {
   fax: 118, fay: 153,
 };
 
+// Whole trunk tilts backward from the hips (extension) — mirror of FORWARD_LEAN,
+// smaller magnitude since backward ROM is anatomically shorter than forward flexion.
+// Not used as a live DeskPostureState (see [[project-posture-calibration]] — no
+// separate "leaning_back" classification state), only as a calibration demo pose.
+export const BACKWARD_LEAN: Joints = {
+  hx:  80, hy: 18,
+  n1x: 84, n1y: 39,   n2x: 87, n2y: 58,
+  sx:  87, sy:  58,
+  shFx: 108, shFy: 66,  shBx: 68, shBy: 66,
+  c1x:  90, c1y:  92,
+  c2x:  92, c2y: 122,
+  px:   96, py:  150,
+  uax:  66, uay: 108,
+  fax: 100, fay: 145,
+};
+
 // Lateral drift to the right
-const TILTED_RIGHT: Joints = {
+export const TILTED_RIGHT: Joints = {
   hx: 108, hy: 23,
   n1x: 105, n1y: 43,   n2x: 102, n2y: 61,
   sx: 102,  sy:  61,
@@ -116,7 +132,7 @@ const TILTED_RIGHT: Joints = {
 };
 
 // Lateral drift to the left
-const TILTED_LEFT: Joints = {
+export const TILTED_LEFT: Joints = {
   hx:  90, hy: 23,
   n1x:  90, n1y: 43,   n2x:  91, n2y: 61,
   sx:   91, sy:  61,
@@ -155,7 +171,7 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function lerpJoints(a: Joints, b: Joints, t: number): Joints {
+export function lerpJoints(a: Joints, b: Joints, t: number): Joints {
   const out = {} as Joints;
   (Object.keys(a) as (keyof Joints)[]).forEach((k) => {
     out[k] = lerp(a[k], b[k], t);
@@ -165,26 +181,26 @@ function lerpJoints(a: Joints, b: Joints, t: number): Joints {
 
 // ─── Stroke widths ───────────────────────────────────────────────────────────
 
-const HEAD_R  = 21;  // head circle radius
-const TORSO_W = 17;  // spine / torso stroke
-const NECK_W  =  8;  // neck stroke
-const LIMB_W  = 10;  // arms & legs
+export const HEAD_R  = 21;  // head circle radius
+export const TORSO_W = 17;  // spine / torso stroke
+export const NECK_W  =  8;  // neck stroke
+export const LIMB_W  = 10;  // arms & legs
 const SH_W    =  8;  // shoulder bar
-const JOINT_R =  5;  // elbow / knee dot
+export const JOINT_R =  5;  // elbow / knee dot
 
 // Fixed leg geometry — thigh is near-horizontal (seated), shin drops straight down
 // Hip (~96, 150) → knee forward (~150, 160) → ankle below (~150, 224) → foot forward
-const HIP_X      =  96, HIP_Y      = 150; // matches px/py in all poses
-const KNEE_X     = 150, KNEE_Y     = 162;
-const ANKLE_X    = 150, ANKLE_Y    = 226;
+export const HIP_X      =  96, HIP_Y      = 150; // matches px/py in all poses
+export const KNEE_X     = 150, KNEE_Y     = 162;
+export const ANKLE_X    = 150, ANKLE_Y    = 226;
 // Shoe silhouette — side profile facing right, connects to shin bottom (150,226)
 // ankle-back → heel (behind shin) → rounded heel corner → flat sole →
 // rounded toe tip → top-front → shoe top → close
-const SHOE_PATH =
+export const SHOE_PATH =
   "M 150 226 L 141 228 Q 138 237 145 238 L 172 238 Q 182 238 182 229 L 177 221 L 152 221 Z";
 // Subtle chair-seat line behind hips so it reads as "sitting"
-const SEAT_X1    =  40, SEAT_Y1    = 153;
-const SEAT_X2    =  96, SEAT_Y2    = 153;
+export const SEAT_X1    =  40, SEAT_Y1    = 153;
+export const SEAT_X2    =  96, SEAT_Y2    = 153;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 

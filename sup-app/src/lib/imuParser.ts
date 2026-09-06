@@ -123,6 +123,17 @@ export const DEFAULT_LATERAL_SIGN:  1 | -1 =  1;
 // Applied to OFFSET-CORRECTED relative inter-s'pot angles.
 // At neutral upright (after offset applied), pitchDiff ≈ 0° and rollDiff ≈ 0°.
 //
+// FIXED absolute-degree thresholds — same for every user. Calibration does
+// NOT rescale these; its job is purely to determine ORIENTATION (which raw
+// sign of pitchDiff/rollDiff means "forward"/"right" for this particular
+// physical mount — see sagittalSign/lateralSign below), not to personalise
+// how many degrees count as "slouched." A brief experiment scaling these
+// bands to each user's own calibrated comfortable range (ClinicalBaseline.
+// maxForwardDeg etc.) made classification too sensitive in practice, so that
+// was reverted — maxForwardDeg/maxBackwardDeg/maxRightDeg/maxLeftDeg are
+// still captured at calibration and shown in the "your personal ranges"
+// summary, they just aren't fed into these thresholds.
+//
 // Sagittal classification uses SIGNED pitchDiff:
 //   pitchDiff > 0 = forward flexion (the clinically significant direction)
 //   pitchDiff < 0 = backward extension (generally benign when seated)
@@ -227,6 +238,13 @@ function computeInstantScore(state: PostureState): number {
  * sagittalSign/lateralSign on the ClinicalBaseline (see IMUContext.tsx's
  * startCalibrationStep()). DEFAULT_SAGITTAL_SIGN/DEFAULT_LATERAL_SIGN below
  * are only the fallback for baselines that predate this detection.
+ *
+ * This is the ONLY thing calibration changes about classification — once
+ * pitchDiff/rollDiff are correctly signed, they're compared against the same
+ * fixed absolute-degree bands for every user (see "Biomechanical thresholds"
+ * above). An earlier version also rescaled the bands themselves to each
+ * user's calibrated ROM; that made classification too sensitive and was
+ * reverted.
  */
 export function classifySpinePosture(
   topSensor:    ParsedIMU,
