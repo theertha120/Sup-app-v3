@@ -31,6 +31,13 @@ const SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9a34fb";
 const NOTIFY_UUID  = "0000ffe4-0000-1000-8000-00805f9a34fb";
 const WRITE_UUID   = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
+// device.connect() has no default timeout — an unresponsive peripheral (out
+// of range, dying battery, a stuck OS-level GATT session) can otherwise hang
+// the promise indefinitely, which in a sequential connect flow (autoConnect
+// connects top then bottom, awaited) freezes the second slot too and leaves
+// any "connecting…" UI spinner stuck forever with no way out.
+const CONNECT_TIMEOUT_MS = 15000;
+
 // ── BLE write commands (WT9011DCL protocol) ───────────────────────────────────
 // Unlock must be sent before any config write (valid for 10 seconds)
 const CMD_UNLOCK          = new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]);
@@ -130,8 +137,16 @@ class BLEService {
 
   /**
    * Scan for nearby s'pots.
-   * Fires onDeviceFound for each new device seen.
-   * Automatically stops after timeoutMs.
+   * Fires onDeviceFound for each sighting. Automatically stops after timeoutMs.
+   *
+   * Returns false — without scanning — if a scan is already in progress or
+   * Bluetooth isn't powered on, instead of silently no-op'ing. Both were
+   * previously silent: a caller whose scan got dropped because another scan
+   * was already running had no way to know, and just burned its whole
+   * timeout finding nothing; same for starting a scan before the adapter
+   * (a real race right after cold launch, or right after the permission
+   * prompt resolves) reports PoweredOn. Pass onError to surface either case
+   * instead of a generic "not found" a few seconds later.
    *
    * Filtering to s'pots is done by SERVICE_UUID alone (passed to
    * startDeviceScan below) — that's the actual "is this our hardware" gate,
@@ -141,22 +156,49 @@ class BLEService {
    * units now get renamed to unique per-kit names (e.g. "s'pot_top_0048.05-08",
    * see src/lib/spotNaming.ts) to fix a BLE-name-collision issue, so a
    * hardcoded prefix would silently exclude every renamed sensor. Don't
-   * reintroduce a name-prefix filter here.
+   * reintroduce a name-prefix filter here — a name check was also removed
+   * from the per-sighting filter below for the same reason (see allowDuplicates
+   * comment): a name isn't guaranteed to be present on every advertisement.
+   *
+   * allowDuplicates is true (was false): with it false, a peripheral whose
+   * *first* delivered advertisement happens to omit the local name (name and
+   * service UUID can arrive in separate AD packets — real, timing-dependent
+   * CoreBluetooth behavior, not a device bug) got silently dropped by the old
+   * `device?.name` filter and, because duplicates were suppressed, was never
+   * reported again for the rest of that scan — a classic "sometimes it just
+   * doesn't find it" flake with no visible cause. true costs more radio/CPU
+   * (every advertisement re-fires the callback) but that's cheap for an 8-10s
+   * window scanning for two known sensors, and callers already dedupe by id.
    */
-  scan(onDeviceFound: (device: Device) => void, timeoutMs = 10000): void {
-    if (this.isScanning) return;
+  async scan(
+    onDeviceFound: (device: Device) => void,
+    timeoutMs = 10000,
+    onError?: (message: string) => void
+  ): Promise<boolean> {
+    if (this.isScanning) {
+      onError?.("a scan is already in progress");
+      return false;
+    }
+
+    const state = await this.manager.state();
+    if (state !== "PoweredOn") {
+      onError?.(`bluetooth isn't ready (${state})`);
+      return false;
+    }
+
     this.isScanning = true;
 
     this.manager.startDeviceScan(
       [SERVICE_UUID],
-      { allowDuplicates: false },
+      { allowDuplicates: true },
       (error, device) => {
         if (error) {
           console.warn("[BLE] Scan error:", error.message);
           this.isScanning = false;
+          onError?.(error.message);
           return;
         }
-        if (device?.name) {
+        if (device) {
           onDeviceFound(device);
         }
       }
@@ -166,6 +208,8 @@ class BLEService {
       this.manager.stopDeviceScan();
       this.isScanning = false;
     }, timeoutMs);
+
+    return true;
   }
 
   stopScan(): void {
@@ -189,8 +233,23 @@ class BLEService {
       // Tear down any existing connection in this slot
       await this.disconnectSlot(slot);
 
-      const connected = await device.connect();
-      await connected.discoverAllServicesAndCharacteristics();
+      // Wait for any in-flight background reconnect (the other slot dropped
+      // and the user chose "try to reconnect") to finish first, and hold the
+      // same lock while this connect runs. Without this, a foreground connect
+      // here and a background reconnectDirect() for the other slot can issue
+      // device.connect() at the same time — two simultaneous BLE central
+      // connect operations cancel each other on iOS (see runReconnectLoop's
+      // own use of this same lock, which only protected itself from itself
+      // until now).
+      await this.waitForReconnectSlot();
+      this.reconnectingAny = true;
+      let connected: Device;
+      try {
+        connected = await device.connect({ timeout: CONNECT_TIMEOUT_MS });
+        await connected.discoverAllServicesAndCharacteristics();
+      } finally {
+        this.reconnectingAny = false;
+      }
 
       this.devices[slot] = connected;
       this.onStatus?.(slot, {
@@ -342,6 +401,21 @@ class BLEService {
     });
   }
 
+  /**
+   * Blocks while another connect operation (a foreground connectDevice() or
+   * another slot's reconnect loop) holds the shared reconnectingAny lock —
+   * only one BLE central connect should be in flight at a time, since two
+   * simultaneous device.connect() calls cancel each other on iOS. Gives up
+   * waiting after 15s so a stuck lock can't wedge every future connect.
+   */
+  private async waitForReconnectSlot(): Promise<void> {
+    let waited = 0;
+    while (this.reconnectingAny && waited < 15000) {
+      await new Promise((r) => setTimeout(r, 500));
+      waited += 500;
+    }
+  }
+
   private async runReconnectLoop(device: Device, slot: SensorSlot): Promise<void> {
     let attempts = 0;
 
@@ -356,13 +430,9 @@ class BLEService {
         break;
       }
 
-      // Wait for any other slot to finish reconnecting first
-      // This prevents parallel BLE connections which cancel each other on iOS
-      let waited = 0;
-      while (this.reconnectingAny && waited < 15000) {
-        await new Promise((r) => setTimeout(r, 500));
-        waited += 500;
-      }
+      // Wait for any other slot (or a foreground connectDevice()) to finish
+      // first — prevents parallel BLE connections which cancel each other on iOS
+      await this.waitForReconnectSlot();
 
       if (this.devices[slot] !== null) break; // reconnected while waiting
 
@@ -435,7 +505,7 @@ class BLEService {
  * that would cancel the pending connection and cause an infinite loop.
  */
   private async reconnectDirect(device: Device, slot: SensorSlot): Promise<void> {
-    const connected = await device.connect();
+    const connected = await device.connect({ timeout: CONNECT_TIMEOUT_MS });
     await connected.discoverAllServicesAndCharacteristics();
 
     this.devices[slot] = connected;

@@ -253,47 +253,108 @@ export default function SensorSetupScreen() {
     if (!savedTop && !savedBottom) return;
     setIsAutoConnecting(true);
 
-    const foundDevices: Record<string, Device> = {};
+    const granted = await bleService.requestPermissions();
+    if (!granted) {
+      Alert.alert(
+        "bluetooth permission needed",
+        "s'up needs Bluetooth access to find your s'pots. check your device's permission settings and try again."
+      );
+      setIsAutoConnecting(false);
+      return;
+    }
 
-    await new Promise<void>((resolve) => {
+    // Keyed by slot, not device id — a match can come from either an exact
+    // id hit or the hardwareName fallback below, so the winning Device for a
+    // slot isn't necessarily filed under that slot's saved id.
+    const foundDevices: Partial<Record<SensorSlot, Device>> = {};
+
+    const started = await new Promise<boolean>((resolve) => {
       const scanTimeout = setTimeout(() => {
         bleService.stopScan();
-        resolve();
+        resolve(true);
       }, 8000);
 
-      bleService.scan((device) => {
-        const isTop    = savedTop    && device.id === savedTop.id;
-        const isBottom = savedBottom && device.id === savedBottom.id;
-        if (!isTop && !isBottom) return;
+      bleService.scan(
+        (device) => {
+          // Prefer an exact saved-id match; fall back to the advertised name
+          // recorded at pairing time. A sensor's id can occasionally change
+          // (documented iOS CoreBluetooth behavior — see spotNaming.ts and
+          // the QR-pairing notes) which would otherwise permanently strand
+          // an id-only match with no way to recover short of forget+re-pair.
+          if (!foundDevices.top && savedTop &&
+              (device.id === savedTop.id || (savedTop.hardwareName && device.name === savedTop.hardwareName))) {
+            foundDevices.top = device;
+          }
+          if (!foundDevices.bottom && savedBottom &&
+              (device.id === savedBottom.id || (savedBottom.hardwareName && device.name === savedBottom.hardwareName))) {
+            foundDevices.bottom = device;
+          }
 
-        foundDevices[device.id] = device;
-
-        const gotTop    = !savedTop    || foundDevices[savedTop.id];
-        const gotBottom = !savedBottom || foundDevices[savedBottom.id];
-        if (gotTop && gotBottom) {
+          const gotTop    = !savedTop    || foundDevices.top;
+          const gotBottom = !savedBottom || foundDevices.bottom;
+          if (gotTop && gotBottom) {
+            clearTimeout(scanTimeout);
+            bleService.stopScan();
+            resolve(true);
+          }
+        },
+        8000,
+        (message) => {
           clearTimeout(scanTimeout);
-          bleService.stopScan();
-          resolve();
+          console.warn("[Setup] auto-connect scan didn't start:", message);
+          resolve(false);
         }
-      }, 8000);
+      ).catch((e: any) => {
+        clearTimeout(scanTimeout);
+        console.warn("[Setup] auto-connect scan threw:", e?.message);
+        resolve(false);
+      });
     });
+
+    if (!started) {
+      Alert.alert(
+        "couldn't start scanning",
+        "make sure bluetooth is turned on, then try again."
+      );
+      setIsAutoConnecting(false);
+      return;
+    }
 
     // Sequential connection — parallel BLE connections cancel each other
     let connected = 0;
-    if (savedTop && foundDevices[savedTop.id]) {
-      await connect(foundDevices[savedTop.id], "top");
-      connected++;
-      await new Promise((r) => setTimeout(r, 500));
+    const missing: SensorSlot[] = [];
+
+    if (savedTop) {
+      if (foundDevices.top) {
+        await connect(foundDevices.top, "top");
+        // Re-save if this was a hardwareName-fallback match on a different
+        // id, so next time's id-only check hits without needing the fallback.
+        if (foundDevices.top.id !== savedTop.id) await saveDevice("top", foundDevices.top);
+        connected++;
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        missing.push("top");
+      }
     }
-    if (savedBottom && foundDevices[savedBottom.id]) {
-      await connect(foundDevices[savedBottom.id], "bottom");
-      connected++;
+    if (savedBottom) {
+      if (foundDevices.bottom) {
+        await connect(foundDevices.bottom, "bottom");
+        if (foundDevices.bottom.id !== savedBottom.id) await saveDevice("bottom", foundDevices.bottom);
+        connected++;
+      } else {
+        missing.push("bottom");
+      }
     }
 
     if (connected === 0) {
       Alert.alert(
         "s'pots not found",
         "make sure both s'pots are powered on and nearby, then try again."
+      );
+    } else if (missing.length > 0) {
+      Alert.alert(
+        "one s'pot not found",
+        `your ${missing[0]} s'pot wasn't found nearby — make sure it's powered on and try again.`
       );
     }
 
