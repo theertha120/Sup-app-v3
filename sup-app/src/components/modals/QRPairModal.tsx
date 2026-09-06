@@ -3,14 +3,21 @@
  *
  * QR-code s'pot pairing for pilot rollout — scan a QR printed by
  * scripts/witmotion_pairing_tool.py, find the two named sensors via a BLE
- * scan, and require an explicit confirm tap per sensor before connecting.
+ * scan, and require an explicit connect tap before connecting.
  *
  * Why "exact name match" and not "first thing we see": with dozens of s'pots
  * powered on simultaneously during the pilot, silently connecting to
  * whichever device shows up first would risk pairing someone's phone to a
- * neighbour's sensor. Matching only the QR's exact advertised names — and
- * never auto-connecting without a tap, even when there's just one match —
- * is the actual "foolproof" property here. See docs/qr-pairing-plan.txt.
+ * neighbour's sensor. Matching only the QR's exact advertised names is the
+ * actual "foolproof" property here — see docs/qr-pairing-plan.txt.
+ *
+ * The confirm tap itself is unified, not per-sensor: when each slot has
+ * exactly one match (the expected case), both are auto-selected and shown
+ * as one "your s'pots were found" screen with a single "connect" button —
+ * making the user tap twice to confirm two sensors they already scanned a
+ * QR for was friction with no real safety benefit. A slot only surfaces its
+ * own picker (SlotReview) when it's genuinely ambiguous: 0 matches (not
+ * found) or 2+ matches (a name collision) — see the review-phase render.
  *
  * Names, not MAC addresses: iOS never exposes real Bluetooth MAC addresses
  * to any app (an OS-level privacy restriction). The only identifier that's
@@ -100,8 +107,14 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
 
     setTimeout(() => {
       const byRssiDesc = (a: Device, b: Device) => (b.rssi ?? -999) - (a.rssi ?? -999);
-      setTop({ candidates: [...topFound].sort(byRssiDesc), selected: null });
-      setBottom({ candidates: [...bottomFound].sort(byRssiDesc), selected: null });
+      const topSorted    = [...topFound].sort(byRssiDesc);
+      const bottomSorted = [...bottomFound].sort(byRssiDesc);
+      // Auto-select when there's exactly one match — the unified "connect"
+      // button below is the confirm tap in that case, not a per-sensor pick.
+      // A slot only needs its own picker when there's genuine ambiguity
+      // (0 or 2+ candidates) — see the review-phase render.
+      setTop({ candidates: topSorted, selected: topSorted.length === 1 ? topSorted[0] : null });
+      setBottom({ candidates: bottomSorted, selected: bottomSorted.length === 1 ? bottomSorted[0] : null });
       setPhase("review");
     }, SCAN_TIMEOUT_MS + 200);
   };
@@ -201,46 +214,87 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
           )}
 
           {/* ── Review + mandatory confirm ── */}
-          {phase === "review" && pairing && (
-            <View style={s.reviewWrap}>
-              <SlotReview
-                slot="top"
-                label="top s'pot"
-                expectedName={pairing.topName}
-                outcome={top}
-                onSelect={(d) => setTop((prev) => ({ ...prev, selected: d }))}
-                onRetry={() => retrySlot("top")}
-              />
-              <SlotReview
-                slot="bottom"
-                label="bottom s'pot"
-                expectedName={pairing.bottomName}
-                outcome={bottom}
-                onSelect={(d) => setBottom((prev) => ({ ...prev, selected: d }))}
-                onRetry={() => retrySlot("bottom")}
-              />
-              {top.selected && bottom.selected && (() => {
-                const topCode = parseSpotName(top.selected.name ?? "")?.code;
-                const bottomCode = parseSpotName(bottom.selected.name ?? "")?.code;
-                if (!topCode || !bottomCode || topCode === bottomCode) return null;
-                return (
+          {/* The expected/common case: exactly one match per slot, auto-selected
+              above — show one unified "found" moment and a single connect tap,
+              not two separate per-sensor confirmations. A slot only gets its
+              own picker card when it's genuinely ambiguous (0 or 2+ matches). */}
+          {phase === "review" && pairing && (() => {
+            const topClean    = top.candidates.length    === 1;
+            const bottomClean = bottom.candidates.length === 1;
+            const allClean    = topClean && bottomClean;
+            const bothResolved = !!top.selected && !!bottom.selected;
+
+            const topCode    = top.selected    ? parseSpotName(top.selected.name ?? "")?.code    : null;
+            const bottomCode = bottom.selected ? parseSpotName(bottom.selected.name ?? "")?.code : null;
+            const kitMismatch = !!topCode && !!bottomCode && topCode !== bottomCode;
+
+            return (
+              <View style={s.reviewWrap}>
+                {allClean ? (
+                  <View style={s.foundCard}>
+                    <Ionicons name="checkmark-circle" size={40} color="#4CAF50" />
+                    <Text style={s.permTitle}>your s'pots were found</Text>
+                    <Text style={s.permBody}>
+                      top: {top.selected!.name}{"\n"}bottom: {bottom.selected!.name}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {topClean && top.selected ? (
+                      <ResolvedSlotLine label="top" device={top.selected} />
+                    ) : (
+                      <SlotReview
+                        slot="top"
+                        label="top s'pot"
+                        expectedName={pairing.topName}
+                        outcome={top}
+                        onSelect={(d) => setTop((prev) => ({ ...prev, selected: d }))}
+                        onRetry={() => retrySlot("top")}
+                      />
+                    )}
+                    {bottomClean && bottom.selected ? (
+                      <ResolvedSlotLine label="bottom" device={bottom.selected} />
+                    ) : (
+                      <SlotReview
+                        slot="bottom"
+                        label="bottom s'pot"
+                        expectedName={pairing.bottomName}
+                        outcome={bottom}
+                        onSelect={(d) => setBottom((prev) => ({ ...prev, selected: d }))}
+                        onRetry={() => retrySlot("bottom")}
+                      />
+                    )}
+                  </>
+                )}
+
+                {kitMismatch && (
                   <View style={s.slotRow}>
                     <Ionicons name="warning-outline" size={18} color="#E65100" />
                     <Text style={s.slotNotFound}>
                       these two sensors have different kit codes ({topCode} vs {bottomCode}) — make sure they're from the same kit
                     </Text>
                   </View>
-                );
-              })()}
-              <Pressable
-                style={[s.primaryBtn, (!top.selected || !bottom.selected) && s.primaryBtnDisabled]}
-                onPress={handleConfirmPair}
-                disabled={!top.selected || !bottom.selected}
-              >
-                <Text style={s.primaryBtnText}>pair my s'pots</Text>
-              </Pressable>
-            </View>
-          )}
+                )}
+
+                <Pressable
+                  style={[s.primaryBtn, !bothResolved && s.primaryBtnDisabled]}
+                  onPress={handleConfirmPair}
+                  disabled={!bothResolved}
+                >
+                  <Text style={s.primaryBtnText}>connect</Text>
+                </Pressable>
+
+                {allClean && (
+                  <Pressable
+                    onPress={() => { setTop(emptySlot); setBottom(emptySlot); runBleSearch(pairing); }}
+                    style={s.rescanLink}
+                  >
+                    <Text style={s.rescanLinkText}>not right? scan again</Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })()}
 
           {/* ── Connecting ── */}
           {phase === "connecting" && (
@@ -266,9 +320,25 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
   );
 }
 
+// ── Resolved slot (auto-selected, unambiguous) ──────────────────────────────
+// Shown instead of the full SlotReview picker when a slot already has its
+// single expected match — only used inside the non-"allClean" branch, i.e.
+// when the *other* slot needs the picker below.
+
+function ResolvedSlotLine({ label, device }: { label: string; device: Device }) {
+  return (
+    <View style={s.slotRow}>
+      <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+      <Text style={s.resolvedText}>{label} s'pot found — {device.name}</Text>
+    </View>
+  );
+}
+
 // ── Per-slot review row ─────────────────────────────────────────────────────
-// Every path here — single match or several — ends in an explicit tap.
-// Nothing about a sensor is ever auto-selected.
+// Only rendered for a slot that's genuinely ambiguous (0 or 2+ candidates) —
+// an unambiguous single match is auto-selected and shown as ResolvedSlotLine
+// instead. Every path here still ends in an explicit tap; nothing here is
+// ever auto-selected.
 
 function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
   slot: SensorSlot;
@@ -295,25 +365,10 @@ function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
         </View>
       )}
 
-      {candidates.length === 1 && (
-        <>
-          <Pressable
-            style={[s.candidateRow, selected?.id === candidates[0].id && s.candidateRowSelected]}
-            onPress={() => onSelect(candidates[0])}
-          >
-            <Ionicons
-              name={selected?.id === candidates[0].id ? "checkmark-circle" : "radio-button-off"}
-              size={20}
-              color={selected?.id === candidates[0].id ? "#4CAF50" : colours.primary}
-            />
-            <Text style={s.candidateText}>found: {candidates[0].name}</Text>
-            {selected?.id !== candidates[0].id && <Text style={s.confirmHint}>tap to confirm</Text>}
-          </Pressable>
-          {roleMismatchWarning(candidates[0], slot) && (
-            <Text style={s.roleWarning}>⚠️ {roleMismatchWarning(candidates[0], slot)}</Text>
-          )}
-        </>
-      )}
+      {/* candidates.length === 1 has no card here — the caller shows
+          ResolvedSlotLine instead, since that case is unambiguous and
+          already auto-selected. This component only ever renders for a
+          genuinely ambiguous slot: 0 candidates (above) or 2+ (below). */}
 
       {candidates.length > 1 && (
         <View>
@@ -385,6 +440,11 @@ const s = StyleSheet.create({
   slotLabel: { fontSize: 13, fontWeight: "700", color: colours.textPrimary },
   slotExpected: { fontSize: 11, color: colours.textSecondary },
 
+  foundCard: { alignItems: "center", gap: 6, backgroundColor: "#F0FAF4", borderRadius: 16, paddingVertical: 20, paddingHorizontal: 16 },
+  resolvedText: { fontSize: 13, color: colours.textPrimary, flex: 1 },
+  rescanLink: { alignSelf: "center", marginTop: 4, paddingVertical: 4 },
+  rescanLinkText: { fontSize: 12, fontWeight: "600", color: colours.textSecondary, textDecorationLine: "underline" },
+
   slotRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   slotNotFound: { fontSize: 12, color: "#E65100", flex: 1 },
   retryBtn: { borderWidth: 1.5, borderColor: colours.primary, borderRadius: 16, paddingVertical: 4, paddingHorizontal: 10 },
@@ -397,6 +457,5 @@ const s = StyleSheet.create({
   },
   candidateRowSelected: { borderColor: "#4CAF50", backgroundColor: "#F0FAF4" },
   candidateText: { fontSize: 13, color: colours.textPrimary, flex: 1 },
-  confirmHint: { fontSize: 11, color: colours.primary, fontWeight: "600" },
   roleWarning: { fontSize: 11, color: "#E65100", marginTop: 2, marginLeft: 4 },
 });

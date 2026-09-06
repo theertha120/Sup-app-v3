@@ -40,6 +40,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -643,6 +644,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             setSensorsReady(false);
           }
         }
+      },
+
+      // Unexpected drop (not a manual disconnect) — ask the user rather than
+      // silently retrying. "end session" leaves things as the status callback
+      // above already left them; "try to reconnect" hands the same Device
+      // back to BLEService's retry loop.
+      (slot, device) => {
+        const label = slot === "top" ? "top" : "bottom";
+        Alert.alert(
+          "s'pot disconnected",
+          `your ${label} s'pot lost connection. end this session, or try to reconnect?`,
+          [
+            { text: "end session", style: "destructive", onPress: () => bleService.cancelReconnect(slot) },
+            { text: "try to reconnect", onPress: () => bleService.confirmReconnect(device, slot) },
+          ],
+          { cancelable: false }
+        );
       }
     );
   }, []);
@@ -810,14 +828,33 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const scan = useCallback(async () => {
     const ok = await bleService.requestPermissions();
     if (!ok) return;
-    setDiscoveredDevices([]); 
+    setDiscoveredDevices([]);
     setIsScanning(true);
-    bleService.scan((device) => {
-      setDiscoveredDevices((prev) => {
-        if (prev.some((d) => d.id === device.id)) return prev;
-        return [...prev, device];
-      });
-    }, 10000);
+    const started = await bleService.scan(
+      (device) => {
+        setDiscoveredDevices((prev) => {
+          const idx = prev.findIndex((d) => d.id === device.id);
+          if (idx === -1) return [...prev, device];
+          // allowDuplicates means the same device can be re-sighted with a
+          // name it didn't carry on its first advertisement (name and
+          // service UUID can arrive in separate AD packets) — replace the
+          // stored sighting so the picker doesn't get stuck showing a blank
+          // name for a device that does have one.
+          if (!prev[idx].name && device.name) {
+            const updated = [...prev];
+            updated[idx] = device;
+            return updated;
+          }
+          return prev;
+        });
+      },
+      10000,
+      (message) => console.warn("[IMUContext] scan didn't start:", message)
+    );
+    if (!started) {
+      setIsScanning(false);
+      return;
+    }
     setTimeout(() => setIsScanning(false), 10000);
   }, []);
 

@@ -109,6 +109,10 @@ export default function SensorSetupScreen() {
   const [savedTop,         setSavedTop]         = useState<SavedDevice | null>(null);
   const [savedBottom,      setSavedBottom]      = useState<SavedDevice | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
+  // Manual per-slot pairing (the pre-QR fallback path) is collapsed behind
+  // this by default — the primary flow treats "your s'pots" as one thing to
+  // connect, not two separate devices to manage.
+  const [showManualSetup,  setShowManualSetup]  = useState(false);
 
   // ── Tutorial: once both s'pots connect, move on to calibration ───────────
 
@@ -246,6 +250,38 @@ export default function SensorSetupScreen() {
     );
   };
 
+  /** Forgets whichever s'pot(s) are saved, in one action — the top/bottom
+   * split only matters for the manual fallback pairing UI, not for the main
+   * "your s'pots" status, which treats them as a single pair. */
+  const forgetAll = () => {
+    Alert.alert(
+      "forget your s'pots?",
+      "this will remove your saved s'pots. you can re-pair them any time.",
+      [
+        { text: "cancel", style: "cancel" },
+        {
+          text: "forget",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (!userId) return;
+              await Promise.all([
+                AsyncStorage.removeItem(storageKey("top", userId)),
+                AsyncStorage.removeItem(storageKey("bottom", userId)),
+              ]);
+              setSavedTop(null);
+              setSavedBottom(null);
+              if (topSensor.state.connected)    await disconnect("top");
+              if (bottomSensor.state.connected) await disconnect("bottom");
+            } catch (e) {
+              console.warn("[Setup] Failed to forget s'pots:", e);
+            }
+          },
+        },
+      ]
+    );
+  };
+
 
   // ── Auto-connect ──────────────────────────────────────────────────────────
 
@@ -253,47 +289,108 @@ export default function SensorSetupScreen() {
     if (!savedTop && !savedBottom) return;
     setIsAutoConnecting(true);
 
-    const foundDevices: Record<string, Device> = {};
+    const granted = await bleService.requestPermissions();
+    if (!granted) {
+      Alert.alert(
+        "bluetooth permission needed",
+        "s'up needs Bluetooth access to find your s'pots. check your device's permission settings and try again."
+      );
+      setIsAutoConnecting(false);
+      return;
+    }
 
-    await new Promise<void>((resolve) => {
+    // Keyed by slot, not device id — a match can come from either an exact
+    // id hit or the hardwareName fallback below, so the winning Device for a
+    // slot isn't necessarily filed under that slot's saved id.
+    const foundDevices: Partial<Record<SensorSlot, Device>> = {};
+
+    const started = await new Promise<boolean>((resolve) => {
       const scanTimeout = setTimeout(() => {
         bleService.stopScan();
-        resolve();
+        resolve(true);
       }, 8000);
 
-      bleService.scan((device) => {
-        const isTop    = savedTop    && device.id === savedTop.id;
-        const isBottom = savedBottom && device.id === savedBottom.id;
-        if (!isTop && !isBottom) return;
+      bleService.scan(
+        (device) => {
+          // Prefer an exact saved-id match; fall back to the advertised name
+          // recorded at pairing time. A sensor's id can occasionally change
+          // (documented iOS CoreBluetooth behavior — see spotNaming.ts and
+          // the QR-pairing notes) which would otherwise permanently strand
+          // an id-only match with no way to recover short of forget+re-pair.
+          if (!foundDevices.top && savedTop &&
+              (device.id === savedTop.id || (savedTop.hardwareName && device.name === savedTop.hardwareName))) {
+            foundDevices.top = device;
+          }
+          if (!foundDevices.bottom && savedBottom &&
+              (device.id === savedBottom.id || (savedBottom.hardwareName && device.name === savedBottom.hardwareName))) {
+            foundDevices.bottom = device;
+          }
 
-        foundDevices[device.id] = device;
-
-        const gotTop    = !savedTop    || foundDevices[savedTop.id];
-        const gotBottom = !savedBottom || foundDevices[savedBottom.id];
-        if (gotTop && gotBottom) {
+          const gotTop    = !savedTop    || foundDevices.top;
+          const gotBottom = !savedBottom || foundDevices.bottom;
+          if (gotTop && gotBottom) {
+            clearTimeout(scanTimeout);
+            bleService.stopScan();
+            resolve(true);
+          }
+        },
+        8000,
+        (message) => {
           clearTimeout(scanTimeout);
-          bleService.stopScan();
-          resolve();
+          console.warn("[Setup] auto-connect scan didn't start:", message);
+          resolve(false);
         }
-      }, 8000);
+      ).catch((e: any) => {
+        clearTimeout(scanTimeout);
+        console.warn("[Setup] auto-connect scan threw:", e?.message);
+        resolve(false);
+      });
     });
+
+    if (!started) {
+      Alert.alert(
+        "couldn't start scanning",
+        "make sure bluetooth is turned on, then try again."
+      );
+      setIsAutoConnecting(false);
+      return;
+    }
 
     // Sequential connection — parallel BLE connections cancel each other
     let connected = 0;
-    if (savedTop && foundDevices[savedTop.id]) {
-      await connect(foundDevices[savedTop.id], "top");
-      connected++;
-      await new Promise((r) => setTimeout(r, 500));
+    const missing: SensorSlot[] = [];
+
+    if (savedTop) {
+      if (foundDevices.top) {
+        await connect(foundDevices.top, "top");
+        // Re-save if this was a hardwareName-fallback match on a different
+        // id, so next time's id-only check hits without needing the fallback.
+        if (foundDevices.top.id !== savedTop.id) await saveDevice("top", foundDevices.top);
+        connected++;
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        missing.push("top");
+      }
     }
-    if (savedBottom && foundDevices[savedBottom.id]) {
-      await connect(foundDevices[savedBottom.id], "bottom");
-      connected++;
+    if (savedBottom) {
+      if (foundDevices.bottom) {
+        await connect(foundDevices.bottom, "bottom");
+        if (foundDevices.bottom.id !== savedBottom.id) await saveDevice("bottom", foundDevices.bottom);
+        connected++;
+      } else {
+        missing.push("bottom");
+      }
     }
 
     if (connected === 0) {
       Alert.alert(
         "s'pots not found",
         "make sure both s'pots are powered on and nearby, then try again."
+      );
+    } else if (missing.length > 0) {
+      Alert.alert(
+        "one s'pot not found",
+        `your ${missing[0]} s'pot wasn't found nearby — make sure it's powered on and try again.`
       );
     }
 
@@ -324,67 +421,39 @@ export default function SensorSetupScreen() {
       ? "you're already calibrated. you can still re-calibrate anytime later."
       : "this is a one-time calibration that personalises how we determine your posture states, in real time.";
 
-  // ── Sensor row ────────────────────────────────────────────────────────────
+  // ── Unified s'pots summary ────────────────────────────────────────────────
+  //
+  // The setup screen treats "your s'pots" as one thing to connect, not two
+  // separate devices to manage — top/bottom only ever surface in the error
+  // alert during a connect attempt (see autoConnect's "missing" message) and
+  // in the manual fallback pairing UI, collapsed behind showManualSetup.
 
-  function SensorRow({ slot, label, position }: {
-    slot: SensorSlot; label: string; position: string;
-  }) {
-    const sensor    = slot === "top" ? topSensor    : bottomSensor;
-    const saved     = slot === "top" ? savedTop     : savedBottom;
-    const connected = sensor.state.connected;
+  const anySaved     = savedTop !== null || savedBottom !== null;
+  const bothSaved     = savedTop !== null && savedBottom !== null;
+  const anyConnected = topSensor.state.connected || bottomSensor.state.connected;
 
-    // Prefer the s'pot's own kit code (parsed from its advertised name, e.g.
-    // "s'pot_top_0048.05-08" → "48_top") over the userId-based displayName —
-    // that's still what's saved to AsyncStorage/backend, just not what's
-    // shown on screen. Falls back to the old displayName for any sensor
-    // whose name doesn't match the s'pot_<role>_<code>.<batch>-<n> convention
-    // (e.g. a factory-default unit that hasn't been renamed yet).
-    const rawHardwareName = saved?.hardwareName ?? sensor.state.deviceName ?? null;
-    const parsedSpot = rawHardwareName ? parseSpotName(rawHardwareName) : null;
-    const displayName = parsedSpot
-      ? `${parseInt(parsedSpot.code, 10)}_${parsedSpot.role}`
-      : saved?.displayName
-        ?? sensor.state.deviceName
-        ?? "not paired";
+  // Kit code shown when both sides parse to the same code (e.g.
+  // "s'pot_top_0048.05-08" + "s'pot_bot_0048.05-08" → "kit 48") — falls back
+  // to a generic label for factory-default names or a mismatched pair.
+  const topCode = (() => {
+    const raw = savedTop?.hardwareName ?? topSensor.state.deviceName ?? null;
+    return raw ? parseSpotName(raw)?.code ?? null : null;
+  })();
+  const bottomCode = (() => {
+    const raw = savedBottom?.hardwareName ?? bottomSensor.state.deviceName ?? null;
+    return raw ? parseSpotName(raw)?.code ?? null : null;
+  })();
+  const kitLabel = topCode && bottomCode && topCode === bottomCode
+    ? `kit ${parseInt(topCode, 10)}`
+    : "your s'pots";
 
-    const hasSavedOrConnected = connected || saved !== null;
-
-    return (
-      <View style={styles.sensorRow}>
-        <View style={[styles.sensorIcon, { backgroundColor: connected ? "#E8F5E9" : "#F5F5F5" }]}>
-          <Ionicons name="hardware-chip-outline" size={24} color={connected ? "#4CAF50" : "#999"} />
-        </View>
-
-        <View style={styles.sensorInfo}>
-          <Text style={styles.sensorLabel}>{label}</Text>
-          <Text style={styles.sensorPosition}>{position}</Text>
-          <View style={styles.sensorStatusRow}>
-            <View style={[styles.statusDot, { backgroundColor: connected ? "#4CAF50" : "#ccc" }]} />
-            <Text style={styles.sensorName} numberOfLines={1}>{displayName}</Text>
-          </View>
-          {saved && !connected && (
-            <Text style={styles.savedHint}>saved — tap auto-connect to reconnect</Text>
-          )}
-          {connected && saved?.hardwareName && (
-            <Text style={styles.hardwareName}>{saved.hardwareName}</Text>
-          )}
-        </View>
-
-        <View style={styles.sensorActions}>
-          {hasSavedOrConnected ? (
-            <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice(slot)}>
-              <Text style={styles.actionBtnDangerText}>forget</Text>
-            </Pressable>
-          ) : (
-            <Pressable style={styles.actionBtn} onPress={() => handleScan(slot)}>
-              <Ionicons name="bluetooth-outline" size={14} color={colours.primary} />
-              <Text style={styles.actionBtnText}>connect</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-    );
-  }
+  const spotsStatusText = bothConnected
+    ? "connected"
+    : anyConnected
+      ? "not connected" // one dropped mid-session — still just "not connected" here, detail lives in the disconnect prompt
+      : anySaved
+        ? "saved — tap auto-connect to reconnect"
+        : "not paired yet";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -443,12 +512,64 @@ export default function SensorSetupScreen() {
           </Pressable>
         )}
 
-        {/* s'pot rows */}
+        {/* s'pots — treated as one thing to connect, not two separate rows */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>your s'pots</Text>
-          <SensorRow slot="top"    label="top s'pot"    position="between your shoulder blades" />
-          <View style={styles.divider} />
-          <SensorRow slot="bottom" label="bottom s'pot" position="lower back, just above your waistband" />
+
+          <View style={styles.sensorRow}>
+            <View style={[styles.sensorIcon, { backgroundColor: bothConnected ? "#E8F5E9" : "#F5F5F5" }]}>
+              <Ionicons name="hardware-chip-outline" size={24} color={bothConnected ? "#4CAF50" : "#999"} />
+            </View>
+
+            <View style={styles.sensorInfo}>
+              <Text style={styles.sensorLabel}>{kitLabel}</Text>
+              <View style={styles.sensorStatusRow}>
+                <View style={[styles.statusDot, { backgroundColor: bothConnected ? "#4CAF50" : "#ccc" }]} />
+                <Text style={styles.sensorName} numberOfLines={1}>{spotsStatusText}</Text>
+              </View>
+            </View>
+
+            {anySaved && (
+              <Pressable style={styles.actionBtnDanger} onPress={forgetAll}>
+                <Text style={styles.actionBtnDangerText}>forget</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {!bothSaved && (
+            <Pressable onPress={() => setShowManualSetup((v) => !v)} style={styles.manualToggle}>
+              <Text style={styles.manualToggleText}>
+                {showManualSetup ? "hide manual setup" : "having trouble? set up manually"}
+              </Text>
+            </Pressable>
+          )}
+
+          {showManualSetup && (
+            <View style={styles.manualSetupWrap}>
+              {!savedTop && (
+                <Pressable style={styles.actionBtn} onPress={() => handleScan("top")}>
+                  <Ionicons name="bluetooth-outline" size={14} color={colours.primary} />
+                  <Text style={styles.actionBtnText}>connect top s'pot</Text>
+                </Pressable>
+              )}
+              {!savedBottom && (
+                <Pressable style={styles.actionBtn} onPress={() => handleScan("bottom")}>
+                  <Ionicons name="bluetooth-outline" size={14} color={colours.primary} />
+                  <Text style={styles.actionBtnText}>connect bottom s'pot</Text>
+                </Pressable>
+              )}
+              {savedTop && (
+                <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice("top")}>
+                  <Text style={styles.actionBtnDangerText}>forget top s'pot only</Text>
+                </Pressable>
+              )}
+              {savedBottom && (
+                <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice("bottom")}>
+                  <Text style={styles.actionBtnDangerText}>forget bottom s'pot only</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {tutorialStep === "connect-tip" && (
             <View style={[styles.tutorialTip, { marginTop: 12, marginBottom: 0 }]}>
@@ -726,20 +847,19 @@ const styles = StyleSheet.create({
   sensorIcon:      { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   sensorInfo:      { flex: 1 },
   sensorLabel:     { fontSize: 14, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
-  sensorPosition:  { fontSize: 11, color: colours.textSecondary, marginTop: 1, fontFamily: "Agrandir-Regular" },
   sensorStatusRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   statusDot:       { width: 7, height: 7, borderRadius: 4 },
   sensorName:      { fontSize: 12, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
-  hardwareName:    { fontSize: 10, color: "#bbb", marginTop: 2, fontFamily: "Agrandir-Regular" },
-  savedHint:       { fontSize: 11, color: colours.primary, marginTop: 3, fontFamily: "Agrandir-Regular" },
-  sensorActions:   { alignItems: "flex-end", gap: 6 },
 
   actionBtn:           { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
   actionBtnText:       { fontSize: 12, fontWeight: "600", color: colours.primary, fontFamily: "Agrandir-Regular" },
   actionBtnDanger:     { borderWidth: 1.5, borderColor: "#F44336", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
   actionBtnDangerText: { fontSize: 12, fontWeight: "600", color: "#F44336", fontFamily: "Agrandir-Regular" },
 
-  divider: { height: 1, backgroundColor: "#F0F0F0", marginVertical: 8 },
+  // Manual per-slot pairing fallback — collapsed by default (see showManualSetup)
+  manualToggle:     { alignSelf: "center", marginTop: 12, paddingVertical: 4 },
+  manualToggleText: { fontSize: 12, fontWeight: "600", color: colours.textSecondary, textDecorationLine: "underline" },
+  manualSetupWrap:  { gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
 
   primaryBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, marginBottom: 16 },
   primaryBtnText: { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },
