@@ -15,6 +15,12 @@
  *      in the React Native JS runtime on iOS.
  *   3. getConnectedDeviceIds() exposed so the picker can filter out
  *      s'pots that are already assigned to a slot.
+ *
+ * Reconnection is user-confirmed, not automatic: an unexpected drop fires
+ * onUnexpectedDisconnect (set via setCallbacks) instead of retrying on its
+ * own. The app prompts "end session, or try to reconnect?" and calls
+ * confirmReconnect()/cancelReconnect() with the answer — see IMUContext.tsx.
+ * A manual disconnect (disconnectSlot()/disconnectAll()) never prompts.
  */
 
 import { BleManager, Device, Characteristic, BleError } from "react-native-ble-plx";
@@ -42,6 +48,10 @@ export interface SensorState {
 
 type DataCallback   = (slot: SensorSlot, data: DataView) => void;
 type StatusCallback = (slot: SensorSlot, state: SensorState) => void;
+// Fired when a slot drops unexpectedly (not via disconnectSlot()/disconnectAll()).
+// The app decides what happens next — see confirmReconnect()/cancelReconnect()
+// below — instead of BLEService silently retrying on its own.
+type UnexpectedDisconnectCallback = (slot: SensorSlot, device: Device) => void;
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 class BLEService {
@@ -69,6 +79,7 @@ class BLEService {
   private disconnectSubs: Record<SensorSlot, { remove: () => void } | null> = { top: null, bottom: null };
   private onData?:   DataCallback;
   private onStatus?: StatusCallback;
+  private onUnexpectedDisconnect?: UnexpectedDisconnectCallback;
 
   constructor() {
     this.manager = new BleManager();
@@ -89,9 +100,14 @@ class BLEService {
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
 
-  setCallbacks(onData: DataCallback, onStatus: StatusCallback) {
-    this.onData   = onData;
-    this.onStatus = onStatus;
+  setCallbacks(
+    onData: DataCallback,
+    onStatus: StatusCallback,
+    onUnexpectedDisconnect?: UnexpectedDisconnectCallback
+  ) {
+    this.onData                 = onData;
+    this.onStatus               = onStatus;
+    this.onUnexpectedDisconnect = onUnexpectedDisconnect;
   }
 
   // ── Permissions ───────────────────────────────────────────────────────────
@@ -207,73 +223,10 @@ class BLEService {
         }
       );
 
-      // ── Disconnection handler with reconnect guard ──────────────────────
-      // Remove any stale handler from a prior connection on this slot before
-      // registering a new one. Without this, both the old and new handlers fire
-      // on disconnect, which clears manuallyDisconnected before the second
-      // handler reads it and incorrectly triggers auto-reconnect.
-      this.disconnectSubs[slot]?.remove();
-      this.disconnectSubs[slot] = this.manager.onDeviceDisconnected(connected.id, async () => {
-        console.log(`[BLE] ${slot} s'pot disconnected`);
-        this.devices[slot] = null;
-        this.onStatus?.(slot, {
-          connected: false, deviceId: null, deviceName: null,
-        });
-
-        // Skip reconnect if the user explicitly disconnected
-        if (this.manuallyDisconnected[slot]) {
-          console.log(`[BLE] ${slot} manually disconnected — skipping auto-reconnect`);
-          this.manuallyDisconnected[slot] = false;
-          return;
-        }
-
-        // Only attempt reconnect if not already reconnecting this slot
-        if (this.reconnecting[slot]) {
-          console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
-          return;
-        }
-
-        this.reconnecting[slot] = true;
-        let attempts = 0;
-
-        while (attempts < 5) {
-          attempts++;
-          const delayMs = attempts * 2000;
-          console.log(`[BLE] ${slot} reconnect attempt ${attempts}/5 in ${delayMs}ms`);
-          await new Promise((r) => setTimeout(r, delayMs));
-
-          if (this.devices[slot] !== null) {
-            console.log(`[BLE] ${slot} already reconnected externally — aborting loop`);
-            break;
-          }
-
-          // Wait for any other slot to finish reconnecting first
-          // This prevents parallel BLE connections which cancel each other on iOS
-          let waited = 0;
-          while (this.reconnectingAny && waited < 15000) {
-            await new Promise((r) => setTimeout(r, 500));
-            waited += 500;
-          }
-
-          if (this.devices[slot] !== null) break; // reconnected while waiting
-
-          this.reconnectingAny = true;
-          try {
-            await this.reconnectDirect(device, slot);
-            console.log(`[BLE] ${slot} s'pot reconnected`);
-            break;
-          } catch (e: any) {
-            console.warn(`[BLE] ${slot} reconnect attempt ${attempts} failed:`, e.message);
-            if (attempts >= 5) {
-              console.log(`[BLE] ${slot} giving up after 5 attempts`);
-            }
-          } finally {
-            this.reconnectingAny = false;
-          }
-        }
-
-        this.reconnecting[slot] = false;
-      });
+      // Reconnect guard — see registerDisconnectHandler() below. Also
+      // re-registered after a successful reconnectDirect() so a *second*
+      // unexpected drop is caught too, not just the first.
+      this.registerDisconnectHandler(device, connected, slot);
 
     } catch (e: any) {
       console.error(`[BLE] Failed to connect ${slot} s'pot:`, e.message);
@@ -314,6 +267,121 @@ class BLEService {
       this.disconnectSlot("top"),
       this.disconnectSlot("bottom"),
     ]);
+  }
+
+  // ── Reconnection (user-confirmed) ─────────────────────────────────────────
+  //
+  // An unexpected drop (see onUnexpectedDisconnect above) no longer retries
+  // on its own — the app prompts "end session, or try to reconnect?" and
+  // calls one of these with the user's answer.
+
+  /**
+   * User chose to try reconnecting. Runs the same 5-attempt, escalating-
+   * backoff retry loop as before this was gated behind confirmation,
+   * serialised across slots so parallel BLE connects don't cancel each
+   * other on iOS.
+   */
+  confirmReconnect(device: Device, slot: SensorSlot): void {
+    if (this.reconnecting[slot] || this.devices[slot] !== null) return;
+    this.reconnecting[slot] = true;
+    this.runReconnectLoop(device, slot);
+  }
+
+  /**
+   * User chose to end the session instead of reconnecting. The disconnect's
+   * cleanup (finalizing the session, clearing sensor state) already ran when
+   * the drop was first detected — this just guards against a reconnect ever
+   * starting for it.
+   */
+  cancelReconnect(slot: SensorSlot): void {
+    this.reconnecting[slot] = false;
+    this.manuallyDisconnected[slot] = true;
+  }
+
+  /**
+   * Wires up the "this slot's device dropped" listener, shared by the
+   * initial connectDevice() and every successful reconnectDirect() — without
+   * re-registering here after each reconnect, only the *first* unexpected
+   * drop for a given slot would ever be noticed; later drops on the
+   * reconnected device would go completely silent (no prompt, no cleanup).
+   *
+   * `device` is the original handle threaded through retries (used to start
+   * another reconnect attempt); `connected` is the live post-.connect()
+   * Device whose id the listener is scoped to.
+   */
+  private registerDisconnectHandler(device: Device, connected: Device, slot: SensorSlot): void {
+    // Remove any stale handler from a prior connection on this slot first.
+    // Without this, both the old and new handlers fire on disconnect, which
+    // clears manuallyDisconnected before the second handler reads it.
+    this.disconnectSubs[slot]?.remove();
+    this.disconnectSubs[slot] = this.manager.onDeviceDisconnected(connected.id, async () => {
+      console.log(`[BLE] ${slot} s'pot disconnected`);
+      this.devices[slot] = null;
+      this.onStatus?.(slot, {
+        connected: false, deviceId: null, deviceName: null,
+      });
+
+      // Skip the reconnect prompt if the user explicitly disconnected
+      if (this.manuallyDisconnected[slot]) {
+        console.log(`[BLE] ${slot} manually disconnected — skipping reconnect prompt`);
+        this.manuallyDisconnected[slot] = false;
+        return;
+      }
+
+      // Don't re-prompt if a reconnect attempt (from an earlier prompt) is
+      // already in flight for this slot.
+      if (this.reconnecting[slot]) {
+        console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
+        return;
+      }
+
+      // An unexpected drop — surface it to the app instead of silently
+      // retrying. The app asks the user "end session, or try reconnecting?"
+      // and calls confirmReconnect()/cancelReconnect() with their answer.
+      this.onUnexpectedDisconnect?.(slot, device);
+    });
+  }
+
+  private async runReconnectLoop(device: Device, slot: SensorSlot): Promise<void> {
+    let attempts = 0;
+
+    while (attempts < 5) {
+      attempts++;
+      const delayMs = attempts * 2000;
+      console.log(`[BLE] ${slot} reconnect attempt ${attempts}/5 in ${delayMs}ms`);
+      await new Promise((r) => setTimeout(r, delayMs));
+
+      if (this.devices[slot] !== null) {
+        console.log(`[BLE] ${slot} already reconnected externally — aborting loop`);
+        break;
+      }
+
+      // Wait for any other slot to finish reconnecting first
+      // This prevents parallel BLE connections which cancel each other on iOS
+      let waited = 0;
+      while (this.reconnectingAny && waited < 15000) {
+        await new Promise((r) => setTimeout(r, 500));
+        waited += 500;
+      }
+
+      if (this.devices[slot] !== null) break; // reconnected while waiting
+
+      this.reconnectingAny = true;
+      try {
+        await this.reconnectDirect(device, slot);
+        console.log(`[BLE] ${slot} s'pot reconnected`);
+        break;
+      } catch (e: any) {
+        console.warn(`[BLE] ${slot} reconnect attempt ${attempts} failed:`, e.message);
+        if (attempts >= 5) {
+          console.log(`[BLE] ${slot} giving up after 5 attempts`);
+        }
+      } finally {
+        this.reconnectingAny = false;
+      }
+    }
+
+    this.reconnecting[slot] = false;
   }
 
   // ── Identity helpers ──────────────────────────────────────────────────────
@@ -398,7 +466,12 @@ class BLEService {
         }
       }
     );
+
+    // Re-arm the disconnect listener for this newly-reconnected device — see
+    // registerDisconnectHandler()'s doc comment for why this matters.
+    this.registerDisconnectHandler(device, connected, slot);
   }
+
   private async writeCommand(device: Device, cmd: Uint8Array): Promise<void> {
     const base64 = btoa(String.fromCharCode(...cmd));
     await device.writeCharacteristicWithResponseForService(

@@ -40,6 +40,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -643,6 +644,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             setSensorsReady(false);
           }
         }
+      },
+
+      // Unexpected drop (not a manual disconnect) — ask the user rather than
+      // silently retrying. "end session" leaves things as the status callback
+      // above already left them; "try to reconnect" hands the same Device
+      // back to BLEService's retry loop.
+      (slot, device) => {
+        const label = slot === "top" ? "top" : "bottom";
+        Alert.alert(
+          "s'pot disconnected",
+          `your ${label} s'pot lost connection. end this session, or try to reconnect?`,
+          [
+            { text: "end session", style: "destructive", onPress: () => bleService.cancelReconnect(slot) },
+            { text: "try to reconnect", onPress: () => bleService.confirmReconnect(device, slot) },
+          ],
+          { cancelable: false }
+        );
       }
     );
   }, []);
