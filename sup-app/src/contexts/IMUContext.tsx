@@ -572,7 +572,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           staticNudgeFiredRef.current  = false;
           setTimeInCurrentStateMs(0);
           setShouldNudge(false);
-          setActiveIntervention(null);
+          // Deliberately NOT clearing activeIntervention here (no
+          // setActiveIntervention(null)) — this block runs on every raw
+          // per-packet classification change, ~10Hz, with no hysteresis.
+          // Sitting near a threshold boundary (e.g. right around 28°) for
+          // an extended time causes the smoothed angle to drift back and
+          // forth across it, so "state changed" fires many times a minute
+          // without the user actually moving. That used to null the popup
+          // within ~100ms of it appearing — often before it could even be
+          // seen — and since interventionFiredRef below usually doesn't
+          // reset once CPL is already high, the alert would then be
+          // permanently blocked from ever firing again for the rest of
+          // that bout. An active intervention should only go away via the
+          // user's explicit "did you move?" answer — see
+          // dismissIntervention() — not an unrelated classification flicker.
 
           // Reset intervention fired flag when state changes
           // BUT only reset if CPL drops below 80% of threshold
