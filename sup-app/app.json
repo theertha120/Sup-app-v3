@@ -7,6 +7,7 @@
     "scheme": "supapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/images/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.supapp.app",
@@ -21,7 +22,8 @@
     "android": {
       "minSdkVersion": 26,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#AB99FA"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
