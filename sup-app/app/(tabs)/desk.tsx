@@ -549,8 +549,8 @@ export default function DeskScreen() {
         metricInfo={SKIPPER_INFO}
       />
 
-      {/*<InterventionModal />*/}
-      {/*<MovementNudgeModal />*/}
+      <InterventionModal />
+      <MovementNudgeModal />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <HeaderBar suffix="it up" logoSize={28} />
