@@ -92,7 +92,7 @@ export default function SensorSetupScreen() {
     discoveredDevices, isScanning,
     calibration, clinicalBaseline,
     scan, connect, disconnect,
-    bothConnected,
+    bothConnected, isNeutralCalibrated,
   } = useIMUContext();
 
   const { userId } = useAuth();
@@ -117,6 +117,39 @@ export default function SensorSetupScreen() {
       setTutorialStep("calibrate-tip");
     }
   }, [tutorialStep, bothConnected, setTutorialStep]);
+
+  // ── Auto-prompt calibration right after connecting ────────────────────────
+  //
+  // Only reacts to a fresh false→true flip of bothConnected (a ref, not
+  // state, so this doesn't re-fire every render while connected stays true).
+  //   - Never calibrated yet: open the full calibration flow straight away,
+  //     so a first-time user can't forget to do it.
+  //   - Already calibrated: ask first, since re-opening the full 5-step flow
+  //     every time someone reconnects would be annoying for daily use —
+  //     "have you moved your s'pots since last calibration?" only opens the
+  //     modal on "yes."
+
+  const prevBothConnectedRef = useRef(bothConnected);
+
+  useEffect(() => {
+    const wasConnected = prevBothConnectedRef.current;
+    prevBothConnectedRef.current = bothConnected;
+    if (wasConnected || !bothConnected) return; // only on a fresh false→true flip
+
+    if (!isNeutralCalibrated) {
+      setShowCalibModal(true);
+      return;
+    }
+
+    Alert.alert(
+      "s'pot placement check",
+      "have you moved the position of your s'pots since your last calibration?",
+      [
+        { text: "no", style: "cancel" },
+        { text: "yes", onPress: () => setShowCalibModal(true) },
+      ]
+    );
+  }, [bothConnected, isNeutralCalibrated]);
 
   // ── Tutorial: once calibration actually completes, move on to desk mode ──
   //
@@ -593,12 +626,12 @@ export default function SensorSetupScreen() {
             {
               icon:  "arrow-up-circle-outline",
               title: "top s'pot",
-              desc:  "between your shoulder blades (T4–T6 vertebrae). clip or tape vertically along the spine.",
+              desc:  "between your shoulder blades. clip or tape vertically along the spine.",
             },
             {
               icon:  "arrow-down-circle-outline",
               title: "bottom s'pot",
-              desc:  "lower back (L2–L4 vertebrae), just above the waistband. clip or tape vertically.",
+              desc:  "lower back, just above your waistband. clip or tape vertically.",
             },
           ].map((item) => (
             <View key={item.title} style={styles.guideRow}>

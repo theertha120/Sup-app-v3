@@ -128,11 +128,12 @@ export default function SourcesMethodologyScreen() {
             before tracking begins, you complete a short 5-step calibration: sit in your own
             natural upright position (this becomes your personal zero-reference, since posture
             and sensor mounting both vary person to person), then lean forward, backward, right,
-            and left to your comfortable limit. this sets the range every later reading is
-            measured against, and separately detects which way your s'pots are physically worn so
-            "forward" and "right" are always measured correctly regardless of mounting
-            orientation. calibration doesn't change how any score is calculated — it only
-            personalises the zero-point and range those calculations use.
+            and left to your comfortable limit. calibration's job is orientation, not thresholds:
+            the forward and right lean steps tell the app which way your s'pots are physically
+            worn, so "forward" and "right" are always measured correctly no matter which of the
+            two possible mounting rotations your kit is in. the classification bands below are the
+            same fixed values for every user once orientation is correctly resolved — calibration
+            doesn't rescale them.
           </Text>
         </Section>
 

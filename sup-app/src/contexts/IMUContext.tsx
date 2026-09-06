@@ -76,6 +76,12 @@ const DISPLAY_TICK_MS           = 10_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
 
+// Packets required from EACH s'pot (at ~10Hz) before classification is
+// trusted enough to let calibration start — roughly half a second of real
+// data. Prevents starting a calibration step's 3s sampling window before any
+// packet has arrived, which would silently capture zero samples.
+const READY_PACKET_THRESHOLD = 5;
+
 // Minimum raw angle delta (deg) during calibration steps 2 (lean forward) and
 // 4 (lean right) before we trust its SIGN as evidence of the kit's mounting
 // orientation. Below this, the delta is close enough to sensor noise that a
@@ -162,6 +168,13 @@ export interface IMUContextValue {
   shoulderBalancePercent: number | null;
   /** Time-weighted upper-back support percent (0-100) computed from per-packet instant scores */
   upperBackPercent: number | null;
+  /**
+   * True once BOTH s'pots have sent enough packets after connecting to trust
+   * live classification. Gates calibration — starting a step before this is
+   * true risks its 3s sampling window capturing zero packets and silently
+   * failing. False again immediately on either slot disconnecting.
+   */
+  sensorsReady: boolean;
 
   discoveredDevices: Device[];
   isScanning: boolean;
@@ -248,11 +261,19 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [neckAlignmentPercent, setNeckAlignmentPercent] = useState<number | null>(null);
   const [shoulderBalancePercent, setShoulderBalancePercent] = useState<number | null>(null);
   const [upperBackPercent, setUpperBackPercent] = useState<number | null>(null);
+  // True once BOTH s'pots have sent enough packets to trust classification —
+  // gates the calibration UI so a step can't be started before real data is
+  // flowing (previously: starting immediately after connect could sample zero
+  // packets during the 3s capture window and silently fail with no error).
+  const [sensorsReady, setSensorsReady] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
 
   const topLatestRef     = useRef<ParsedIMU | null>(null);
   const bottomLatestRef  = useRef<ParsedIMU | null>(null);
+  const topPacketCountRef    = useRef(0);
+  const bottomPacketCountRef = useRef(0);
+  const sensorsReadyRef      = useRef(false);
   const neutralOffsetRef = useRef<NeutralOffset | null>(null);
   const baselineRef      = useRef<ClinicalBaseline | null>(null);
   const userIdRef        = useRef<string | null>(userId);
@@ -444,10 +465,24 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         if (slot === "top") {
           topLatestRef.current = parsed;
+          topPacketCountRef.current += 1;
           setTopData((prev) => ({ ...prev, latest: parsed }));
         } else {
           bottomLatestRef.current = parsed;
+          bottomPacketCountRef.current += 1;
           setBottomData((prev) => ({ ...prev, latest: parsed }));
+        }
+
+        // Flip once, the first time both slots have enough packets — using a
+        // ref (not the sensorsReady state) since this closure is captured
+        // once at mount and would otherwise read a stale value.
+        if (
+          !sensorsReadyRef.current &&
+          topPacketCountRef.current    >= READY_PACKET_THRESHOLD &&
+          bottomPacketCountRef.current >= READY_PACKET_THRESHOLD
+        ) {
+          sensorsReadyRef.current = true;
+          setSensorsReady(true);
         }
 
         const top    = slot === "top"    ? parsed : topLatestRef.current;
@@ -571,7 +606,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             finalizeSession();
-            topLatestRef.current = null; 
+            topLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
@@ -582,12 +617,16 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             upperSumMsRef.current = 0;
             lastPacketTimestampRef.current = null;
             setUpperBackPercent(null);
+            // Not ready until this slot streams enough fresh packets again
+            topPacketCountRef.current = 0;
+            sensorsReadyRef.current = false;
+            setSensorsReady(false);
           }
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             finalizeSession();
-            bottomLatestRef.current = null; 
+            bottomLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
@@ -598,6 +637,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             upperSumMsRef.current = 0;
             lastPacketTimestampRef.current = null;
             setUpperBackPercent(null);
+            // Not ready until this slot streams enough fresh packets again
+            bottomPacketCountRef.current = 0;
+            sensorsReadyRef.current = false;
+            setSensorsReady(false);
           }
         }
       }
@@ -790,10 +833,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <IMUContext.Provider value={{
-      topSensor: topData, 
-      bottomSensor: bottomData, 
-      posture, 
+      topSensor: topData,
+      bottomSensor: bottomData,
+      posture,
       bothConnected,
+      sensorsReady,
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,

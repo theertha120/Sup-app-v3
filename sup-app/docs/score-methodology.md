@@ -87,18 +87,24 @@ health inputs, no data from outside the s'pot hardware.
   pitch, yaw) over Bluetooth LE, roughly 10 times per second.
 
 ### 3b. One-time calibration
-Before tracking starts, the user completes a short calibration: sit in their own natural upright
+Before tracking starts, the user completes a 5-step calibration: sit in their own natural upright
 position (this becomes their personal zero-reference, since people's natural posture varies and
 the sensors' physical mounting angle can vary too), then lean forward, backward, right, and left
-to their comfortable limit. This calibration is used only to correct for individual anatomy and
-sensor mounting — it does not change the scoring formula itself.
+to their comfortable limit. Calibration's job is **orientation, not thresholds**: the forward and
+right lean steps tell the app which raw sensor-angle sign means "forward" and "right" for this
+particular physical s'pot mount (a kit can be worn in either of two rotations — calibration
+detects which one this is, rather than assuming one fixed mounting orientation for every kit). An
+earlier version of this app also rescaled the classification bands themselves to each user's
+calibrated comfortable range; that made classification too sensitive in practice and was reverted
+— the bands below are fixed for every user once orientation is correctly resolved.
 
 ### 3c. Posture classification
-On every sensor reading, the app computes two calibration-corrected angles:
+On every sensor reading, the app computes two calibration-corrected, orientation-corrected angles:
 - **pitchDiff** — the forward/backward angle between the two sensors (positive = leaning forward)
 - **rollDiff** — the left/right angle between the two sensors (positive = leaning right)
 
-These are compared against fixed thresholds to classify the moment into one of seven states:
+These are compared against fixed thresholds — the same for every user — to classify the moment
+into one of seven states:
 
 | pitchDiff (forward lean)   | State          |
 |-----------------------------|----------------|
@@ -109,7 +115,11 @@ These are compared against fixed thresholds to classify the moment into one of s
 | > 42°                       | severe         |
 
 Independently, if the sideways angle exceeds 8° and is the dominant signal, the state is
-`tilted_left` or `tilted_right` instead.
+`tilted_left`/`tilted_right` instead (moderate severity past 16°).
+
+Backward lean (negative pitchDiff) is always classified as upright regardless of magnitude —
+seated backward extension is generally benign and self-limiting (a chair backrest naturally
+prevents extreme range), so it doesn't get penalised the way forward flexion does.
 
 ### 3d. SHS accumulation (runs once per second)
 Every second, the app looks at the current state and adjusts SHS:
