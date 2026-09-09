@@ -210,7 +210,7 @@ export default function SignInModal() {
                   style={[styles.button, styles.secondaryButton]}
                   onPress={() => {
                     startRegistration();
-                    router.replace("/onboarding/intro" as any);
+                    router.push("/onboarding/intro" as any);
                   }}
                 >
                   <Text style={[styles.buttonText, styles.secondaryText]}>Create account</Text>

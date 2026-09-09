@@ -90,10 +90,11 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "700",
     lineHeight: 28,
-    marginBottom: 7,
+    // marginBottom: 7,
   },
   backText: {
     fontSize: 18,
+    lineHeight: 28, // add this, matching the arrow's lineHeight
     color: "#333",
     fontFamily: "Agrandir-GrandHeavy",
   },

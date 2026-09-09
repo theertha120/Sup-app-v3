@@ -1,11 +1,12 @@
 import React, { useRef, useCallback, useEffect } from "react";
-import { Animated, StyleSheet, Text, View, Image, Pressable } from "react-native";
+import { Animated, StyleSheet, Text, View, Image, Pressable, TouchableOpacity } from "react-native";
 import { useFonts } from "expo-font";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { supabase } from "../../src/lib/supabase";
+import { useAuth } from "@/src/contexts/AuthContext";
 
 export default function IntroScreen() {
   const [fontsLoaded] = useFonts({
@@ -37,9 +38,22 @@ export default function IntroScreen() {
 
   if (!fontsLoaded) return null;
 
+  const { stopRegistration } = useAuth();
+
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <BackgroundBlobs />
+
+      <TouchableOpacity
+        onPress={() => {
+          stopRegistration();
+          router.back();
+        }}
+        style={styles.backBtn}
+      >
+        <Text style={styles.backArrow}>←</Text>
+        <Text style={styles.backText}> Back</Text>
+      </TouchableOpacity>
 
       <View style={styles.content}>
         {/* Card */}
@@ -72,6 +86,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "rgba(211, 193, 231, 0.64)",
+  },
+  backBtn: {
+    position: "absolute",
+    top: 60,
+    left: 24,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backArrow: {
+    fontSize: 26,
+    color: "#333",
+    fontWeight: "700",
+    lineHeight: 28,
+    // marginBottom: 7,
+  },
+  backText: {
+    fontSize: 18,
+    lineHeight: 28, // add this, matching the arrow's lineHeight
+    color: "#333",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   content: {
     flex: 1,

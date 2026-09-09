@@ -11,6 +11,7 @@ interface AuthContextType {
   userId: string | null;
   registrationMode: boolean;
   startRegistration: () => void;
+  stopRegistration: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (
     email: string,
@@ -79,6 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function startRegistration() {
     setRegistrationMode(true);
+  }
+
+  function stopRegistration() {
+    setRegistrationMode(false);
   }
 
   async function login(
@@ -333,7 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
       {children}
     </AuthContext.Provider>
   );

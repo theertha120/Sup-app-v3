@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
 
-const OPTIONS = ["influencerr", "linkedin", "instagram", "tiktok", "friend/fam", "other"];
+const OPTIONS = ["influencer", "linkedin", "instagram", "tiktok", "friend/fam", "other"];
 
 export default function HeardScreen() {
   const router = useRouter();
@@ -26,6 +26,11 @@ export default function HeardScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <Text style={styles.backArrow}>←</Text>
+        <Text style={styles.backText}> Back</Text>
+      </TouchableOpacity>
+
       <View style={styles.questionBubble}>
         <Text style={styles.questionText}>How did you{"\n"}hear about s'up?</Text>
       </View>
@@ -53,6 +58,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 80,
     paddingHorizontal: 24,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    alignSelf: "flex-start",
+  },
+  backArrow: {
+    fontSize: 26,
+    color: "#333",
+    fontWeight: "700",
+    lineHeight: 28,
+    // marginBottom: 7,
+  },
+  backText: {
+    fontSize: 18,
+    lineHeight: 28, // add this, matching the arrow's lineHeight
+    color: "#333",
+    fontFamily: "Agrandir-GrandHeavy",
   },
   questionBubble: {
     backgroundColor: "#EDE8FF",
