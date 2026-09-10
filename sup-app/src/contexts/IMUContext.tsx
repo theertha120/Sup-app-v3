@@ -761,6 +761,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       // running while this prompt is up, so "reconnect s'pot" resumes the
       // same session with no gap.
       (slot, device) => {
+        // No session running (e.g. the other s'pot was switched off after the
+        // session already ended) — a drop is just a drop, don't prompt.
+        if (sessionStartTimeRef.current === null) return;
+
         const label = slot === "top" ? "top" : "bottom";
         setBrandAlert({
           title: `${label} s'pot disconnected`,
