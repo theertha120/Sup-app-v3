@@ -41,6 +41,7 @@ import React, {
   useRef,
 } from "react";
 import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
+import { Alert, AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -438,6 +439,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
+  // Handle app backgrounding - auto-finalize session when app goes to background
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if ((state === "background" || state === "inactive") && sessionIdRef.current) {
+        console.log("[IMUContext] App backgrounding, auto-finalizing session");
+        finalizeSessionRef.current();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const finalizeSession = useCallback(() => {
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
@@ -464,20 +479,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Ends the current session for real — writes it to Supabase (finalizeSession)
-  // AND clears the local session timer/accumulators so a fresh session starts
-  // on the next packet. Use this for a deliberate end (manual disconnect, or
-  // the user picking "end s'ession" on the disconnect prompt) — NOT for an
-  // unexpected drop the user might still choose to reconnect through.
-  const endCurrentSession = useCallback(() => {
-    finalizeSession();
-    sessionStartTimeRef.current = null;
-    setSessionStartTimeMs(null);
-    setSessionDurationMs(0);
-    upperSumScoreMsRef.current = 0;
-    upperSumMsRef.current = 0;
-    lastPacketTimestampRef.current = null;
-    setUpperBackPercent(null);
+  // Keep ref to finalizeSession for use in AppState listener
+  const finalizeSessionRef = useRef(finalizeSession);
+  useEffect(() => {
+    finalizeSessionRef.current = finalizeSession;
   }, [finalizeSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────

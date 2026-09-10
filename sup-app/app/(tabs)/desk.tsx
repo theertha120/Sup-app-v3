@@ -1,18 +1,3 @@
-/**
- * desk.tsx — Desk Mode screen
- *
- * Shows live posture + current session data only.
- * Charts and historical breakdown moved to stats.tsx.
- *
- * Session data shown:
- *   - Live posture figure + state label
- *   - Session duration (time s'pots have been connected)
- *   - Time in current state
- *   - Session posture breakdown (upright %, forward %, etc.)
- *   - s'train indicator (branded UI name for CPL, cumulative postural load —
- *     see the "?" button beside it, and app/sources-methodology.tsx)
- */
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
@@ -40,6 +25,7 @@ import { useToast } from "../../src/contexts/ToastContext";
 import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
+import { sUpdatesService } from "../../src/services/posture/s_updatesService";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -322,6 +308,20 @@ export default function DeskScreen() {
     disconnectAll,
   } = useIMUContext();
 
+  // --- State declarations ---
+  const [showCalibModal, setShowCalibModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateColor, setUpdateColor] = useState<"green" | "yellow" | "red">("yellow");
+  const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
+  const [updateHistory, setUpdateHistory] = useState<{ text: string; color: "green" | "yellow" | "red"; time: Date }[]>([]);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+  const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
   const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
   const livePostureRef = useRef(posture);
@@ -344,22 +344,49 @@ export default function DeskScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const [showCalibModal, setShowCalibModal] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-  const [updateColor, setUpdateColor] = useState<"green" | "yellow" | "red">("yellow");
-  const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
-  const [updateHistory, setUpdateHistory] = useState<{ text: string; color: "green" | "yellow" | "red"; time: Date }[]>([]);
+  // Load today's s'updates from Supabase on mount
+  useEffect(() => {
+    const loadUpdates = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          // Load today's s'updates for display
+          const todaySUpdates = await sUpdatesService.getTodaySUpdates(user.id);
+          if (todaySUpdates && todaySUpdates.length > 0) {
+            const converted = todaySUpdates.map(su => ({
+              text: su.text,
+              color: su.color as "green" | "yellow" | "red",
+              time: new Date(su.created_at || new Date()),
+            }));
+            setUpdateHistory(converted);
+          }
+        }
+      } catch (error) {
+        console.error("[desk] Failed to load s'updates:", error);
+      }
+    };
+    loadUpdates();
+  }, []);
 
-  const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
-  const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
-  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const handleCloseUpdateModal = async () => {
+    const newUpdate = { text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() };
+    setUpdateHistory(prev => [newUpdate, ...prev]);
 
-  const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+    // Save s'update to Supabase
+    if (currentUserId) {
+      try {
+        await sUpdatesService.saveSUpdate(
+          currentUserId,
+          newUpdate.text,
+          newUpdate.color
+        );
+      } catch (error) {
+        console.error("[s'update] Failed to save to Supabase:", error);
+        // Still close the modal even if save fails
+      }
+    }
 
-  const handleCloseUpdateModal = () => {
-    setUpdateHistory(prev => [{ text: updateMessage ?? "no message recorded", color: updateColor, time: new Date() }, ...prev]);
     setShowUpdateModal(false);
     setUpdateMessage(null);
     setUpdateColor("yellow");
