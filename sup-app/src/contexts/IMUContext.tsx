@@ -40,7 +40,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { Alert } from "react-native";
+import { Alert, AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -430,6 +430,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
+  // Handle app backgrounding - auto-finalize session when app goes to background
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if ((state === "background" || state === "inactive") && sessionIdRef.current) {
+        console.log("[IMUContext] App backgrounding, auto-finalizing session");
+        finalizeSessionRef.current();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const finalizeSession = useCallback(() => {
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
@@ -455,6 +469,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
     }
   }, []);
+
+  // Keep ref to finalizeSession for use in AppState listener
+  const finalizeSessionRef = useRef(finalizeSession);
+  useEffect(() => {
+    finalizeSessionRef.current = finalizeSession;
+  }, [finalizeSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
