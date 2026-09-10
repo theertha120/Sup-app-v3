@@ -51,8 +51,7 @@ export default function IntroScreen() {
         }}
         style={styles.backBtn}
       >
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
       </TouchableOpacity>
 
       <View style={styles.content}>
@@ -92,21 +91,11 @@ const styles = StyleSheet.create({
     top: 60,
     left: 24,
     zIndex: 10,
-    flexDirection: "row",
-    alignItems: "center",
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    transform: [{ translateY: -1 }],
-  },
-  backText: {
-    fontSize: 18,
-    lineHeight: 28,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   content: {
     flex: 1,

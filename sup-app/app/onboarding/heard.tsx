@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
@@ -27,8 +27,7 @@ export default function HeardScreen() {
       style={styles.container}
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
       </TouchableOpacity>
 
       <View style={styles.questionBubble}>
@@ -56,27 +55,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
-    paddingTop: 80,
+    paddingTop: 16,
     paddingHorizontal: 24,
   },
   backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+    marginTop: 45,
+    marginBottom: -20,
     alignSelf: "flex-start",
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    transform: [{ translateY: -1 }],
-  },
-  backText: {
-    fontSize: 18,
-    lineHeight: 28,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   questionBubble: {
     backgroundColor: "#EDE8FF",

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, Pressable } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, Pressable, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -51,6 +51,7 @@ export default function VerifyEmailScreen() {
         id: user.id,
         name: pendingSignup.firstName,
         last_name: pendingSignup.lastName,
+        phone: pendingSignup.phone,
         avatar_url: randomAvatarUrl(),
         current_streak: 0,
         weekly_avg_points: 0,
@@ -86,17 +87,14 @@ export default function VerifyEmailScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
-      </TouchableOpacity>
-
       <View style={styles.content}>
         <Text style={styles.heading}>check your email</Text>
         <Text style={styles.subheading}>
           enter the 6-digit code we sent to{"\n"}
           <Text style={styles.emailText}>{pendingSignup.email}</Text>
         </Text>
+
+        <Text style={styles.warningText}>💡 ensure that you check your spam/junk folder for the verification code!</Text>
 
         <Pressable style={styles.codeRow} onPress={() => inputRef.current?.focus()}>
           {Array.from({ length: CODE_LENGTH }).map((_, i) => (
@@ -126,26 +124,16 @@ export default function VerifyEmailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 32,
+    paddingTop: 60,
     paddingHorizontal: 24,
   },
   backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
     marginBottom: 12,
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    transform: [{ translateY: -1 }],
-  },
-  backText: {
-    fontSize: 18,
-    lineHeight: 28,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   content: {
     flex: 1,
@@ -171,6 +159,15 @@ const styles = StyleSheet.create({
   emailText: {
     fontFamily: "Agrandir-GrandHeavy",
     color: "#5222AE",
+  },
+  warningText: {
+    fontSize: 16,
+    fontFamily: "Agrandir-Regular",
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 18,
   },
   codeRow: {
     flexDirection: "row",
