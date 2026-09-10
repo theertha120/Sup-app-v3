@@ -87,6 +87,8 @@ function buildPromptInsight(data: SessionInsightData): string {
   return `
 You are s'kipper, the friendly posture coach in the s'up posture tracking app. The user has just asked for a mid-session update.
 
+Everything below describes ONLY the current desk session (the one that started when the s'pots last connected). It is not the user's whole day or their history. Do not reference earlier sessions, a daily total, or how long they have been "tracking today" — if the numbers are small it just means this session is young, not that the user only started using the app today. Comment strictly on this session.
+
 Session data so far:
 - Total session time: ${toMin(data.sessionDurationMs)} minutes
 - Currently in: ${STATE_LABEL[data.currentState] ?? data.currentState} for ${toMin(data.timeInCurrentStateMs)} minutes
@@ -96,7 +98,7 @@ ${breakdown || "  - no posture data recorded yet"}
 ${previousSection}
 ${dailySection}
 
-Write a warm, conversational 2-3 sentence mid-session update. Reference today's goal if one is provided. Comment on the most notable aspect of their session so far. Give one clear actionable suggestion they can act on right now. Lowercase only, except for proper nouns and the standalone word "I", which should always be capitalized. No em dashes. No bullet points or headers.
+Write a warm, conversational 2-3 sentence mid-session update. Reference today's goal if one is provided. Comment on the most notable aspect of this session so far. Give one clear actionable suggestion they can act on right now. Lowercase only, except for proper nouns and the standalone word "I", which should always be capitalized. No em dashes. No bullet points or headers.
 
 Based on everything above, decide if this session is "green" (going well), "yellow" (ok, room to improve), or "red" (needs attention). Use your own judgment.
 
@@ -115,6 +117,8 @@ function buildPromptSummary(data: SessionSummaryData): string {
   return `
 You are s'kipper, the friendly posture coach in the s'up posture tracking app. The user has just ended their session.
 
+Everything below describes ONLY the session that just ended (from when the s'pots connected to now). It is not the user's whole day or their history. Do not reference other sessions, a daily total, or how long they have been "using the app today" — a short session just means this one sitting was short. Summarise strictly this session.
+
 Full session data:
 - Total session time: ${toMin(data.sessionDurationMs)} minutes
 - Cumulative s'train: ${data.cpl} (${cplLabel(data.cpl)})
@@ -122,7 +126,7 @@ Full session data:
 ${breakdown || "  - no posture data recorded"}
 ${updatesSection}
 
-Write a warm end-of-session summary in 3-4 sentences. Cover: (1) an overall verdict on how the session went, (2) one thing that was good, (3) one thing to improve next time. Keep it conversational and encouraging. Lowercase only, except for proper nouns and the standalone word "I", which should always be capitalized. No em dashes. No bullet points or headers.
+Write a warm end-of-session summary in 3-4 sentences. Cover: (1) an overall verdict on how this session went, (2) one thing that was good, (3) one thing to improve next time. Keep it conversational and encouraging. Lowercase only, except for proper nouns and the standalone word "I", which should always be capitalized. No em dashes. No bullet points or headers.
 
 Rate the overall session "green" (good session), "yellow" (mixed), or "red" (needs work). Use your judgment.
 
