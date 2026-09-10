@@ -41,7 +41,7 @@ import React, {
   useRef,
 } from "react";
 import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -301,6 +301,16 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const staticStartTimeRef      = useRef<number>(Date.now());
   const sessionStartTimeRef     = useRef<number | null>(null); // set on first packet after connect
   const sessionIdRef            = useRef<string | null>(null);
+  // True from the moment a session is deliberately ended until the s'pots
+  // reconnect / the app returns to the foreground. Stops in-flight packets
+  // that arrive during BLE teardown from spawning a phantom new session.
+  const sessionEndedRef         = useRef(false);
+  // Cumulative time (ms) the s'pots were disconnected during the current
+  // session, plus the start of the gap currently in progress (or null). Used
+  // to subtract dead time from total_duration_ms so it matches the tracked
+  // time in state_totals.
+  const sessionGapMsRef         = useRef(0);
+  const disconnectedAtRef       = useRef<number | null>(null);
   const shsRef                  = useRef(100);
   const cplRef                  = useRef(0);
   const sessionShsSumRef        = useRef<number>(0);
@@ -439,12 +449,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
-  // Handle app backgrounding - auto-finalize session when app goes to background
+  // App going to the background ends the current session — it's written to
+  // Supabase and the timer is reset, so reopening the app starts fresh. Guard
+  // on the timer (not sessionIdRef) so a session whose startSession() insert
+  // hasn't resolved yet is still torn down locally.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if ((state === "background" || state === "inactive") && sessionIdRef.current) {
-        console.log("[IMUContext] App backgrounding, auto-finalizing session");
-        finalizeSessionRef.current();
+      // "background" only — NOT "inactive", which also fires for transient
+      // interruptions (a phone call, the notification shade, the app
+      // switcher) that shouldn't end a session.
+      if (state === "background" && sessionStartTimeRef.current !== null) {
+        console.log("[IMUContext] App backgrounded — ending session");
+        endCurrentSessionRef.current();
+      }
+      // Back in the foreground with s'pots still streaming: allow a new
+      // session to start again (the previous one was ended on background).
+      if (state === "active") {
+        sessionEndedRef.current = false;
       }
     });
 
@@ -461,17 +482,27 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     const todayDK   = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
     const uid       = userIdRef.current;
 
+    // Duration excludes time the s'pots were disconnected — banked gaps plus a
+    // gap still open at end (session ended while disconnected). This keeps
+    // total_duration_ms in step with the tracked time in state_totals.
+    const now      = Date.now();
+    const openGapMs = disconnectedAtRef.current !== null ? now - disconnectedAtRef.current : 0;
+    const rawMs     = sessionStartTimeRef.current ? now - sessionStartTimeRef.current : 0;
+    const trackedMs = Math.max(0, rawMs - sessionGapMsRef.current - openGapMs);
+
     postureSync.endSession(sessionId, {
       avgShs: tickCount > 0 ? sessionShsSumRef.current / tickCount : null,
       minShs: sessionMinShsRef.current,
       maxCpl: sessionMaxCplRef.current,
       avgInstantScore: upperSumMsRef.current > 0 ? upperSumScoreMsRef.current / upperSumMsRef.current : null,
-      totalDurationMs: sessionStartTimeRef.current ? Date.now() - sessionStartTimeRef.current : 0,
+      totalDurationMs: trackedMs,
       stateTotals: sessionStateTotalsRef.current,
     });
 
     sessionIdRef.current          = null;
     sessionStateTotalsRef.current = {};
+    sessionGapMsRef.current       = 0;
+    disconnectedAtRef.current     = null;
 
     // Rebuild posture_daily after a short delay to ensure endSession has written to DB
     if (uid) {
@@ -479,11 +510,26 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Keep ref to finalizeSession for use in AppState listener
-  const finalizeSessionRef = useRef(finalizeSession);
-  useEffect(() => {
-    finalizeSessionRef.current = finalizeSession;
+  // Deliberate end of the current session: writes it to Supabase
+  // (finalizeSession) AND clears the local session timer so a brand-new
+  // session starts on the next packet. Used for a manual disconnect, the
+  // "end s'ession" button on the disconnect prompt, and the app going to the
+  // background. NOT used for an unexpected drop the user might still
+  // reconnect through — that path deliberately leaves the timer running so
+  // "reconnect s'pot" resumes the same session.
+  const endCurrentSession = useCallback(() => {
+    finalizeSession();
+    sessionStartTimeRef.current = null;
+    sessionEndedRef.current = true;
+    setSessionStartTimeMs(null);
+    setSessionDurationMs(0);
   }, [finalizeSession]);
+
+  // Ref so the mount-only AppState listener always calls the latest version.
+  const endCurrentSessionRef = useRef(endCurrentSession);
+  useEffect(() => {
+    endCurrentSessionRef.current = endCurrentSession;
+  }, [endCurrentSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
@@ -519,6 +565,19 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const bottom = slot === "bottom" ? parsed : bottomLatestRef.current;
         if (!top || !bottom) return;
 
+        // A session was just deliberately ended — ignore any packets still
+        // draining out of the BLE stack during teardown so they can't spawn a
+        // phantom session. Cleared when the s'pots reconnect or the app
+        // returns to the foreground.
+        if (sessionEndedRef.current) return;
+
+        // Both slots are streaming again after a mid-session disconnect —
+        // bank the dead gap so it's excluded from total_duration_ms.
+        if (disconnectedAtRef.current !== null) {
+          sessionGapMsRef.current += Date.now() - disconnectedAtRef.current;
+          disconnectedAtRef.current = null;
+        }
+
         // Start session timer on first packet
         if (sessionStartTimeRef.current === null) {
           sessionStartTimeRef.current = Date.now();
@@ -532,6 +591,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           sessionShsTickCountRef.current = 0;
           sessionMinShsRef.current = 100;
           sessionMaxCplRef.current = 0;
+          sessionGapMsRef.current = 0;
+          disconnectedAtRef.current = null;
 
           postureSync.startSession(userIdRef.current).then((id) => {
             if (sessionStartTimeRef.current !== null) {
@@ -650,6 +711,18 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // or the "end s'ession" button on the prompt below), and an
         // unexpected drop the user may still reconnect through must keep the
         // session timer running.
+
+        // A fresh connection means the user wants to track again — lift the
+        // post-end packet suppression so the next packet can start a session.
+        if (state.connected) {
+          sessionEndedRef.current = false;
+        } else if (sessionStartTimeRef.current !== null && disconnectedAtRef.current === null) {
+          // A slot dropped mid-session — start timing the dead gap. It's
+          // banked in the packet handler once BOTH slots stream again (the
+          // moment tracking truly resumes).
+          disconnectedAtRef.current = Date.now();
+        }
+
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
@@ -657,6 +730,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
+            // Drop the per-packet timestamp so the first packet after a
+            // reconnect doesn't fold the whole disconnected gap into the
+            // upper-back time-weighted average.
+            lastPacketTimestampRef.current = null;
             // Not ready until this slot streams enough fresh packets again
             topPacketCountRef.current = 0;
             sensorsReadyRef.current = false;
@@ -669,6 +746,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
+            lastPacketTimestampRef.current = null;
             // Not ready until this slot streams enough fresh packets again
             bottomPacketCountRef.current = 0;
             sensorsReadyRef.current = false;

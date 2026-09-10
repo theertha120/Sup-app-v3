@@ -88,7 +88,7 @@ const TICK_MS = 5_000;
 
 export function useSessionStats(currentState: DeskPostureState | undefined) {
   const { userId } = useAuth();
-  const { setSessionStateTotals } = useIMUContext();
+  const { setSessionStateTotals, sessionStartTimeMs } = useIMUContext();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
   const [weekDays,     setWeekDays]     = useState<DayData[]>([]);
@@ -100,6 +100,7 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
   const sessionRef         = useRef<StateTimeMap>({});
   const userIdRef          = useRef<string | null>(userId);
+  const prevSessionStartRef = useRef<number | null>(sessionStartTimeMs);
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
@@ -191,9 +192,16 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
     return () => clearInterval(interval);
   }, []);
 
-  // Reset session on disconnect
+  // Commit + reset the session accumulator only when the session identity
+  // actually changes — i.e. a session ended (sessionStartTimeMs → null) or a
+  // brand-new one began (→ a different timestamp). A temporary s'pot
+  // disconnect the user reconnects through keeps the SAME sessionStartTimeMs,
+  // so the per-state totals carry straight through as one continuous session.
   useEffect(() => {
-    if (currentState === undefined) {
+    if (sessionStartTimeMs === prevSessionStartRef.current) return;
+
+    // Only fold if there was a real session before this change.
+    if (prevSessionStartRef.current !== null) {
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
       const todayDK = new Date().toISOString().slice(0, 10);
       AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
@@ -201,7 +209,9 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       sessionRef.current = {};
       setSessionStats({});
     }
-  }, [currentState === undefined]);
+
+    prevSessionStartRef.current = sessionStartTimeMs;
+  }, [sessionStartTimeMs]);
 
   return {
     sessionStats,
