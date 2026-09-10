@@ -5,13 +5,13 @@ import {
   TextInput,
   Pressable,
   Modal,
-  Alert,
   KeyboardAvoidingView,
   ScrollView,
   Platform,
 } from "react-native";
 import { useState, useEffect } from "react";
 import React from "react";
+import { BrandAlert } from "../ui/BrandAlert";
 import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -48,6 +48,7 @@ export default function SignInModal() {
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [signInAlert, setSignInAlert] = useState<{ title: string; message?: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -77,7 +78,10 @@ export default function SignInModal() {
 
     const res = await login(email, password);
     if (!res.success) {
-      Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please try again.");
+      setSignInAlert({
+        title: "sign in failed",
+        message: res.error || "invalid credentials. please try again.",
+      });
     } else {
       router.replace("/(tabs)/home" as any);
     }
@@ -152,6 +156,7 @@ export default function SignInModal() {
   if (!fontsLoaded) return null;
 
   return (
+    <>
     <Modal
       visible={(!isAuthenticated && !registrationMode) || step !== "signin"}
       animationType="fade"
@@ -313,6 +318,13 @@ export default function SignInModal() {
         </KeyboardAvoidingView>
       </View>
     </Modal>
+    <BrandAlert
+      visible={signInAlert !== null}
+      title={signInAlert?.title ?? ""}
+      message={signInAlert?.message}
+      onRequestClose={() => setSignInAlert(null)}
+    />
+    </>
   );
 }
 

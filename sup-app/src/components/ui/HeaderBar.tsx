@@ -7,9 +7,9 @@ import {
   Modal,
   TouchableWithoutFeedback,
   TextInput,
-  Alert,
   Image,
 } from "react-native";
+import { BrandAlert } from "./BrandAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -57,6 +57,8 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
  
   // Friends modal
   const [friendsModalVisible, setFriendsModalVisible] = useState(false);
+
+  const [nameAlert, setNameAlert] = useState(false);
  
   // Load profile data
   const loadProfile = () => {
@@ -113,7 +115,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
   const handleSaveUsername = async () => {
     const trimmed = draftName.trim();
     if (trimmed.length === 0) {
-      Alert.alert("Username can't be empty");
+      setNameAlert(true);
       return;
     }
     try {
@@ -299,6 +301,12 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <BrandAlert
+        visible={nameAlert}
+        title="username can't be empty"
+        onRequestClose={() => setNameAlert(false)}
+      />
     </>
   );
 }
