@@ -81,6 +81,12 @@ class BLEService {
   // Prevents auto-reconnect from firing after an intentional disconnection.
   private manuallyDisconnected: Record<SensorSlot, boolean> = { top: false, bottom: false };
 
+  // De-dupes a single drop that surfaces through more than one path (the
+  // characteristic notify-error callback AND onDeviceDisconnected can both
+  // fire for one disconnect, in either order). Set the first time a drop for
+  // the slot is processed; cleared again on the next successful (re)connect.
+  private dropHandled: Record<SensorSlot, boolean> = { top: false, bottom: false };
+
   // onDeviceDisconnected subscriptions — one per slot, removed before re-registering
   // so stale handlers from previous connections don't fire on the next disconnect.
   private disconnectSubs: Record<SensorSlot, { remove: () => void } | null> = { top: null, bottom: null };
@@ -252,6 +258,10 @@ class BLEService {
       }
 
       this.devices[slot] = connected;
+      // Fresh connection is live — a later drop on it is unexpected until
+      // proven otherwise, so clear both suppression flags now.
+      this.dropHandled[slot] = false;
+      this.manuallyDisconnected[slot] = false;
       this.onStatus?.(slot, {
         connected:  true,
         deviceId:   connected.id,
@@ -265,9 +275,7 @@ class BLEService {
         (error: BleError | null, characteristic: Characteristic | null) => {
           if (error) {
             console.warn(`[BLE] ${slot} s'pot notify error:`, error.message);
-            this.onStatus?.(slot, {
-              connected: false, deviceId: null, deviceName: null,
-            });
+            this.handleUnexpectedDrop(slot, device);
             return;
           }
           if (characteristic?.value) {
@@ -301,6 +309,9 @@ class BLEService {
     // Mark as intentional — prevents onDeviceDisconnected from auto-reconnecting
     this.manuallyDisconnected[slot] = true;
     this.reconnecting[slot] = false;
+    // A stray notify-error / onDeviceDisconnected after teardown must not
+    // re-surface this as an unexpected drop.
+    this.dropHandled[slot] = true;
 
     // Remove the disconnect subscription so the stale handler can't fire
     this.disconnectSubs[slot]?.remove();
@@ -373,32 +384,49 @@ class BLEService {
     // Without this, both the old and new handlers fire on disconnect, which
     // clears manuallyDisconnected before the second handler reads it.
     this.disconnectSubs[slot]?.remove();
-    this.disconnectSubs[slot] = this.manager.onDeviceDisconnected(connected.id, async () => {
-      console.log(`[BLE] ${slot} s'pot disconnected`);
-      this.devices[slot] = null;
-      this.onStatus?.(slot, {
-        connected: false, deviceId: null, deviceName: null,
-      });
-
-      // Skip the reconnect prompt if the user explicitly disconnected
-      if (this.manuallyDisconnected[slot]) {
-        console.log(`[BLE] ${slot} manually disconnected — skipping reconnect prompt`);
-        this.manuallyDisconnected[slot] = false;
-        return;
-      }
-
-      // Don't re-prompt if a reconnect attempt (from an earlier prompt) is
-      // already in flight for this slot.
-      if (this.reconnecting[slot]) {
-        console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
-        return;
-      }
-
-      // An unexpected drop — surface it to the app instead of silently
-      // retrying. The app asks the user "end session, or try reconnecting?"
-      // and calls confirmReconnect()/cancelReconnect() with their answer.
-      this.onUnexpectedDisconnect?.(slot, device);
+    this.disconnectSubs[slot] = this.manager.onDeviceDisconnected(connected.id, () => {
+      this.handleUnexpectedDrop(slot, device);
     });
+  }
+
+  /**
+   * Single choke point for a dropped slot, reached from BOTH the
+   * characteristic notify-error callback and the onDeviceDisconnected
+   * listener — either can win the race for a given drop, and powering a
+   * s'pot off / walking out of range usually fires the notify error first,
+   * which is why the prompt has to hang off this and not just
+   * onDeviceDisconnected. dropHandled[slot] de-dupes; connectDevice() and
+   * reconnectDirect() clear it on a fresh connection.
+   *
+   * `device` is the original Device handle (threaded through retries) so a
+   * subsequent confirmReconnect() has something to reconnect.
+   */
+  private handleUnexpectedDrop(slot: SensorSlot, device: Device): void {
+    if (this.dropHandled[slot]) return;
+    this.dropHandled[slot] = true;
+
+    console.log(`[BLE] ${slot} s'pot disconnected`);
+    this.devices[slot] = null;
+    this.subscriptions[slot]?.remove();
+    this.subscriptions[slot] = null;
+
+    this.onStatus?.(slot, { connected: false, deviceId: null, deviceName: null });
+
+    // Explicit disconnect — the app already knows, no prompt.
+    if (this.manuallyDisconnected[slot]) {
+      console.log(`[BLE] ${slot} manually disconnected — skipping reconnect prompt`);
+      this.manuallyDisconnected[slot] = false;
+      return;
+    }
+
+    // A reconnect attempt from an earlier prompt is already running.
+    if (this.reconnecting[slot]) {
+      console.log(`[BLE] ${slot} reconnect already in flight — skipping`);
+      return;
+    }
+
+    // Unexpected — hand it to the app to ask "reconnect s'pot, or end session?"
+    this.onUnexpectedDisconnect?.(slot, device);
   }
 
   /**
@@ -509,6 +537,8 @@ class BLEService {
     await connected.discoverAllServicesAndCharacteristics();
 
     this.devices[slot] = connected;
+    this.dropHandled[slot] = false;
+    this.manuallyDisconnected[slot] = false;
     this.onStatus?.(slot, {
       connected:  true,
       deviceId:   connected.id,
@@ -521,9 +551,7 @@ class BLEService {
       (error: BleError | null, characteristic: Characteristic | null) => {
         if (error) {
           console.warn(`[BLE] ${slot} s'pot notify error:`, error.message);
-          this.onStatus?.(slot, {
-            connected: false, deviceId: null, deviceName: null,
-          });
+          this.handleUnexpectedDrop(slot, device);
           return;
         }
         if (characteristic?.value) {

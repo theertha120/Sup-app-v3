@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, ActivityIndicator, Alert, Image,
+  Pressable, ActivityIndicator, Image,
 } from "react-native";
 import { useFonts } from "expo-font";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,6 +30,7 @@ import { Device } from "react-native-ble-plx";
 import { useAuth } from "../src/contexts/AuthContext";
 import CalibrationModal from "../src/components/modals/CalibrationModal";
 import QRPairModal from "../src/components/modals/QRPairModal";
+import { BrandAlert, BrandAlertButton } from "../src/components/ui/BrandAlert";
 import { useTutorial } from "../src/contexts/TutorialContext";
 import { parseSpotName } from "../src/lib/spotNaming";
 
@@ -113,6 +114,12 @@ export default function SensorSetupScreen() {
   // this by default — the primary flow treats "your s'pots" as one thing to
   // connect, not two separate devices to manage.
   const [showManualSetup,  setShowManualSetup]  = useState(false);
+  const [showPlacementCheck, setShowPlacementCheck] = useState(false);
+  const [alert, setAlert] = useState<{
+    title: string;
+    message?: string;
+    buttons?: BrandAlertButton[];
+  } | null>(null);
 
   // ── Tutorial: once both s'pots connect, move on to calibration ───────────
 
@@ -145,14 +152,7 @@ export default function SensorSetupScreen() {
       return;
     }
 
-    Alert.alert(
-      "s'pot placement check",
-      "have you moved the position of your s'pots since your last calibration?",
-      [
-        { text: "no", style: "cancel" },
-        { text: "yes", onPress: () => setShowCalibModal(true) },
-      ]
-    );
+    setShowPlacementCheck(true);
   }, [bothConnected, isNeutralCalibrated]);
 
   // ── Tutorial: once calibration actually completes, move on to desk mode ──
@@ -225,10 +225,10 @@ export default function SensorSetupScreen() {
 
   const forgetDevice = (slot: SensorSlot) => {
     const label = slot === "top" ? "top s'pot" : "bottom s'pot";
-    Alert.alert(
-      `forget ${label}?`,
-      `this will remove your saved ${label}. you can re-pair it any time.`,
-      [
+    setAlert({
+      title: `forget ${label}?`,
+      message: `this will remove your saved ${label}. you can re-pair it any time.`,
+      buttons: [
         { text: "cancel", style: "cancel" },
         {
           text: "forget",
@@ -246,18 +246,18 @@ export default function SensorSetupScreen() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   /** Forgets whichever s'pot(s) are saved, in one action — the top/bottom
    * split only matters for the manual fallback pairing UI, not for the main
    * "your s'pots" status, which treats them as a single pair. */
   const forgetAll = () => {
-    Alert.alert(
-      "forget your s'pots?",
-      "this will remove your saved s'pots. you can re-pair them any time.",
-      [
+    setAlert({
+      title: "forget your s'pots?",
+      message: "this will remove your saved s'pots. you can re-pair them any time.",
+      buttons: [
         { text: "cancel", style: "cancel" },
         {
           text: "forget",
@@ -278,8 +278,8 @@ export default function SensorSetupScreen() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
 
@@ -291,10 +291,10 @@ export default function SensorSetupScreen() {
 
     const granted = await bleService.requestPermissions();
     if (!granted) {
-      Alert.alert(
-        "bluetooth permission needed",
-        "s'up needs Bluetooth access to find your s'pots. check your device's permission settings and try again."
-      );
+      setAlert({
+        title: "bluetooth permission needed",
+        message: "s'up needs Bluetooth access to find your s'pots. check your device's permission settings and try again.",
+      });
       setIsAutoConnecting(false);
       return;
     }
@@ -348,10 +348,10 @@ export default function SensorSetupScreen() {
     });
 
     if (!started) {
-      Alert.alert(
-        "couldn't start scanning",
-        "make sure bluetooth is turned on, then try again."
-      );
+      setAlert({
+        title: "couldn't start scanning",
+        message: "make sure bluetooth is turned on, then try again.",
+      });
       setIsAutoConnecting(false);
       return;
     }
@@ -383,15 +383,15 @@ export default function SensorSetupScreen() {
     }
 
     if (connected === 0) {
-      Alert.alert(
-        "s'pots not found",
-        "make sure both s'pots are powered on and nearby, then try again."
-      );
+      setAlert({
+        title: "s'pots not found",
+        message: "make sure both s'pots are powered on and nearby, then try again.",
+      });
     } else if (missing.length > 0) {
-      Alert.alert(
-        "one s'pot not found",
-        `your ${missing[0]} s'pot wasn't found nearby — make sure it's powered on and try again.`
-      );
+      setAlert({
+        title: "one s'pot not found",
+        message: `your ${missing[0]} s'pot wasn't found nearby, make sure it's powered on and try again.`,
+      });
     }
 
     setIsAutoConnecting(false);
@@ -462,6 +462,23 @@ export default function SensorSetupScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <CalibrationModal visible={showCalibModal} onClose={() => setShowCalibModal(false)} />
+      <BrandAlert
+        visible={showPlacementCheck}
+        title="s'pot placement check"
+        message="have you moved the position of your s'pots since your last calibration?"
+        buttons={[
+          { text: "no", style: "cancel" },
+          { text: "yes", onPress: () => setShowCalibModal(true) },
+        ]}
+        onRequestClose={() => setShowPlacementCheck(false)}
+      />
+      <BrandAlert
+        visible={alert !== null}
+        title={alert?.title ?? ""}
+        message={alert?.message}
+        buttons={alert?.buttons ?? [{ text: "ok" }]}
+        onRequestClose={() => setAlert(null)}
+      />
       <QRPairModal
         visible={showQRPairModal}
         onClose={() => setShowQRPairModal(false)}

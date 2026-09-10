@@ -40,7 +40,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { Alert } from "react-native";
+import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -268,6 +268,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // packets during the 3s capture window and silently fail with no error).
   const [sensorsReady, setSensorsReady] = useState(false);
 
+  // On-brand replacement for native Alert.alert on s'pot disconnect notices.
+  const [brandAlert, setBrandAlert] = useState<{
+    title: string;
+    message?: string;
+    buttons: BrandAlertButton[];
+    dismissable?: boolean;
+  } | null>(null);
+
   // ── Refs ──────────────────────────────────────────────────────────────────
 
   const topLatestRef     = useRef<ParsedIMU | null>(null);
@@ -456,6 +464,22 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Ends the current session for real — writes it to Supabase (finalizeSession)
+  // AND clears the local session timer/accumulators so a fresh session starts
+  // on the next packet. Use this for a deliberate end (manual disconnect, or
+  // the user picking "end s'ession" on the disconnect prompt) — NOT for an
+  // unexpected drop the user might still choose to reconnect through.
+  const endCurrentSession = useCallback(() => {
+    finalizeSession();
+    sessionStartTimeRef.current = null;
+    setSessionStartTimeMs(null);
+    setSessionDurationMs(0);
+    upperSumScoreMsRef.current = 0;
+    upperSumMsRef.current = 0;
+    lastPacketTimestampRef.current = null;
+    setUpperBackPercent(null);
+  }, [finalizeSession]);
+
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -616,29 +640,18 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       },
 
       (slot, state) => {
+        // Signal-level cleanup only. The session is NOT ended here — a
+        // deliberate end goes through endCurrentSession() (manual disconnect
+        // or the "end s'ession" button on the prompt below), and an
+        // unexpected drop the user may still reconnect through must keep the
+        // session timer running.
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            // Only show alert if there was an active session
-            if (sessionIdRef.current) {
-              Alert.alert(
-                "top s'pot disconnected",
-                "your session has been saved.",
-                [{ text: "ok" }]
-              );
-            }
-            finalizeSession();
             topLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
-            sessionStartTimeRef.current = null;
-            setSessionDurationMs(0);
-            // Reset upper-back accumulators on disconnect
-            upperSumScoreMsRef.current = 0;
-            upperSumMsRef.current = 0;
-            lastPacketTimestampRef.current = null;
-            setUpperBackPercent(null);
             // Not ready until this slot streams enough fresh packets again
             topPacketCountRef.current = 0;
             sensorsReadyRef.current = false;
@@ -647,26 +660,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
-            // Only show alert if there was an active session
-            if (sessionIdRef.current) {
-              Alert.alert(
-                "bottom s'pot disconnected",
-                "your session has been saved.",
-                [{ text: "ok" }]
-              );
-            }
-            finalizeSession();
             bottomLatestRef.current = null;
             setPosture(null);
             lastPostureStateRef.current = null;
             emaRef.current.initialised  = false;
-            sessionStartTimeRef.current = null;
-            setSessionDurationMs(0);
-            // Reset upper-back accumulators on disconnect
-            upperSumScoreMsRef.current = 0;
-            upperSumMsRef.current = 0;
-            lastPacketTimestampRef.current = null;
-            setUpperBackPercent(null);
             // Not ready until this slot streams enough fresh packets again
             bottomPacketCountRef.current = 0;
             sensorsReadyRef.current = false;
@@ -675,21 +672,29 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
-      // Unexpected drop (not a manual disconnect) — ask the user rather than
-      // silently retrying. "end session" leaves things as the status callback
-      // above already left them; "try to reconnect" hands the same Device
-      // back to BLEService's retry loop.
+      // Unexpected drop (not a manual disconnect). Ask the user: reconnect the
+      // s'pot and stay on the same session, or end the session now (which
+      // saves it to Supabase like a normal end). The session timer keeps
+      // running while this prompt is up, so "reconnect s'pot" resumes the
+      // same session with no gap.
       (slot, device) => {
         const label = slot === "top" ? "top" : "bottom";
-        Alert.alert(
-          "s'pot disconnected",
-          `your ${label} s'pot lost connection. end this session, or try to reconnect?`,
-          [
-            { text: "end session", style: "destructive", onPress: () => bleService.cancelReconnect(slot) },
-            { text: "try to reconnect", onPress: () => bleService.confirmReconnect(device, slot) },
+        setBrandAlert({
+          title: `${label} s'pot disconnected`,
+          message: "reconnect the s'pot to carry on, or end your session now; it'll be saved either way.",
+          dismissable: false,
+          buttons: [
+            {
+              text: "end s'ession",
+              style: "destructive",
+              onPress: () => { bleService.cancelReconnect(slot); endCurrentSession(); },
+            },
+            {
+              text: "reconnect s'pot",
+              onPress: () => bleService.confirmReconnect(device, slot),
+            },
           ],
-          { cancelable: false }
-        );
+        });
       }
     );
   }, []);
@@ -888,12 +893,15 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connect       = useCallback(async (device: Device, slot: SensorSlot) => { bleService.stopScan(); setIsScanning(false); await bleService.connectDevice(device, slot); }, []);
-  const disconnect    = useCallback(async (slot: SensorSlot) => { await bleService.disconnectSlot(slot); }, []);
+  const disconnect    = useCallback(async (slot: SensorSlot) => {
+    await bleService.disconnectSlot(slot);
+    endCurrentSession();
+  }, [endCurrentSession]);
   const disconnectAll = useCallback(async () => {
-    finalizeSession();
+    endCurrentSession();
     await bleService.disconnectAll();
     setPosture(null);
-  }, [finalizeSession]);
+  }, [endCurrentSession]);
 
   const bothConnected = topData.state.connected && bottomData.state.connected;
 
@@ -913,6 +921,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       setSessionStateTotals: (totals: postureSync.StateTotals) => { sessionStateTotalsRef.current = totals; },
     }}>
       {children}
+      <BrandAlert
+        visible={brandAlert !== null}
+        title={brandAlert?.title ?? ""}
+        message={brandAlert?.message}
+        buttons={brandAlert?.buttons ?? [{ text: "ok" }]}
+        dismissable={brandAlert?.dismissable ?? true}
+        onRequestClose={() => setBrandAlert(null)}
+      />
     </IMUContext.Provider>
   );
 }

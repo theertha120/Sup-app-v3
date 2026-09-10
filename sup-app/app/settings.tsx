@@ -7,9 +7,9 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Alert,
 } from "react-native";
 import React, { useState } from "react";
+import { BrandAlert, BrandAlertButton } from "../src/components/ui/BrandAlert";
 import { router } from "expo-router";
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
@@ -32,6 +32,11 @@ export default function SettingsScreen() {
   const [initialBehaviorProfile, setInitialBehaviorProfile] = useState<BehaviorProfile | null>(null);
   const [loadingCoachingProfile, setLoadingCoachingProfile] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [alert, setAlert] = useState<{
+    title: string;
+    message?: string;
+    buttons?: BrandAlertButton[];
+  } | null>(null);
 
   const handleLogout = async () => {
     await logout();
@@ -39,13 +44,13 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete account?",
-      "This permanently deletes your account and app data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
+    setAlert({
+      title: "delete account?",
+      message: "this permanently deletes your account and app data. this cannot be undone.",
+      buttons: [
+        { text: "cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "delete",
           style: "destructive",
           onPress: async () => {
             setIsDeletingAccount(true);
@@ -53,7 +58,10 @@ export default function SettingsScreen() {
             setIsDeletingAccount(false);
 
             if (!result.success) {
-              Alert.alert("Delete failed", result.error || "Please try again.");
+              setAlert({
+                title: "delete failed",
+                message: result.error || "please try again.",
+              });
               return;
             }
 
@@ -61,8 +69,8 @@ export default function SettingsScreen() {
             router.replace("/home");
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
 
@@ -225,6 +233,14 @@ export default function SettingsScreen() {
           }
         }}
         onCancel={() => setShowCoachingModal(false)}
+      />
+
+      <BrandAlert
+        visible={alert !== null}
+        title={alert?.title ?? ""}
+        message={alert?.message}
+        buttons={alert?.buttons ?? [{ text: "ok" }]}
+        onRequestClose={() => setAlert(null)}
       />
     </ScrollView>
   );
