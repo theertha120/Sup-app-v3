@@ -1,18 +1,3 @@
-/**
- * desk.tsx — Desk Mode screen
- *
- * Shows live posture + current session data only.
- * Charts and historical breakdown moved to stats.tsx.
- *
- * Session data shown:
- *   - Live posture figure + state label
- *   - Session duration (time s'pots have been connected)
- *   - Time in current state
- *   - Session posture breakdown (upright %, forward %, etc.)
- *   - s'train indicator (branded UI name for CPL, cumulative postural load —
- *     see the "?" button beside it, and app/sources-methodology.tsx)
- */
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
@@ -41,7 +26,6 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
-import { startSession } from "../../src/services/posture/postureSyncService";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -336,7 +320,6 @@ export default function DeskScreen() {
   const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
@@ -361,33 +344,29 @@ export default function DeskScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // Initialize user and session, load s'updates from Supabase
+  // Load today's s'updates from Supabase on mount
   useEffect(() => {
-    const initializeSession = async () => {
+    const loadUpdates = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setCurrentUserId(user.id);
-          const sessionId = await startSession(user.id);
-          if (sessionId) {
-            setCurrentSessionId(sessionId);
-            // Load today's s'updates for display when session opens
-            const todaySUpdates = await sUpdatesService.getTodaySUpdates(user.id);
-            if (todaySUpdates && todaySUpdates.length > 0) {
-              const converted = todaySUpdates.map(su => ({
-                text: su.text,
-                color: su.color as "green" | "yellow" | "red",
-                time: new Date(su.created_at || new Date()),
-              }));
-              setUpdateHistory(converted);
-            }
+          // Load today's s'updates for display
+          const todaySUpdates = await sUpdatesService.getTodaySUpdates(user.id);
+          if (todaySUpdates && todaySUpdates.length > 0) {
+            const converted = todaySUpdates.map(su => ({
+              text: su.text,
+              color: su.color as "green" | "yellow" | "red",
+              time: new Date(su.created_at || new Date()),
+            }));
+            setUpdateHistory(converted);
           }
         }
       } catch (error) {
-        console.error("[desk] Failed to initialize session:", error);
+        console.error("[desk] Failed to load s'updates:", error);
       }
     };
-    initializeSession();
+    loadUpdates();
   }, []);
 
   const handleCloseUpdateModal = async () => {
@@ -395,13 +374,12 @@ export default function DeskScreen() {
     setUpdateHistory(prev => [newUpdate, ...prev]);
 
     // Save s'update to Supabase
-    if (currentUserId && currentSessionId) {
+    if (currentUserId) {
       try {
         await sUpdatesService.saveSUpdate(
           currentUserId,
           newUpdate.text,
-          newUpdate.color,
-          currentSessionId
+          newUpdate.color
         );
       } catch (error) {
         console.error("[s'update] Failed to save to Supabase:", error);
