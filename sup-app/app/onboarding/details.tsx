@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -22,6 +22,7 @@ export default function DetailsScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
@@ -31,10 +32,11 @@ export default function DetailsScreen() {
     !!lastName.trim() &&
     emailValid &&
     !!password.trim() &&
-    !!confirmPassword.trim();
+    !!confirmPassword.trim() &&
+    !!phone.trim();
 
   const handleNext = async () => {
-    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim()) return;
+    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim() || !phone.trim()) return;
     if (!emailValid) {
       setError("please enter a valid email");
       return;
@@ -68,6 +70,7 @@ export default function DetailsScreen() {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim(),
+      phone: phone.trim(),
     });
     router.push("/onboarding/verify-email" as any);
   };
@@ -80,8 +83,7 @@ export default function DetailsScreen() {
       style={styles.container}
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
+        <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
       </TouchableOpacity>
 
       <KeyboardAvoidingView
@@ -138,6 +140,14 @@ export default function DetailsScreen() {
               onChangeText={setConfirmPassword}
               secureTextEntry
             />
+
+            <Text style={styles.fieldLabel}>phone</Text>
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
           </View>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -157,25 +167,17 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 32,
+    paddingTop: 0,
     paddingHorizontal: 24,
   },
   backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+    marginTop: 60,
+    marginBottom: -20,
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    marginBottom: 7,
-  },
-  backText: {
-    fontSize: 18,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   keyboardView: {
     flex: 1,
@@ -185,12 +187,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingBottom: 200,
+    paddingTop: 0,
   },
   heading: {
     fontSize: 36,
     fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
-    marginBottom: 8,
+    marginBottom: 0,
+    marginTop: -10,
     textAlign: "center",
   },
   subheading: {
@@ -199,7 +203,7 @@ const styles = StyleSheet.create({
     color: "#111",
     lineHeight: 28,
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 12,
   },
   card: {
     backgroundColor: "#ffffff",

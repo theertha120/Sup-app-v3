@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
@@ -35,8 +35,7 @@ export default function Question2Screen() {
     >
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}> Back</Text>
+          <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
         </TouchableOpacity>
         <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
@@ -82,20 +81,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    marginBottom: 7,
-  },
-  backText: {
-    fontSize: 18,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   questionCounter: {
     fontSize: 18,

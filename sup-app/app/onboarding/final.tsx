@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -52,11 +52,6 @@ export default function FinalScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backText}> Back</Text>
-      </TouchableOpacity>
-
       <Text style={styles.heading}>final s'tep!!</Text>
       <Text style={styles.subheading}>enter your details to start your journey!</Text>
 
@@ -150,25 +145,17 @@ export default function FinalScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 32,
+    paddingTop: 125,
     paddingHorizontal: 24,
   },
   backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
+    marginTop: 60,
+    marginBottom: 8,
   },
-  backArrow: {
-    fontSize: 26,
-    color: "#333",
-    fontWeight: "700",
-    lineHeight: 28,
-    marginBottom: 7,
-  },
-  backText: {
-    fontSize: 18,
-    color: "#333",
-    fontFamily: "Agrandir-GrandHeavy",
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   heading: {
     fontSize: 38,
@@ -176,6 +163,7 @@ const styles = StyleSheet.create({
     color: "#111",
     textAlign: "center",
     marginBottom: 10,
+    marginTop: -20,
   },
   subheading: {
     fontSize: 20,

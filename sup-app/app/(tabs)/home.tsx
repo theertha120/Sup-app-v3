@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   },
   tutorialTip: {
     position: "absolute",
-    top: -34,
+    top: -50,
     right: 16,
     maxWidth: 230,
     backgroundColor: "rgba(30, 24, 46, 0.94)",

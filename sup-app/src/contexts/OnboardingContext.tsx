@@ -14,6 +14,7 @@ interface PendingSignup {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
 }
 
 interface OnboardingContextType {
@@ -37,7 +38,7 @@ const defaultAnswers: OnboardingAnswers = {
 };
 
 const defaultPendingSignup: PendingSignup = {
-  firstName: "", lastName: "", email: "",
+  firstName: "", lastName: "", email: "", phone: "",
 };
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);

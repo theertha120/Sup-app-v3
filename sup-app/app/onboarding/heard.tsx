@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
 
-const OPTIONS = ["influencerr", "linkedin", "instagram", "tiktok", "friend/fam", "other"];
+const OPTIONS = ["influencer", "linkedin", "instagram", "tiktok", "friend/fam", "other"];
 
 export default function HeardScreen() {
   const router = useRouter();
@@ -26,6 +26,10 @@ export default function HeardScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
+      </TouchableOpacity>
+
       <View style={styles.questionBubble}>
         <Text style={styles.questionText}>How did you{"\n"}hear about s'up?</Text>
       </View>
@@ -51,8 +55,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
-    paddingTop: 80,
+    paddingTop: 16,
     paddingHorizontal: 24,
+  },
+  backBtn: {
+    marginTop: 45,
+    marginBottom: -20,
+    alignSelf: "flex-start",
+  },
+  backImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
   },
   questionBubble: {
     backgroundColor: "#EDE8FF",

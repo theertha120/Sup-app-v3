@@ -194,10 +194,10 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                tap the profile icon at the headerbar and pick 'friends' to search for people and add them.
+                tap the profile icon at the headerbar and pick 'friends' to search for people and add them. you are now ready to use this app.
               </Text>
               <Pressable onPress={dismissTutorial}>
-                <Text style={styles.tutorialTipNext}>got it!</Text>
+                <Text style={styles.tutorialTipNext}>start exploring!</Text>
               </Pressable>
             </View>
           </View>
