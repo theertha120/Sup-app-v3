@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
+import { Ionicons } from "@expo/vector-icons";
 
 const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
 
@@ -104,7 +105,9 @@ export default function FinalScreen() {
         {/* Checkbox */}
         <View style={styles.checkboxRow}>
           <TouchableOpacity onPress={() => setAccepted(!accepted)}>
-            <View style={[styles.checkbox, accepted && styles.checkboxChecked]} />
+            <View style={[styles.checkbox, accepted && styles.checkboxChecked]}>
+              {accepted && <Ionicons name="checkmark" size={18} color="#5222AE" />}
+            </View>
           </TouchableOpacity>
           <Text style={styles.checkboxLabel}>
             i accept the s'uper{" "}
@@ -258,11 +261,15 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 5,
-    backgroundColor: "#D0C8F0",
+    borderWidth: 2,
+    borderColor: "#5222AE",
+    backgroundColor: "#EDE8FF",
     marginTop: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
   checkboxChecked: {
-    backgroundColor: "#5222AE",
+    backgroundColor: "#EDE8FF",
   },
   checkboxLabel: {
     flex: 1,

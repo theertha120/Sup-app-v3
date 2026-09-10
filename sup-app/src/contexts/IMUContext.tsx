@@ -619,6 +619,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (slot === "top") {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
+            // Only show alert if there was an active session
+            if (sessionIdRef.current) {
+              Alert.alert(
+                "top s'pot disconnected",
+                "your session has been saved.",
+                [{ text: "ok" }]
+              );
+            }
             finalizeSession();
             topLatestRef.current = null;
             setPosture(null);
@@ -639,6 +647,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         } else {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
+            // Only show alert if there was an active session
+            if (sessionIdRef.current) {
+              Alert.alert(
+                "bottom s'pot disconnected",
+                "your session has been saved.",
+                [{ text: "ok" }]
+              );
+            }
             finalizeSession();
             bottomLatestRef.current = null;
             setPosture(null);

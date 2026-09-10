@@ -62,12 +62,17 @@ export default function IntroScreen() {
           </Text>
         </View>
 
-        {/* Intro image below card */}
-        <Image
-          source={require("../../assets/images/intro.png")}
-          style={styles.introImage}
-          resizeMode="contain"
-        />
+        {/* Coach s'kipper badge */}
+        <View style={styles.skipperWrap}>
+          <View style={styles.skipperBadge}>
+            <Text style={styles.skipperBadgeText}>with coach s'kipper!</Text>
+          </View>
+          <Image
+            source={require("../../assets/images/mascot.png")}
+            style={styles.skipperImage}
+            resizeMode="contain"
+          />
+        </View>
 
         {/* Button */}
         <Pressable
@@ -120,18 +125,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     lineHeight: 42,
   },
-  introImage: {
-    width: "100%",
-    height: 140,
+  skipperWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: -10,
     marginBottom: -8,
+  },
+  skipperImage: {
+    width: 130,
+    height: 130,
+    marginLeft: -70,
+    marginRight: -50,
+    zIndex: 2,
+  },
+  skipperBadge: {
+    backgroundColor: "#5222AE",
+    borderRadius: 50,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    paddingRight: 56,
+    zIndex: 1,
+  },
+  skipperBadgeText: {
+    fontSize: 16,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#fff",
+    textAlign: "center",
   },
   button: {
     backgroundColor: "#AB99FA",
     borderRadius: 50,
     paddingVertical: 16,
     paddingHorizontal: 48,
-    marginTop: -16,
+    marginTop: -20,
   },
   buttonPressed: {
     opacity: 0.75,
