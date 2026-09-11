@@ -196,7 +196,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                tap the profile icon at the headerbar and pick 'friends' to search for people and add them. you are now ready to use this app.
+                add friends here to make the leaderboard about people you actually know — flip it to "friends" once you've added some, to compete, cheer each other on, and keep each other accountable for good posture. tap the profile icon and pick 'friends' to search for people and add them. you're all set!
               </Text>
               <Pressable onPress={dismissTutorial}>
                 <Text style={styles.tutorialTipNext}>start exploring!</Text>
@@ -381,14 +381,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

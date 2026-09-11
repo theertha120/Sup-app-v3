@@ -597,7 +597,7 @@ export default function SensorSetupScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  connect both top and bottom s'pots. once they're both connected, a session starts automatically.
+                  scan the qr code provided and turn on both your top and bottom s'pots to connect them. once they're both connected, a session starts automatically.
                 </Text>
                 <Pressable
                   onPress={() => {
@@ -826,14 +826,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

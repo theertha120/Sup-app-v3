@@ -60,7 +60,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   trend: {
     title: "s'core trend",
-    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or week's, or month's) score out of 100 — tap a bar to see that period's exact score.",
+    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or week's, or month's) score out of 100; tap a bar to see that period's exact score.",
   },
   session: {
     title: "s'ession time",
@@ -68,7 +68,7 @@ const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   },
   breakdown: {
     title: "posture breakdown",
-    body: "the share of your tracked time spent in each posture state over the selected period — upright, forward lean, slouched, and so on.",
+    body: "the share of your tracked time spent in each posture state over the selected period such as upright, forward lean, slouched, and so on.",
   },
 };
 
@@ -875,14 +875,9 @@ export default function StatsScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                switch between weekly, monthly, and yearly data here. you can see your s'up score, session time, and posture snapshot for whichever period you pick.
+                switch between weekly, monthly, and yearly data here. let me walk you through what each card below means!
               </Text>
-              <Pressable
-                onPress={() => {
-                  setTutorialStep("community-tip");
-                  router.replace("/leaderboard" as any);
-                }}
-              >
+              <Pressable onPress={() => setTutorialStep("stats-tip-trend")}>
                 <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
               </Pressable>
             </View>
@@ -892,6 +887,25 @@ export default function StatsScreen() {
         {/* S'CORE TREND */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
+
+          {tutorialStep === "stats-tip-trend" && (
+            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
+              <Image
+                source={require("../../assets/images/mascot.png")}
+                style={styles.tutorialTipMascot}
+                resizeMode="contain"
+              />
+              <View style={styles.tutorialTipTextWrap}>
+                <Text style={styles.tutorialTipText}>
+                  this is your s'up s'core trend. each bar is one day's (or week's, or month's) score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
+                </Text>
+                <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
@@ -913,6 +927,25 @@ export default function StatsScreen() {
         {/* S'ESSION TIME */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
+
+          {tutorialStep === "stats-tip-session" && (
+            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
+              <Image
+                source={require("../../assets/images/mascot.png")}
+                style={styles.tutorialTipMascot}
+                resizeMode="contain"
+              />
+              <View style={styles.tutorialTipTextWrap}>
+                <Text style={styles.tutorialTipText}>
+                  s'ession time is how long you tracked posture in each period. more tracked time boosts the "showing up" part of your s'up s'core.
+                </Text>
+                <Pressable onPress={() => setTutorialStep("stats-tip-breakdown")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
@@ -953,6 +986,30 @@ export default function StatsScreen() {
         {/* POSTURE BREAKDOWN */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
+
+          {tutorialStep === "stats-tip-breakdown" && (
+            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
+              <Image
+                source={require("../../assets/images/mascot.png")}
+                style={styles.tutorialTipMascot}
+                resizeMode="contain"
+              />
+              <View style={styles.tutorialTipTextWrap}>
+                <Text style={styles.tutorialTipText}>
+                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more. tap any "?" anytime for the full details.
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setTutorialStep("community-tip");
+                    router.replace("/leaderboard" as any);
+                  }}
+                >
+                  <Text style={styles.tutorialTipNext}>got it! {'>>'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
               <>
@@ -1030,6 +1087,15 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  // Used when the tip sits inside a card (next to its "?" InfoButton) instead
+  // of full-bleed in the scroll flow — the card already has its own
+  // horizontal margin/padding, so this drops tutorialTip's own and adds a
+  // little breathing room under the InfoButton instead.
+  tutorialTipInCard: {
+    marginHorizontal: 0,
+    marginTop: 8,
+    marginBottom: 12,
+  },
   tutorialTipMascot: {
     width: 34,
     height: 34,
@@ -1039,14 +1105,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

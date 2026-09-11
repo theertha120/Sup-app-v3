@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
   View,
@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { User } from "../../../constants/env";
 import {
   acceptFriendRequest,
+  cancelFriendRequest,
   ensureFriendDirectory,
   getUsernameForUser,
   getFriendsForUser,
@@ -42,6 +43,9 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
   const [friends, setFriends] = useState<string[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  // Guards against a fast double-tap on "Send" firing two requests to the
+  // same person before the optimistic update re-renders the button as "Cancel".
+  const sendingToRef = useRef<Set<string>>(new Set());
 
   // Load the user roster whenever the modal opens
   useEffect(() => {
@@ -131,11 +135,14 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
       showToast("You must be signed in to send requests", "error");
       return;
     }
+    if (sendingToRef.current.has(toUser.id)) return; // already sending, ignore the repeat tap
     const currentUsername = getUsernameForUser(currentUserId);
     if (!currentUsername) {
       showToast("Couldn't determine your username", "error");
       return;
     }
+    sendingToRef.current.add(toUser.id);
+
     const tempId = `tmp-${Date.now()}`;
     const optimistic = {
       id: tempId,
@@ -147,6 +154,7 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
     setOutgoingRequests((prev) => [optimistic, ...prev]);
 
     const result = await sendFriendRequestByUsername(currentUserId, toUser.name, users);
+    sendingToRef.current.delete(toUser.id);
     if (!result.ok) {
       setOutgoingRequests((prev) => prev.filter((r) => r.id !== tempId));
     }
@@ -175,6 +183,24 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
       setFriends((prev) => prev.filter((id) => id !== fromId));
     }
     showToast(result.ok ? "New bestie unlocked" : result.message, result.ok ? "success" : "error");
+    refresh();
+  };
+
+  const handleCancelRequest = async (requestId: string) => {
+    if (!currentUserId) {
+      showToast("You must be signed in to cancel requests", "error");
+      return;
+    }
+    const pending = outgoingRequests.find((r) => r.id === requestId);
+    if (pending) {
+      setOutgoingRequests((prev) => prev.filter((r) => r.id !== requestId));
+    }
+
+    const result = await cancelFriendRequest(requestId, currentUserId);
+    if (!result.ok && pending) {
+      setOutgoingRequests((prev) => [pending, ...prev]);
+    }
+    showToast(result.ok ? "Request cancelled" : result.message, result.ok ? "success" : "error");
     refresh();
   };
 
@@ -267,6 +293,18 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                               >
                                 <Text style={styles.actionTextLight}>Accept</Text>
                               </Pressable>
+                            ) : status === "outgoing" ? (
+                              <Pressable
+                                style={[styles.actionBtn, styles.rejectBtn]}
+                                onPress={() => {
+                                  const pending = outgoingRequests.find(
+                                    (r) => r.toUserId === user.id
+                                  );
+                                  if (pending) handleCancelRequest(pending.id);
+                                }}
+                              >
+                                <Text style={styles.actionText}>Cancel</Text>
+                              </Pressable>
                             ) : null}
                           </View>
                         );
@@ -321,6 +359,12 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                         <Text style={styles.userName}>{getUserDisplayName(request.toUserId)}</Text>
                         <Text style={styles.userStatus}>Request sent</Text>
                       </View>
+                      <Pressable
+                        style={[styles.actionBtn, styles.rejectBtn]}
+                        onPress={() => handleCancelRequest(request.id)}
+                      >
+                        <Text style={styles.actionText}>Cancel</Text>
+                      </Pressable>
                     </View>
                   ))
                 )}

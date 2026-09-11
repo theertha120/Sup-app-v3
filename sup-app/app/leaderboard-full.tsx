@@ -20,6 +20,7 @@ import {
   type LeaderboardEntry,
   type LeaderboardPeriod,
 } from "../src/services/social/leaderboardPeriodService";
+import { getFriendsForUser } from "../src/services/social/friendService";
 import { UserSupsonaAvatar } from "../src/components/supsona/SupsonaAvatar";
 
 const PRIMARY_TEXT = "#1D014A";
@@ -28,6 +29,8 @@ const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "day", label: "Day" },
   { key: "week", label: "Week" },
 ];
+
+type Scope = "everyone" | "friends";
 
 export default function FullLeaderboardScreen() {
   const { userId } = useAuth();
@@ -45,25 +48,36 @@ export default function FullLeaderboardScreen() {
   });
 
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
+  const [scope, setScope] = useState<Scope>("everyone");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const load = useCallback(async (selectedPeriod: LeaderboardPeriod) => {
+  const load = useCallback(async (selectedPeriod: LeaderboardPeriod, selectedScope: Scope) => {
     setIsLoading(true);
     try {
       const users: User[] = await fetchLeaderboardByStreak();
-      const ranked = await fetchLeaderboardForPeriod(users, selectedPeriod);
+
+      let roster = users;
+      if (selectedScope === "friends") {
+        const friendIds = userId ? await getFriendsForUser(userId) : [];
+        setFriendCount(friendIds.length);
+        const allowed = new Set([...friendIds, userId]);
+        roster = users.filter((u) => allowed.has(u.id));
+      }
+
+      const ranked = await fetchLeaderboardForPeriod(roster, selectedPeriod);
       setEntries(ranked);
     } catch (err) {
       console.error("[FullLeaderboardScreen] Failed to load leaderboard", err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
-    load(period);
-  }, [period, load]);
+    load(period, scope);
+  }, [period, scope, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,6 +106,26 @@ export default function FullLeaderboardScreen() {
           <Text style={styles.sectionLabel}>Full Leaderboard</Text>
         </View>
 
+        {/* Scope toggle — everyone vs friends only */}
+        <View style={styles.periodToggle}>
+          {(["everyone", "friends"] as Scope[]).map((s) => (
+            <Pressable
+              key={s}
+              style={[styles.periodButton, scope === s && styles.periodButtonActive]}
+              onPress={() => setScope(s)}
+            >
+              <Text
+                style={[
+                  styles.periodButtonText,
+                  scope === s && styles.periodButtonTextActive,
+                ]}
+              >
+                {s === "everyone" ? "Everyone" : "Friends"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* Period toggle */}
         <View style={styles.periodToggle}>
           {PERIODS.map((p) => (
@@ -114,6 +148,10 @@ export default function FullLeaderboardScreen() {
 
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
+        ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
+          <Text style={styles.loadingText}>
+            you haven't added any friends yet — add some from the profile menu to see them here.
+          </Text>
         ) : entries.length === 0 ? (
           <Text style={styles.loadingText}>No posture data for this period yet.</Text>
         ) : (

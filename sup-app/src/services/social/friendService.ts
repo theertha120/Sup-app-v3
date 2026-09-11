@@ -155,7 +155,7 @@ export async function sendFriendRequestByUsername(
       .from("friend_requests")
       .select("id, status, from_user_id, to_user_id")
       .or(
-        `and(from_user_id.eq.${fromUserId},to_user_id.eq.${toUserId}),and(from_user_id.eq.${toUserId},to_user_id.eq.${fromUserId}))`
+        `and(from_user_id.eq.${fromUserId},to_user_id.eq.${toUserId}),and(from_user_id.eq.${toUserId},to_user_id.eq.${fromUserId})`
       )
       .limit(1);
 
@@ -216,6 +216,39 @@ export async function acceptFriendRequest(
   } catch (err: any) {
     console.warn("[friend] acceptFriendRequest failed", err);
     return { ok: false, message: err?.message ?? "Failed to accept request" };
+  }
+}
+
+// Cancel a request you sent — actually deletes the row (not just a status
+// flip) so it doesn't linger and block re-sending a request to the same
+// person later (sendFriendRequestByUsername blocks on any existing pending
+// row between the two users).
+export async function cancelFriendRequest(
+  requestId: string,
+  actingUserId: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const { data: req, error: fetchErr } = await supabase
+      .from("friend_requests")
+      .select("id, from_user_id, status")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!req) return { ok: false, message: "Request not found." };
+    if (req.from_user_id !== actingUserId) return { ok: false, message: "You can only cancel requests you sent." };
+    if (req.status !== "pending") return { ok: false, message: "This request is no longer pending." };
+
+    const { error } = await supabase
+      .from("friend_requests")
+      .delete()
+      .eq("id", requestId);
+
+    if (error) throw error;
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[friend] cancelFriendRequest failed", err);
+    return { ok: false, message: err?.message ?? "Failed to cancel request" };
   }
 }
 
