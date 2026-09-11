@@ -541,14 +541,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

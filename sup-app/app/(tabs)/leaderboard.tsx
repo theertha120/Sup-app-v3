@@ -29,7 +29,10 @@ import {
   fetchLeaderboardForPeriod,
   type LeaderboardEntry,
 } from "../../src/services/social/leaderboardPeriodService";
+import { getFriendsForUser } from "../../src/services/social/friendService";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
+
+type Scope = "everyone" | "friends";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -66,23 +69,34 @@ export default function LeaderboardScreen() {
 
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [scope, setScope] = useState<Scope>("everyone");
+  const [friendCount, setFriendCount] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (selectedScope: Scope) => {
     setIsLoading(true);
     try {
       const users: User[] = await fetchLeaderboardByStreak();
-      const ranked = await fetchLeaderboardForPeriod(users, SUMMARY_PERIOD);
+
+      let roster = users;
+      if (selectedScope === "friends") {
+        const friendIds = userId ? await getFriendsForUser(userId) : [];
+        setFriendCount(friendIds.length);
+        const allowed = new Set([...friendIds, userId]);
+        roster = users.filter((u) => allowed.has(u.id));
+      }
+
+      const ranked = await fetchLeaderboardForPeriod(roster, SUMMARY_PERIOD);
       setEntries(ranked);
     } catch (err) {
       console.error("[LeaderboardScreen] Failed to load leaderboard", err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(scope);
+  }, [scope, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,8 +106,8 @@ export default function LeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      load();
-    }, [fadeAnim, load])
+      load(scope);
+    }, [fadeAnim, load, scope])
   );
 
   const top3 = entries.slice(0, 3);
@@ -124,7 +138,7 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                here's the summarised view of the leaderboard: your top scorers at a glance. tap 'see full leaderboard' below to see everyone and where you're placed.
+                this is the leaderboard. everyone's ranked by their weekly points, earned from staying consistent with good posture. it's a fun way to see how you're doing against others and stay motivated to keep showing up. tap 'see full leaderboard' below to see everyone and where you're placed.
               </Text>
               <Pressable onPress={() => setTutorialStep("add-friends-tip")}>
                 <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -133,8 +147,32 @@ export default function LeaderboardScreen() {
           </View>
         )}
 
+        {/* Scope toggle — everyone vs friends only */}
+        <View style={styles.scopeToggle}>
+          {(["everyone", "friends"] as Scope[]).map((s) => (
+            <Pressable
+              key={s}
+              style={[styles.scopeButton, scope === s && styles.scopeButtonActive]}
+              onPress={() => setScope(s)}
+            >
+              <Text
+                style={[
+                  styles.scopeButtonText,
+                  scope === s && styles.scopeButtonTextActive,
+                ]}
+              >
+                {s === "everyone" ? "Everyone" : "Friends"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
+        ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
+          <Text style={styles.loadingText}>
+            you haven't added any friends yet — add some from the profile menu to see them here.
+          </Text>
         ) : entries.length === 0 ? (
           <Text style={styles.loadingText}>No posture data for this week yet.</Text>
         ) : (
@@ -285,6 +323,38 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
   },
+  scopeToggle: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: "rgba(63, 36, 131, 0.08)",
+    borderRadius: 18,
+    padding: 4,
+  },
+  scopeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  scopeButtonActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  scopeButtonText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 12,
+    color: PRIMARY_TEXT,
+    opacity: 0.6,
+  },
+  scopeButtonTextActive: {
+    fontFamily: "Agrandir-GrandHeavy",
+    opacity: 1,
+  },
 
   /* Tutorial tip */
   tutorialTip: {
@@ -313,14 +383,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

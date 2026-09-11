@@ -361,14 +361,14 @@ export default function HomeScreen() {
             )}
 
             {tutorialStep === "data-tip" && (
-              <View style={styles.tutorialTip}>
+              <View style={[styles.tutorialTip, styles.tutorialTipBelow]}>
                 <Image
                   source={require("../../assets/images/mascot.png")}
                   style={styles.tutorialTipMascot}
                   resizeMode="contain"
                 />
                 <View style={styles.tutorialTipTextWrap}>
-                  <Text style={styles.tutorialTipText}>click on this button to see your posture data for today</Text>
+                  <Text style={styles.tutorialTipText}>click on the "see today's data" button to see your posture data for today</Text>
                 </View>
               </View>
             )}
@@ -509,6 +509,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  tutorialTipBelow: {
+    top: "100%",
+    marginTop: -12,
+  },
   tutorialTipMascot: {
     width: 30,
     height: 30,
@@ -518,14 +522,14 @@ const styles = StyleSheet.create({
   },
   tutorialTipText: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 12,
+    fontSize: 14,
     color: "#FFFFFF",
-    lineHeight: 16,
+    lineHeight: 19,
     marginBottom: 4,
   },
   tutorialTipNext: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",

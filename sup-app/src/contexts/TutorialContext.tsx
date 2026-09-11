@@ -12,6 +12,9 @@ export type TutorialStep =
   | "supdate-tip"
   | "end-session-tip"
   | "stats-tip"
+  | "stats-tip-trend"
+  | "stats-tip-session"
+  | "stats-tip-breakdown"
   | "community-tip"
   | "add-friends-tip"
   | null;

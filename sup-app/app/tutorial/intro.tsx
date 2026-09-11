@@ -92,11 +92,11 @@ const styles = StyleSheet.create({
   },
 
   body: {
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: "Agrandir-Regular",
     color: "#333",
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 24,
     marginBottom: 24,
   },
 

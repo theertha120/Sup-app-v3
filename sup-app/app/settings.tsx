@@ -166,15 +166,16 @@ export default function SettingsScreen() {
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>App Version</Text>
           </View>
-          <Text style={styles.settingValue}>2.0.1</Text>
+          <Text style={styles.settingValue}>2.0.3</Text>
         </View>
 
-        <Pressable style={styles.settingItem}>
+        <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Help & Support</Text>
+            <Text style={styles.settingDescription}>supposture@gmail.com</Text>
+            <Text style={styles.settingDescription}>89955903</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
+        </View>
 
         <Pressable
           style={styles.settingItem}
@@ -325,9 +326,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tutorialTipText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#FFFFFF",
-    lineHeight: 18,
+    lineHeight: 20,
   },
   settingInfo: {
     flex: 1,
