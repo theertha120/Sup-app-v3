@@ -99,7 +99,7 @@ export default function FinalScreen() {
               ))}
             </ScrollView>
           </View>
-          <Text style={styles.ageNote}>this data is necessary to accurately determine your current s'pine health</Text>
+          <Text style={styles.ageNote}>this data helps us personalise your posture tracking</Text>
         </View>
 
         {/* Checkbox */}

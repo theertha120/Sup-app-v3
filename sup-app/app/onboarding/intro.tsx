@@ -58,7 +58,7 @@ export default function IntroScreen() {
         {/* Card */}
         <View style={styles.card}>
           <Text style={styles.heading}>
-            {"S'TIME TO\nGET\nS'TARTED\nON YOUR\nS'PINE\nCARE\nJOURNEY!"}
+            {"S'TIME TO\nGET\nS'TARTED\nON YOUR\nPOSTURE\nJOURNEY!"}
           </Text>
         </View>
 
