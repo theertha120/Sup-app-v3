@@ -764,7 +764,7 @@ export default function SensorSetupScreen() {
             {
               icon:  "arrow-up-circle-outline",
               title: "top s'pot",
-              desc:  "between your shoulder blades. clip or tape vertically along the spine.",
+              desc:  "between your shoulder blades. clip or tape vertically along your back.",
             },
             {
               icon:  "arrow-down-circle-outline",

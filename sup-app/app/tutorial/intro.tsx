@@ -31,7 +31,7 @@ export default function TutorialIntroScreen() {
         />
 
         <Text style={styles.body}>
-          I'm s'kipper and I will be your coach in your spine health journey.
+          I'm s'kipper and I will be your coach in your posture journey.
           {"\n\n"}
           Let's start off with a tutorial!
         </Text>

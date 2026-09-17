@@ -117,9 +117,8 @@ export default function SourcesMethodologyScreen() {
             one at your upper back (roughly between the shoulder blades) and one at your lower
             back (roughly waistband height). each sensor reports its orientation about ten times
             per second. the app compares the angle of the upper sensor to the angle of the lower
-            sensor to estimate how far your spine is bending forward, backward, or sideways
-            relative to your own calibrated neutral position — not an absolute or universal
-            "correct" posture.
+            sensor to estimate how far you're leaning forward, backward, or sideways relative to
+            your own calibrated neutral position — not an absolute or universal "correct" posture.
           </Text>
         </Section>
 
@@ -233,8 +232,8 @@ export default function SourcesMethodologyScreen() {
             s'up is a general wellness and posture-awareness tool. it is not a medical device and
             is not intended to diagnose, treat, cure, or prevent any disease or medical condition.
             the information in this app, including s'train and your s'up s'core, does not
-            constitute medical advice. if you have pain, an existing spinal condition, or any
-            health concern, please consult a qualified healthcare professional.
+            constitute medical advice. if you have pain, an existing back or posture-related
+            condition, or any health concern, please consult a qualified healthcare professional.
           </Text>
         </Section>
 

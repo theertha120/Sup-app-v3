@@ -59,7 +59,7 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
   upright:      { label: "good alignment",       icon: "checkmark-circle" },
   transition:   { label: "slight forward shift",  icon: "arrow-forward-circle" },
   forward_lean: { label: "leaning forward",       icon: "trending-up" },
-  slouched:     { label: "spine rounding",        icon: "warning" },
+  slouched:     { label: "slouching",             icon: "warning" },
   severe:       { label: "high s'train",          icon: "alert-circle" },
   tilted_left:  { label: "shifting left",         icon: "arrow-back-circle" },
   tilted_right: { label: "shifting right",        icon: "arrow-forward-circle" },

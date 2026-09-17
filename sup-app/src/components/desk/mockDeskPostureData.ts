@@ -11,9 +11,9 @@
 export type DeskPostureState =
   | "upright"
   | "transition"     // early flexion zone — watch and wait, no alert
-  | "forward_lean"   // true lumbar flexion beginning — upper back rounding relative to pelvis
-  | "slouched"       // significant lumbar flexion — disc compression zone
-  | "severe"         // >35° relative flexion — passive ligament loading zone
+  | "forward_lean"   // upper back rounding forward, relative to the hips
+  | "slouched"       // sustained forward rounding
+  | "severe"         // >35° relative flexion — pronounced, sustained slouch
   | "tilted_left"
   | "tilted_right";
 
@@ -34,16 +34,15 @@ export const POSTURE_ANGLES: Record<
   tilted_right: { torso:  0,  head:  8,  shoulder:  22 },
 };
 
-// ── Spine Health Score (SHS) colour bands ─────────────────────────────────────
+// ── Posture quality score colour bands ────────────────────────────────────────
 //
-// Updated from old PLI bands to reflect the new BIS/SHS model.
-// Red is now reserved for genuinely sustained dangerous postures —
-// a momentary lean should not turn the figure red.
+// Red is reserved for genuinely sustained poor posture — a momentary lean
+// should not turn the figure red.
 //
-//   80–100  green   — excellent structural alignment
+//   80–100  green   — great posture
 //   60–79   amber   — notice this, small adjustment helpful
-//   40–59   orange  — act on this, tissue loading accumulating
-//   0–39    red     — urgent, significant structural debt accumulated
+//   40–59   orange  — act on this, posture load accumulating
+//   0–39    red     — urgent, significant posture load accumulated
 
 export function getScoreColor(score: number): string {
   if (score >= 80) return "#4CAF50"; // green

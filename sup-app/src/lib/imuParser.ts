@@ -2,8 +2,16 @@
  * imuParser.ts
  *
  * Parses raw BLE packets from the WT9011DCL IMU inside each s'pot,
- * classifies spine posture using biomechanically grounded thresholds,
- * and provides per-state alert timers for the Spine Health Score (SHS).
+ * classifies posture using biomechanically grounded thresholds, and
+ * provides per-state alert timers for the posture quality score.
+ *
+ * User-facing copy (labels, cues, intervention messages below) is
+ * deliberately kept to plain posture language ("slouching," "leaning
+ * forward") rather than anatomical/clinical terms (spine, disc, ligament,
+ * vertebra) — this is a general-wellness posture-awareness app, not a
+ * medical device, and its own copy shouldn't read like one. Internal
+ * names (classifySpinePosture, shs, SHS_RATES, etc.) are unchanged —
+ * those are never seen by a user or an app reviewer.
  *
  * Naming convention (s'up brand):
  *   UI-facing strings → "s'pot", "top s'pot", "bottom s'pot"
@@ -378,7 +386,7 @@ export const POSTURE_LABELS: Record<PostureState, string> = {
   upright:      "good alignment",
   transition:   "slight forward shift",
   forward_lean: "leaning forward",
-  slouched:     "spine rounding",
+  slouched:     "slouching",
   severe:       "high s'train",
   tilted_left:  "shifting left",
   tilted_right: "shifting right",
@@ -386,15 +394,15 @@ export const POSTURE_LABELS: Record<PostureState, string> = {
 
 export const POSTURE_CUES: Record<PostureState, string> = {
   upright:
-    "your spine is well aligned — keep it up.",
+    "your posture is well aligned — keep it up.",
   transition:
     "you're starting to drift forward. a gentle chest lift will reset you.",
   forward_lean:
-    "try moving your screen closer rather than leaning in. your spine is straight but your muscles are working.",
+    "try moving your screen closer rather than leaning in. your back is straight, but your muscles are working to hold that lean.",
   slouched:
     "your upper back is rounding. try a gentle chest lift — imagine a thread pulling the crown of your head upward.",
   severe:
-    "you're in a significantly slouched position. a small position change now significantly reduces disc pressure.",
+    "you're in a significantly slouched position. a small position change now makes a big difference.",
   tilted_left:
     "your weight is shifting left. try redistributing evenly across both sit bones.",
   tilted_right:
@@ -402,9 +410,9 @@ export const POSTURE_CUES: Record<PostureState, string> = {
 };
 
 export const SEVERITY_DESCRIPTIONS: Record<PostureSeverity, string> = {
-  minimal:  "minimal deviation — neutral curve maintained.",
+  minimal:  "minimal deviation — good posture maintained.",
   mild:     "mild deviation — a small adjustment will help.",
-  moderate: "moderate deviation — your disc pressure is elevated.",
+  moderate: "moderate deviation — time for a posture check.",
   severe:   "significant deviation — adjust your position now.",
 };
 
@@ -413,34 +421,34 @@ export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
 }>> = {
   forward_lean: {
     title: "your back muscles are working hard",
-    body:  "leaning forward puts your erector spinae under continuous isometric load. after 10–15 minutes these muscles begin to fatigue, which often leads to collapsing into a full slouch.",
+    body:  "leaning forward puts your back muscles under continuous strain. after 10–15 minutes they begin to tire, which often leads to collapsing into a full slouch.",
     cue:   "rest your back against your chair for a minute to let those muscles recover.",
   },
   slouched: {
-    title: "disc pressure is building up",
-    body:  "your spine has been in a rounded position. this squeezes the front of your intervertebral discs and stretches your spinal ligaments. research shows 20 minutes of sustained rounding can take 4–7 hours to fully recover from.",
-    cue:   "sit tall — imagine a thread pulling the crown of your head upward. your discs will thank you.",
+    title: "time to sit up",
+    body:  "you've been in a rounded position for a while. research shows sustained slouching can take hours to fully recover from, so it adds up over the day.",
+    cue:   "sit tall — imagine a thread pulling the crown of your head upward.",
   },
   severe: {
     title: "high s'train — please adjust now",
-    body:  "your spine is under significant load and your posterior ligaments are approaching their elastic limit.",
-    cue:   "shift your position now — even a small change redistributes the load significantly.",
+    body:  "you've been holding this position for a while and your posture is under a lot of strain.",
+    cue:   "shift your position now — even a small change makes a big difference.",
   },
   tilted_left: {
-    title: "asymmetric loading on your spine",
-    body:  "leaning to one side creates uneven pressure across your discs and keeps one side of your lower back locked in a shortened position.",
+    title: "leaning to one side",
+    body:  "leaning to one side puts uneven strain on your lower back and keeps it in a lopsided position.",
     cue:   "sit evenly on both sit bones. if you're resting on an armrest, try sitting without it for a few minutes.",
   },
   tilted_right: {
-    title: "asymmetric loading on your spine",
-    body:  "leaning to one side creates uneven pressure across your discs and keeps one side of your lower back locked in a shortened position.",
+    title: "leaning to one side",
+    body:  "leaning to one side puts uneven strain on your lower back and keeps it in a lopsided position.",
     cue:   "sit evenly on both sit bones. if you're resting on an armrest, try sitting without it for a few minutes.",
   },
 };
 
 export const MOVEMENT_NUDGE = {
   title: "time to move",
-  body:  "you've been in the same position for a while. even a small shift significantly preserves lumbar and pelvic mobility.",
+  body:  "you've been in the same position for a while. even a small shift helps keep your body moving and comfortable.",
   cue:   "stand up, roll your shoulders, or just shift your weight. did you move?",
 };
 
