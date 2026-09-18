@@ -41,7 +41,6 @@ import React, {
   useRef,
 } from "react";
 import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
-import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
@@ -449,30 +448,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
-  // App going to the background ends the current session — it's written to
-  // Supabase and the timer is reset, so reopening the app starts fresh. Guard
-  // on the timer (not sessionIdRef) so a session whose startSession() insert
-  // hasn't resolved yet is still torn down locally.
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      // "background" only — NOT "inactive", which also fires for transient
-      // interruptions (a phone call, the notification shade, the app
-      // switcher) that shouldn't end a session.
-      if (state === "background" && sessionStartTimeRef.current !== null) {
-        console.log("[IMUContext] App backgrounded — ending session");
-        endCurrentSessionRef.current();
-      }
-      // Back in the foreground with s'pots still streaming: allow a new
-      // session to start again (the previous one was ended on background).
-      if (state === "active") {
-        sessionEndedRef.current = false;
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
+  // App backgrounding no longer ends the session — s'pots keep streaming and
+  // accumulating SHS/CPL while backgrounded (react-native-ble-plx is
+  // configured with isBackgroundEnabled/central mode for this). The session
+  // now only ends via endCurrentSession(): manual disconnect, the "end
+  // s'ession" button, or "end session" from the reconnect prompt.
 
   const finalizeSession = useCallback(() => {
     const sessionId = sessionIdRef.current;
@@ -512,11 +492,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   // Deliberate end of the current session: writes it to Supabase
   // (finalizeSession) AND clears the local session timer so a brand-new
-  // session starts on the next packet. Used for a manual disconnect, the
-  // "end s'ession" button on the disconnect prompt, and the app going to the
-  // background. NOT used for an unexpected drop the user might still
-  // reconnect through — that path deliberately leaves the timer running so
-  // "reconnect s'pot" resumes the same session.
+  // session starts on the next packet. Used for a manual disconnect and the
+  // "end s'ession" button (including from the disconnect prompt). NOT used
+  // for an unexpected drop the user might still reconnect through — that
+  // path deliberately leaves the timer running so "reconnect s'pot" resumes
+  // the same session.
   const endCurrentSession = useCallback(() => {
     finalizeSession();
     sessionStartTimeRef.current = null;
@@ -524,12 +504,6 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setSessionStartTimeMs(null);
     setSessionDurationMs(0);
   }, [finalizeSession]);
-
-  // Ref so the mount-only AppState listener always calls the latest version.
-  const endCurrentSessionRef = useRef(endCurrentSession);
-  useEffect(() => {
-    endCurrentSessionRef.current = endCurrentSession;
-  }, [endCurrentSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
@@ -567,8 +541,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         // A session was just deliberately ended — ignore any packets still
         // draining out of the BLE stack during teardown so they can't spawn a
-        // phantom session. Cleared when the s'pots reconnect or the app
-        // returns to the foreground.
+        // phantom session. Cleared when the s'pots make a fresh connection.
         if (sessionEndedRef.current) return;
 
         // Both slots are streaming again after a mid-session disconnect —
