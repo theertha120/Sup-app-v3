@@ -76,7 +76,7 @@ const STEPS: StepConfig[] = [
     step:        5,
     title:       "step 5 of 5 — lean left",
     instruction: "lean your upper body to the left until your weight shifts heavily onto your left sit bone. hold there.",
-    subtext:     "your left and right ranges are often different — we record both separately.",
+    subtext:     "your left and right ranges are often different — we track both separately.",
     liveAngle:   "rollDiff",
     liveLabel:   "left lean",
   },

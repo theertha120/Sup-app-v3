@@ -9,70 +9,13 @@
  */
 
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { colours } from "../theme/colours";
-
-// ── Citations ─────────────────────────────────────────────────────────────────
-// All HTTPS, all verified working links. Grouped the way they're actually used
-// below: general evidence for wearable/IMU-based posture monitoring, and the
-// specific creep/recovery literature s'train's accumulate-fast/recover-slow
-// design is based on.
-
-interface Citation {
-  authors: string;
-  title: string;
-  venue: string;
-  url: string;
-}
-
-const WEARABLE_MONITORING_CITATIONS: Citation[] = [
-  {
-    authors: "Simpson L, Maharaj MM, Mobbs RJ",
-    title: "The Role of Wearables in Spinal Posture Analysis: A Systematic Review",
-    venue: "2019",
-    url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC6368717/",
-  },
-  {
-    authors: "Lee R, James C, Edwards S, et al.",
-    title: "Evidence for the Effectiveness of Feedback from Wearable Inertial Sensors during Work-Related Activities: A Scoping Review",
-    venue: "Sensors, 2021;21(19):6377",
-    url: "https://doi.org/10.3390/s21196377",
-  },
-  {
-    authors: "Figueira V, et al.",
-    title: "Wearables for Monitoring and Postural Feedback in the Work Environment: A Scoping Review",
-    venue: "Sensors, 2024;24(4):1341",
-    url: "https://pubmed.ncbi.nlm.nih.gov/38400498/",
-  },
-];
-
-const STRAIN_CITATIONS: Citation[] = [
-  {
-    authors: "Kang SH, Mirka GA",
-    title: "Creep Deformation of Viscoelastic Lumbar Tissue During Sustained Submaximal Trunk Flexion Postures",
-    venue: "Journal of Biomechanics, 2023;155:111647",
-    url: "https://pubmed.ncbi.nlm.nih.gov/37245386/",
-  },
-  {
-    authors: "Kang SH, Mirka GA",
-    title: "Cumulative Creep Response of Viscoelastic Lumbar Tissue as a Function of Work-Rest Schedule",
-    venue: "Journal of Electromyography and Kinesiology, 2024;78:102916",
-    url: "https://pubmed.ncbi.nlm.nih.gov/38909410/",
-  },
-];
-
-// Opens in an in-app browser (SFSafariViewController on iOS, Custom Tabs on
-// Android) rather than backgrounding the app into external Safari/Chrome.
-async function openCitation(url: string) {
-  try {
-    await WebBrowser.openBrowserAsync(url);
-  } catch {
-    // Fallback if the in-app browser fails to open for any reason.
-    Linking.openURL(url).catch(() => {});
-  }
-}
+import {
+  Citation, openCitation,
+  WEARABLE_MONITORING_CITATIONS, STRAIN_CITATIONS, MOVEMENT_CITATIONS,
+} from "../src/lib/citations";
 
 function CitationRow({ citation }: { citation: Citation }) {
   return (
@@ -106,12 +49,12 @@ export default function SourcesMethodologyScreen() {
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          this page explains exactly what your s'pots record, how every number in the app is
+          this page explains exactly what your s'pots track, how every number in the app is
           calculated, and which parts are s'up's own design versus findings from published
           research. it's always available here — you don't need an active session to read it.
         </Text>
 
-        <Section title="what the two s'pots record">
+        <Section title="what the two s'pots track">
           <Text style={styles.body}>
             each s'pot contains a motion sensor (accelerometer + gyroscope) worn on your back —
             one at your upper back (roughly between the shoulder blades) and one at your lower
@@ -119,6 +62,15 @@ export default function SourcesMethodologyScreen() {
             per second. the app compares the angle of the upper sensor to the angle of the lower
             sensor to estimate how far you're leaning forward, backward, or sideways relative to
             your own calibrated neutral position — not an absolute or universal "correct" posture.
+          </Text>
+        </Section>
+
+        <Section title="about the s'pots hardware">
+          <Text style={styles.body}>
+            s'pots are general-purpose consumer motion sensors (a small accelerometer +
+            gyroscope module, not a medical sensor). they are not medical devices, are not
+            intended to diagnose, treat, or track any condition, and only report how the
+            sensor is tilted so the app can show you your own posture over time.
           </Text>
         </Section>
 
@@ -170,8 +122,8 @@ export default function SourcesMethodologyScreen() {
         <Section title="what is s'train?">
           <Text style={styles.body}>
             s'train is s'up's proprietary posture-awareness indicator. it reflects the duration
-            and degree of posture deviation detected relative to your personal calibrated range.
-            it does not measure physical force, tissue strain, injury, pain, or a medical
+            and degree of posture deviation tracked relative to your personal calibrated range.
+            it does not track physical force, tissue strain, injury, pain, or a medical
             condition.
           </Text>
           <Text style={styles.body}>
@@ -237,7 +189,7 @@ export default function SourcesMethodologyScreen() {
           </Text>
         </Section>
 
-        <Section title="wearable posture feedback — cited evidence">
+        <Section title="wearable posture tracking — cited evidence">
           {WEARABLE_MONITORING_CITATIONS.map((c) => (
             <CitationRow key={c.url} citation={c} />
           ))}
@@ -245,6 +197,16 @@ export default function SourcesMethodologyScreen() {
 
         <Section title="sustained posture & s'train — cited evidence">
           {STRAIN_CITATIONS.map((c) => (
+            <CitationRow key={c.url} citation={c} />
+          ))}
+        </Section>
+
+        <Section title="movement & breaks — cited evidence">
+          <Text style={styles.body}>
+            the "time to move" reminder is based on public-health guidance to break up long,
+            uninterrupted sitting with short bouts of movement:
+          </Text>
+          {MOVEMENT_CITATIONS.map((c) => (
             <CitationRow key={c.url} citation={c} />
           ))}
         </Section>

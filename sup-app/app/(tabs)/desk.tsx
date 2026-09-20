@@ -26,6 +26,8 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
+import CitationLinks from "../../src/components/ui/CitationLinks";
+import { MOVEMENT_CITATIONS, STRAIN_CITATIONS } from "../../src/lib/citations";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -91,8 +93,8 @@ const STRAIN_INFO: Record<string, InfoModalEntry> = {
     title: "what is s'train?",
     body:
       "s'train is s'up's proprietary posture-awareness indicator. it reflects the duration and " +
-      "degree of posture deviation detected relative to your personal calibrated range. it does " +
-      "not measure physical force, tissue strain, injury, pain, or a medical condition.",
+      "degree of posture deviation tracked relative to your personal calibrated range. it does " +
+      "not track physical force, tissue strain, injury, pain, or a medical condition.",
   },
 };
 
@@ -246,6 +248,7 @@ function InterventionModal() {
             <Ionicons name="arrow-forward-circle-outline" size={18} color={colours.primary} />
             <Text style={iv.cueText}>{activeIntervention.cue}</Text>
           </View>
+          <CitationLinks citations={STRAIN_CITATIONS} />
           <Text style={iv.question}>did you adjust your position?</Text>
           <View style={iv.buttonRow}>
             <Pressable style={iv.notYetBtn} onPress={() => dismissIntervention(false)}>
@@ -278,6 +281,7 @@ function MovementNudgeModal() {
           <Text style={mv.title}>{MOVEMENT_NUDGE.title}</Text>
           <Text style={mv.body}>{MOVEMENT_NUDGE.body}</Text>
           <Text style={mv.cue}>{MOVEMENT_NUDGE.cue}</Text>
+          <CitationLinks citations={MOVEMENT_CITATIONS} />
           <Pressable style={mv.btn} onPress={confirmMovement}>
             <Text style={mv.btnText}>yes, i moved ✓</Text>
           </Pressable>

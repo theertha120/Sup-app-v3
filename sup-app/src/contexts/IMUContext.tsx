@@ -58,12 +58,14 @@ import {
   POSTURE_LABELS,
   POSTURE_CUES,
   INTERVENTION_MESSAGES,
+  MOVEMENT_NUDGE,
   SHS_RATES,
   SHS_GRACE_PERIODS_MS,
   DEFAULT_SAGITTAL_SIGN,
   DEFAULT_LATERAL_SIGN,
 } from "../lib/imuParser";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
+import { sendPostureAlertNotification } from "../services/reminder/pushNotificationService";
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
@@ -74,6 +76,7 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 
 const STATIC_NUDGE_THRESHOLD_MS = 15 * 60 * 1000; // 15 min — fires regardless of posture quality, just staying static too long
 const SHS_TICK_MS               = 1_000;
+const MAX_TICK_SCALE_SEC        = 60; // never credit more than a minute per tick
 const DISPLAY_TICK_MS           = 10_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
@@ -305,6 +308,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // reconnect / the app returns to the foreground. Stops in-flight packets
   // that arrive during BLE teardown from spawning a phantom new session.
   const sessionEndedRef         = useRef(false);
+  const lastTickAtRef           = useRef(Date.now());
   // Cumulative time (ms) the s'pots were disconnected during the current
   // session, plus the start of the gap currently in progress (or null). Used
   // to subtract dead time from total_duration_ms so it matches the tracked
@@ -380,11 +384,22 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     shsIntervalRef.current = setInterval(() => {
+      // Time-based, not tick-counted: while the app is in the background iOS
+      // can delay JS timers (BLE notifications still wake the app, but a
+      // 1s setInterval may fire late or bunch up). Scale each tick by the
+      // real time since the last one so accumulation stays correct whether
+      // the app is foregrounded or not. Capped so a genuine long suspension
+      // isn't credited as tracked time.
+      const now   = Date.now();
+      const dtSec = Math.min(Math.max((now - lastTickAtRef.current) / 1000, 0), MAX_TICK_SCALE_SEC);
+      lastTickAtRef.current = now;
+      if (dtSec === 0) return;
+
       const state = lastPostureStateRef.current;
       if (!state) return;
 
       // ── SHS ──
-      const rate        = SHS_RATES[state] ?? 0;
+      const rate        = (SHS_RATES[state] ?? 0) * dtSec;
       const gracePeriod = SHS_GRACE_PERIODS_MS[state] ?? 0;
       const stateElapsed = Date.now() - stateStartTimeRef.current;
       if (rate > 0 || stateElapsed >= gracePeriod) {
@@ -396,14 +411,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       // ── CPL ──
       let newCpl: number;
       if (state === "upright") {
-        newCpl = Math.max(0, cplRef.current - CPL_RECOVERY_RATE);
+        newCpl = Math.max(0, cplRef.current - CPL_RECOVERY_RATE * dtSec);
       } else {
-        newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0);
+        newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0) * dtSec;
       }
       cplRef.current = newCpl;
       setCpl(Math.round(newCpl));
-      sessionShsSumRef.current += shsRef.current;
-      sessionShsTickCountRef.current += 1;
+      sessionShsSumRef.current += shsRef.current * dtSec;
+      sessionShsTickCountRef.current += dtSec;
       sessionMinShsRef.current = Math.min(sessionMinShsRef.current, shsRef.current);
       sessionMaxCplRef.current = Math.max(sessionMaxCplRef.current, newCpl);
 
@@ -417,6 +432,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
           // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
           console.log("[IMUContext] CPL intervention fired for", state, "CPL:", Math.round(newCpl));
+          // The pop-up only renders in Desk Mode; if the app is backgrounded
+          // (s'pots keep streaming), surface it as a local notification too.
+          if (AppState.currentState !== "active") {
+            sendPostureAlertNotification(msg.title, msg.cue);
+          }
         }
       }
     }, SHS_TICK_MS);
@@ -444,31 +464,31 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // PHONE: Vibration.vibrate([0, 300, 100, 300]);
         // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
         console.log("[IMUContext] static nudge fired");
+        if (AppState.currentState !== "active") {
+          sendPostureAlertNotification(MOVEMENT_NUDGE.title, MOVEMENT_NUDGE.cue);
+        }
       }
     }, DISPLAY_TICK_MS);
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
-  // App going to the background ends the current session — it's written to
-  // Supabase and the timer is reset, so reopening the app starts fresh. Guard
-  // on the timer (not sessionIdRef) so a session whose startSession() insert
-  // hasn't resolved yet is still torn down locally.
+  // App backgrounding does NOT end the session: the s'pots keep streaming
+  // over BLE (UIBackgroundModes: bluetooth-central), so tracking continues
+  // while the user works in another app or the screen is locked. The session
+  // ends only via "end s'ession", a manual disconnect, or the user choosing
+  // "end session" on the unexpected-disconnect prompt.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      // "background" only — NOT "inactive", which also fires for transient
-      // interruptions (a phone call, the notification shade, the app
-      // switcher) that shouldn't end a session.
-      if (state === "background" && sessionStartTimeRef.current !== null) {
-        console.log("[IMUContext] App backgrounded — ending session");
-        endCurrentSessionRef.current();
-      }
-      // Back in the foreground with s'pots still streaming: allow a new
-      // session to start again (the previous one was ended on background).
       if (state === "active") {
-        sessionEndedRef.current = false;
+        // Resync the clock-driven UI (session/state duration) immediately
+        // rather than waiting up to 10s for the display timer.
+        const now = Date.now();
+        setTimeInCurrentStateMs(now - stateStartTimeRef.current);
+        if (sessionStartTimeRef.current !== null) {
+          setSessionDurationMs(now - sessionStartTimeRef.current);
+        }
       }
     });
-
     return () => {
       subscription.remove();
     };

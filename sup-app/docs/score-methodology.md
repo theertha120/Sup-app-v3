@@ -160,8 +160,8 @@ score in §3.
 The required definition, used verbatim everywhere s'train is explained in-app:
 
 > **What is s'train?** s'train is s'up's proprietary posture-awareness indicator. It reflects the
-> duration and degree of posture deviation detected relative to your personal calibrated range.
-> It does not measure physical force, tissue strain, injury, pain, or a medical condition.
+> duration and degree of posture deviation tracked relative to your personal calibrated range.
+> It does not track physical force, tissue strain, injury, pain, or a medical condition.
 
 Live implementation: `src/components/ui/InfoModal.tsx` (shared "?" popup used by both s'train and
 the s'napshot/s'core popups), `app/(tabs)/desk.tsx` (the s'train bar itself), and
@@ -213,6 +213,17 @@ posture quality score's recovery-rate asymmetry in §3d):
 - Kang SH, Mirka GA. *Cumulative Creep Response of Viscoelastic Lumbar Tissue as a Function of
   Work-Rest Schedule.* Journal of Electromyography and Kinesiology, 2024;78:102916.
   https://pubmed.ncbi.nlm.nih.gov/38909410/
+
+**Movement & breaks** (the "time to move" reminder — break up long uninterrupted sitting with
+short bouts of movement; also linked from the pop-up itself):
+- Bull FC, Al-Ansari SS, Biddle S, et al. *World Health Organization 2020 guidelines on physical
+  activity and sedentary behaviour.* Br J Sports Med, 2020;54(24):1451-1462.
+  https://pubmed.ncbi.nlm.nih.gov/33239350/
+- Healy GN, Dunstan DW, Salmon J, et al. *Breaks in sedentary time: beneficial associations with
+  metabolic risk.* Diabetes Care, 2008;31(4):661-666. https://pubmed.ncbi.nlm.nih.gov/18252901/
+- Dunstan DW, Kingwell BA, Larsen R, et al. *Breaking up prolonged sitting reduces postprandial
+  glucose and insulin responses.* Diabetes Care, 2012;35(5):976-983.
+  https://pubmed.ncbi.nlm.nih.gov/22374636/
 
 ---
 

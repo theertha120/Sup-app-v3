@@ -5,7 +5,7 @@ import React from "react";
 
 const GOALS: { id: BehaviorGoalId; label: string }[] = [
   { id: "study_posture", label: "better study posture" },
-  { id: "less_back_discomfort", label: "less back discomfort" },
+  { id: "less_back_discomfort", label: "more comfortable sitting" },
   { id: "desk_posture", label: "desk posture" },
   { id: "pilates_form_awareness", label: "pilates/form awareness" },
   { id: "general_posture_awareness", label: "general posture awareness" },

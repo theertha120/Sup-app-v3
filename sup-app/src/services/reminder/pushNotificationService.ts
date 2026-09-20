@@ -217,6 +217,33 @@ export async function sendLocalNotification(
   }
 }
 
+/**
+ * SEND POSTURE ALERT (background)
+ * Local notification for a live posture pop-up (intervention / "time to move")
+ * that fired while the app was backgrounded — the in-app modal only renders in
+ * Desk Mode. Deliberately NOT routed through sendLocalNotification(): that also
+ * records a "reminder sent" and would eat into the user's reminder cooldown /
+ * daily cap. Silently no-ops if notification permission wasn't granted.
+ */
+export async function sendPostureAlertNotification(title: string, body: string): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: "default",
+        ...(Platform.OS === "android" && {
+          channelId: CHANNEL_REMINDERS,
+          tag: "posture_alert",
+        }),
+      },
+      trigger: null, // deliver immediately
+    });
+  } catch (error) {
+    console.warn("Error sending posture alert notification:", error);
+  }
+}
+
 async function maybeSendAnnoyingThresholdNotification(annoyingCount: number): Promise<void> {
   if (annoyingCount < 3) return;
  
