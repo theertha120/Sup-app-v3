@@ -97,7 +97,7 @@ export interface NeutralOffset {
 /**
  * Full 5-position calibration baseline.
  */
-export interface ClinicalBaseline {
+export interface PostureBaseline {
   neutral:        NeutralOffset;
   maxForwardDeg:  number;
   maxBackwardDeg: number;
@@ -136,14 +136,14 @@ export const DEFAULT_LATERAL_SIGN:  1 | -1 =  1;
 // sign of pitchDiff/rollDiff means "forward"/"right" for this particular
 // physical mount — see sagittalSign/lateralSign below), not to personalise
 // how many degrees count as "slouched." A brief experiment scaling these
-// bands to each user's own calibrated comfortable range (ClinicalBaseline.
+// bands to each user's own calibrated comfortable range (PostureBaseline.
 // maxForwardDeg etc.) made classification too sensitive in practice, so that
 // was reverted — maxForwardDeg/maxBackwardDeg/maxRightDeg/maxLeftDeg are
 // still captured at calibration and shown in the "your personal ranges"
 // summary, they just aren't fed into these thresholds.
 //
 // Sagittal classification uses SIGNED pitchDiff:
-//   pitchDiff > 0 = forward flexion (the clinically significant direction)
+//   pitchDiff > 0 = forward flexion (the direction the app tracks most closely)
 //   pitchDiff < 0 = backward extension (generally benign when seated)
 //
 // Bands (forward only — positive pitchDiff):
@@ -243,7 +243,7 @@ function computeInstantScore(state: PostureState): number {
  * assume one fixed mounting orientation for every kit, calibration step 2
  * (lean forward) and step 4 (lean right) detect the actual sign for THIS
  * kit from the direction the user just leaned, and store it as
- * sagittalSign/lateralSign on the ClinicalBaseline (see IMUContext.tsx's
+ * sagittalSign/lateralSign on the PostureBaseline (see IMUContext.tsx's
  * startCalibrationStep()). DEFAULT_SAGITTAL_SIGN/DEFAULT_LATERAL_SIGN below
  * are only the fallback for baselines that predate this detection.
  *
@@ -257,7 +257,7 @@ function computeInstantScore(state: PostureState): number {
 export function classifySpinePosture(
   topSensor:    ParsedIMU,
   bottomSensor: ParsedIMU,
-  baseline:     ClinicalBaseline | NeutralOffset | null = null
+  baseline:     PostureBaseline | NeutralOffset | null = null
 ): PostureClassification {
 
   // Extract neutral offset from either type
@@ -265,7 +265,7 @@ export function classifySpinePosture(
     ? ("neutral" in baseline ? baseline.neutral : baseline)
     : null;
 
-  // Orientation signs only exist on a full ClinicalBaseline (they're detected
+  // Orientation signs only exist on a full PostureBaseline (they're detected
   // across calibration steps 2 and 4) — a bare step-1-only NeutralOffset, or
   // a baseline saved before this field existed, falls back to the defaults.
   const sagittalSign = (baseline && "sagittalSign" in baseline && baseline.sagittalSign)
@@ -387,7 +387,7 @@ export const POSTURE_LABELS: Record<PostureState, string> = {
   transition:   "slight forward shift",
   forward_lean: "leaning forward",
   slouched:     "slouching",
-  severe:       "high s'train",
+  severe:       "deep slouch",
   tilted_left:  "shifting left",
   tilted_right: "shifting right",
 };
@@ -421,18 +421,18 @@ export const INTERVENTION_MESSAGES: Partial<Record<PostureState, {
 }>> = {
   forward_lean: {
     title: "your back muscles are working hard",
-    body:  "leaning forward puts your back muscles under continuous strain. after 10–15 minutes they begin to tire, which often leads to collapsing into a full slouch.",
+    body:  "leaning forward for a long stretch can tire your back muscles, which often leads to slouching.",
     cue:   "rest your back against your chair for a minute to let those muscles recover.",
   },
   slouched: {
     title: "time to sit up",
-    body:  "you've been in a rounded position for a while. research shows sustained slouching can take hours to fully recover from, so it adds up over the day.",
+    body:  "you've been in a rounded position for a while. changing position and taking a short active break can help you stay comfortable.",
     cue:   "sit tall — imagine a thread pulling the crown of your head upward.",
   },
   severe: {
-    title: "high s'train — please adjust now",
-    body:  "you've been holding this position for a while and your posture is under a lot of strain.",
-    cue:   "shift your position now — even a small change makes a big difference.",
+    title: "time for a posture reset",
+    body:  "you've been holding this position for a while. a quick reset can make it easier to stay comfortable.",
+    cue:   "shift your position now — even a small change helps.",
   },
   tilted_left: {
     title: "leaning to one side",

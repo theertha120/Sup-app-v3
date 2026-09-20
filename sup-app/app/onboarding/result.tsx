@@ -93,7 +93,7 @@ export default function ResultScreen() {
             router.replace("/" as any);
           }}
         >
-          <Text style={styles.downloadBtnText}>start your posture health journey</Text>
+          <Text style={styles.downloadBtnText}>start your posture journey</Text>
         </TouchableOpacity>
       </ScrollView>
     </LinearGradient>

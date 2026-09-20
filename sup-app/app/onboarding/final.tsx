@@ -139,7 +139,7 @@ export default function FinalScreen() {
           router.push("/tutorial/intro" as any);
         }}
       >
-        <Text style={styles.nextBtnText}>start your posture health journey</Text>
+        <Text style={styles.nextBtnText}>start your posture journey</Text>
       </TouchableOpacity>
     </LinearGradient>
   );

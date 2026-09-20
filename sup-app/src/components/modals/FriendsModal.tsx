@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { User } from "../../../constants/env";
@@ -20,6 +21,7 @@ import {
   getIncomingPendingRequests,
   getOutgoingPendingRequests,
   rejectFriendRequest,
+  removeFriend,
   sendFriendRequestByUsername,
 } from "../../services/social/friendService";
 import { fetchLeaderboardByStreak } from "../../services/social/leaderboardService";
@@ -204,6 +206,31 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
     refresh();
   };
 
+  const handleRemoveFriend = (friendId: string) => {
+    if (!currentUserId) {
+      showToast("You must be signed in to remove friends", "error");
+      return;
+    }
+    const name = getUserDisplayName(friendId);
+    Alert.alert(
+      `Remove ${name}?`,
+      "You'll no longer see each other on your friends list or leaderboard. You can send a new request any time.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            const result = await removeFriend(currentUserId, friendId);
+            if (result.ok) setFriends((prev) => prev.filter((id) => id !== friendId));
+            showToast(result.ok ? "Friend removed" : result.message, result.ok ? "success" : "error");
+            refresh();
+          },
+        },
+      ]
+    );
+  };
+
   const handleRejectRequest = async (requestId: string) => {
     if (!currentUserId) {
       showToast("You must be signed in to reject requests", "error");
@@ -382,6 +409,12 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                         <Text style={styles.userName}>{getUserDisplayName(friendId)}</Text>
                         <Text style={styles.userStatus}>Friends</Text>
                       </View>
+                      <Pressable
+                        style={[styles.actionBtn, styles.rejectBtn]}
+                        onPress={() => handleRemoveFriend(friendId)}
+                      >
+                        <Text style={styles.actionText}>Remove</Text>
+                      </Pressable>
                     </View>
                   ))
                 )}

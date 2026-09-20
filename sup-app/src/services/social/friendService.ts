@@ -280,3 +280,30 @@ export async function rejectFriendRequest(
     return { ok: false, message: err?.message ?? "Failed to reject request" };
   }
 }
+
+// Remove an existing (accepted) friendship. Deletes the accepted row in either
+// direction, so either person can remove the other. `.select()` lets us tell a
+// real delete from an RLS-blocked no-op (0 rows) instead of reporting success.
+export async function removeFriend(
+  currentUserId: string,
+  friendUserId: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .delete()
+      .eq("status", "accepted")
+      .or(
+        `and(from_user_id.eq.${currentUserId},to_user_id.eq.${friendUserId}),` +
+        `and(from_user_id.eq.${friendUserId},to_user_id.eq.${currentUserId})`
+      )
+      .select("id");
+
+    if (error) throw error;
+    if (!data || data.length === 0) return { ok: false, message: "Couldn't remove this friend. Try again." };
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[friend] removeFriend failed", err);
+    return { ok: false, message: err?.message ?? "Failed to remove friend" };
+  }
+}

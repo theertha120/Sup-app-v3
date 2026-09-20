@@ -7,7 +7,7 @@
  *
  * Updates in this version:
  *   1. Calibration updated to 5-position protocol (neutral, forward, backward, right, left).
- *   2. ClinicalBaseline summary shows all 4 ROM ceilings.
+ *   2. PostureBaseline summary shows all 4 ROM ceilings.
  *   3. startCalibrationStep now typed as 1|2|3|4|5.
  *   4. All existing identity management, picker filter, and forget logic preserved.
  */
@@ -91,7 +91,7 @@ export default function SensorSetupScreen() {
   const {
     topSensor, bottomSensor,
     discoveredDevices, isScanning,
-    calibration, clinicalBaseline,
+    calibration, postureBaseline,
     scan, connect, disconnect,
     bothConnected, isNeutralCalibrated,
   } = useIMUContext();
@@ -728,9 +728,9 @@ export default function SensorSetupScreen() {
                 </Text>
               </Pressable>
 
-              {calibration.isComplete && clinicalBaseline && (
+              {calibration.isComplete && postureBaseline && (
                 <Text style={styles.calibratedNote}>
-                  ✓ calibrated {new Date(clinicalBaseline.capturedAt).toLocaleDateString()}
+                  ✓ calibrated {new Date(postureBaseline.capturedAt).toLocaleDateString()}
                 </Text>
               )}
               {!bothConnected && (
@@ -740,13 +740,13 @@ export default function SensorSetupScreen() {
           </View>
 
           {/* ROM summary — shown once calibrated */}
-          {calibration.isComplete && clinicalBaseline && (
+          {calibration.isComplete && postureBaseline && (
             <View style={styles.romSummary}>
               {[
-                { label: "forward",  value: clinicalBaseline.maxForwardDeg.toFixed(1)  },
-                { label: "backward", value: clinicalBaseline.maxBackwardDeg.toFixed(1) },
-                { label: "right",    value: clinicalBaseline.maxRightDeg.toFixed(1)    },
-                { label: "left",     value: clinicalBaseline.maxLeftDeg.toFixed(1)     },
+                { label: "forward",  value: postureBaseline.maxForwardDeg.toFixed(1)  },
+                { label: "backward", value: postureBaseline.maxBackwardDeg.toFixed(1) },
+                { label: "right",    value: postureBaseline.maxRightDeg.toFixed(1)    },
+                { label: "left",     value: postureBaseline.maxLeftDeg.toFixed(1)     },
               ].map((row) => (
                 <View key={row.label} style={styles.romRow}>
                   <Text style={styles.romLabel}>{row.label}</Text>

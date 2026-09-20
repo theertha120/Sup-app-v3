@@ -51,7 +51,7 @@ import {
   parseIMUPacket,
   classifySpinePosture,
   ParsedIMU,
-  ClinicalBaseline,
+  PostureBaseline,
   NeutralOffset,
   PostureState,
   PostureSeverity,
@@ -189,7 +189,7 @@ export interface IMUContextValue {
   disconnectAll: () => Promise<void>;
 
   calibration: CalibrationState;
-  clinicalBaseline: ClinicalBaseline | null;
+  postureBaseline: PostureBaseline | null;
   isNeutralCalibrated: boolean;
   startCalibrationStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   resetCalibration: () => void;
@@ -253,7 +253,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [discoveredDevices, setDiscoveredDevices] = useState<Device[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationState>(defaultCalibration);
-  const [clinicalBaseline, setClinicalBaseline] = useState<ClinicalBaseline | null>(null);
+  const [postureBaseline, setPostureBaseline] = useState<PostureBaseline | null>(null);
   const [isNeutralCalibrated, setIsNeutralCalibrated] = useState(false);
 
   const [shs,                  setShs]                  = useState(100);
@@ -288,7 +288,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const bottomPacketCountRef = useRef(0);
   const sensorsReadyRef      = useRef(false);
   const neutralOffsetRef = useRef<NeutralOffset | null>(null);
-  const baselineRef      = useRef<ClinicalBaseline | null>(null);
+  const baselineRef      = useRef<PostureBaseline | null>(null);
   const userIdRef        = useRef<string | null>(userId);
 
   const emaRef = useRef<EMAState>({
@@ -349,10 +349,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(BASELINE_STORAGE_KEY).then((raw) => {
       if (!raw) return;
-      const saved: ClinicalBaseline = JSON.parse(raw);
+      const saved: PostureBaseline = JSON.parse(raw);
       baselineRef.current      = saved;
       neutralOffsetRef.current = saved.neutral;
-      setClinicalBaseline(saved);
+      setPostureBaseline(saved);
       setIsNeutralCalibrated(true);
       setCalibration((prev) => ({
         ...prev, stepComplete: [true, true, true, true, true], isComplete: true,
@@ -898,7 +898,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (allDone) {
           const { neutral, maxForward, maxBackward, maxRight, maxLeft, sagittalSign, lateralSign } = captureRef.current;
           if (neutral && maxForward !== null && maxBackward !== null && maxRight !== null && maxLeft !== null) {
-            const baseline: ClinicalBaseline = {
+            const baseline: PostureBaseline = {
               neutral, maxForwardDeg: maxForward, maxBackwardDeg: maxBackward,
               maxRightDeg: maxRight, maxLeftDeg: maxLeft, capturedAt: new Date().toISOString(),
               // Fall back to the historical defaults if steps 2/4 never got a
@@ -908,7 +908,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
               lateralSign:  lateralSign  ?? DEFAULT_LATERAL_SIGN,
             };
             baselineRef.current = baseline;
-            setClinicalBaseline(baseline);
+            setPostureBaseline(baseline);
             AsyncStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(baseline))
               .catch((e) => console.warn("[IMUContext] Failed to save baseline:", e));
           }
@@ -934,7 +934,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     };
     baselineRef.current    = null; neutralOffsetRef.current = null;
     emaRef.current.initialised = false;
-    setClinicalBaseline(null); setIsNeutralCalibrated(false);
+    setPostureBaseline(null); setIsNeutralCalibrated(false);
     setCalibration(defaultCalibration);
     AsyncStorage.removeItem(BASELINE_STORAGE_KEY).catch(() => {});
     AsyncStorage.removeItem(NEUTRAL_OFFSET_STORAGE_KEY).catch(() => {});
@@ -1020,7 +1020,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       bothConnected,
       sensorsReady,
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
-      calibration, clinicalBaseline, isNeutralCalibrated,
+      calibration, postureBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,
       shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
       neckAlignmentPercent, shoulderBalancePercent, upperBackPercent,

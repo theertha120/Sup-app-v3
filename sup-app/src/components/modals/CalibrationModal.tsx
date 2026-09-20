@@ -51,16 +51,16 @@ const STEPS: StepConfig[] = [
   {
     step:        2,
     title:       "step 2 of 5 — lean forward",
-    instruction: "slowly lean forward from your hips until you feel mild resistance in your lower back. stop there — that's your limit.",
-    subtext:     "we capture this as your forward range ceiling. don't push into discomfort.",
+    instruction: "slowly lean forward from your hips as far as feels natural, then hold there.",
+    subtext:     "we capture this as your forward range. no need to strain — stop at a comfortable limit.",
     liveAngle:   "pitchDiff",
     liveLabel:   "forward lean",
   },
   {
     step:        3,
     title:       "step 3 of 5 — lean backward",
-    instruction: "gently lean your upper body backward until you feel your lower back beginning to arch. hold there.",
-    subtext:     "this sets your backward extension ceiling. don't push into discomfort.",
+    instruction: "gently lean your upper body backward as far as feels natural, then hold there.",
+    subtext:     "this sets your backward range. no need to strain — stop at a comfortable limit.",
     liveAngle:   "pitchDiff",
     liveLabel:   "backward lean",
   },
@@ -175,7 +175,7 @@ interface Props {
 
 export default function CalibrationModal({ visible, onClose }: Props) {
   const {
-    calibration, clinicalBaseline,
+    calibration, postureBaseline,
     startCalibrationStep, resetCalibration, bothConnected, sensorsReady,
   } = useIMUContext();
 
@@ -291,15 +291,15 @@ export default function CalibrationModal({ visible, onClose }: Props) {
               <View style={s.allDoneContainer}>
                 <Ionicons name="checkmark-circle" size={56} color="#4CAF50" />
                 <Text style={s.allDoneTitle}>calibration complete</Text>
-                {clinicalBaseline && (
+                {postureBaseline && (
                   <View style={s.summaryCard}>
                     <Text style={s.summaryTitle}>your personal ranges</Text>
                     {[
-                      { label: "forward range",  value: clinicalBaseline.maxForwardDeg.toFixed(1)  },
-                      { label: "backward range", value: clinicalBaseline.maxBackwardDeg.toFixed(1) },
-                      { label: "right range",    value: clinicalBaseline.maxRightDeg.toFixed(1)    },
-                      { label: "left range",     value: clinicalBaseline.maxLeftDeg.toFixed(1)     },
-                      { label: "calibrated",     value: new Date(clinicalBaseline.capturedAt).toLocaleDateString() },
+                      { label: "forward range",  value: postureBaseline.maxForwardDeg.toFixed(1)  },
+                      { label: "backward range", value: postureBaseline.maxBackwardDeg.toFixed(1) },
+                      { label: "right range",    value: postureBaseline.maxRightDeg.toFixed(1)    },
+                      { label: "left range",     value: postureBaseline.maxLeftDeg.toFixed(1)     },
+                      { label: "calibrated",     value: new Date(postureBaseline.capturedAt).toLocaleDateString() },
                     ].map((row) => (
                       <View key={row.label} style={s.summaryRow}>
                         <Text style={s.summaryLabel}>{row.label}</Text>
@@ -468,7 +468,7 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                   </View>
                 )}
 
-                {clinicalBaseline && !allDone && (
+                {postureBaseline && !allDone && (
                   <Pressable onPress={handleClose} style={s.skipRow}>
                     <Text style={s.skipText}>keep existing calibration</Text>
                   </Pressable>

@@ -27,7 +27,7 @@ import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/I
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
 import CitationLinks from "../../src/components/ui/CitationLinks";
-import { MOVEMENT_CITATIONS, STRAIN_CITATIONS } from "../../src/lib/citations";
+import { MOVEMENT_CITATIONS } from "../../src/lib/citations";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -62,7 +62,7 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
   transition:   { label: "slight forward shift",  icon: "arrow-forward-circle" },
   forward_lean: { label: "leaning forward",       icon: "trending-up" },
   slouched:     { label: "slouching",             icon: "warning" },
-  severe:       { label: "high s'train",          icon: "alert-circle" },
+  severe:       { label: "deep slouch",           icon: "alert-circle" },
   tilted_left:  { label: "shifting left",         icon: "arrow-back-circle" },
   tilted_right: { label: "shifting right",        icon: "arrow-forward-circle" },
 };
@@ -123,7 +123,7 @@ function SessionStatsRow({
   // s'train bar — max display at 1500 (above that is red zone regardless)
   const cplPct    = Math.min(cpl / 1500, 1);
   const cplColor  = cpl < 600 ? "#4CAF50" : cpl < 1000 ? "#FF9800" : "#F44336";
-  const cplLabel  = cpl < 600 ? "low s'train" : cpl < 1000 ? "building s'train" : "high s'train";
+  const cplLabel  = cpl < 600 ? "low s'train" : cpl < 1000 ? "building s'train" : "elevated s'train";
 
   return (
     <View style={ss.container}>
@@ -248,7 +248,7 @@ function InterventionModal() {
             <Ionicons name="arrow-forward-circle-outline" size={18} color={colours.primary} />
             <Text style={iv.cueText}>{activeIntervention.cue}</Text>
           </View>
-          <CitationLinks citations={STRAIN_CITATIONS} />
+          <CitationLinks citations={MOVEMENT_CITATIONS} />
           <Text style={iv.question}>did you adjust your position?</Text>
           <View style={iv.buttonRow}>
             <Pressable style={iv.notYetBtn} onPress={() => dismissIntervention(false)}>
