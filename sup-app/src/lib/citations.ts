@@ -57,26 +57,28 @@ export const STRAIN_CITATIONS: Citation[] = [
   },
 ];
 
-// Behind the "time to move" nudge: breaking up long uninterrupted sitting
-// with short bouts of movement.
+// Behind the "time to move" nudge: breaking up long uninterrupted sitting with
+// short active breaks (walking, stretching) and posture changes. Note the
+// evidence for back pain specifically is mixed/low-quality per the 2018
+// systematic review, so the app's copy says "comfortable", not "prevents pain".
 export const MOVEMENT_CITATIONS: Citation[] = [
+  {
+    authors: "Waongenngarm P, van der Beek AJ, Akkarakittichoke N, Janwantanakul P",
+    title: "Effects of an active break and postural shift intervention on preventing neck and low-back pain among high-risk office workers: a 3-arm cluster-randomized controlled trial",
+    venue: "Scandinavian Journal of Work, Environment & Health, 2021;47:306-317",
+    url: "https://pubmed.ncbi.nlm.nih.gov/33906239/",
+  },
+  {
+    authors: "Waongenngarm P, Areerak K, Janwantanakul P",
+    title: "The effects of breaks on low back pain, discomfort, and work productivity in office workers: A systematic review of randomized and non-randomized controlled trials",
+    venue: "Applied Ergonomics, 2018;68:230-239",
+    url: "https://pubmed.ncbi.nlm.nih.gov/29409639/",
+  },
   {
     authors: "Bull FC, Al-Ansari SS, Biddle S, et al.",
     title: "World Health Organization 2020 guidelines on physical activity and sedentary behaviour",
     venue: "British Journal of Sports Medicine, 2020;54(24):1451-1462",
     url: "https://pubmed.ncbi.nlm.nih.gov/33239350/",
-  },
-  {
-    authors: "Healy GN, Dunstan DW, Salmon J, et al.",
-    title: "Breaks in sedentary time: beneficial associations with metabolic risk",
-    venue: "Diabetes Care, 2008;31(4):661-666",
-    url: "https://pubmed.ncbi.nlm.nih.gov/18252901/",
-  },
-  {
-    authors: "Dunstan DW, Kingwell BA, Larsen R, et al.",
-    title: "Breaking up prolonged sitting reduces postprandial glucose and insulin responses",
-    venue: "Diabetes Care, 2012;35(5):976-983",
-    url: "https://pubmed.ncbi.nlm.nih.gov/22374636/",
   },
 ];
 

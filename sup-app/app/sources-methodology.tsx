@@ -203,8 +203,11 @@ export default function SourcesMethodologyScreen() {
 
         <Section title="movement & breaks — cited evidence">
           <Text style={styles.body}>
-            the "time to move" reminder is based on public-health guidance to break up long,
-            uninterrupted sitting with short bouts of movement:
+            the "time to move" reminder is based on research on short active breaks (such as
+            walking or stretching) and posture changes during long periods of desk sitting, which
+            has been linked to less discomfort in office workers, plus public-health guidance to
+            limit uninterrupted sitting. the evidence for back pain specifically is mixed, so
+            s'up frames this as staying comfortable, not as preventing or treating pain:
           </Text>
           {MOVEMENT_CITATIONS.map((c) => (
             <CitationRow key={c.url} citation={c} />

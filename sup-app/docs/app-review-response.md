@@ -66,15 +66,23 @@ tappable "sources" row that lists and opens its citations in an in-app browser, 
 Sources & Methodology has a new "movement & breaks — cited evidence" section. Citations
 (all verified links) live in `src/lib/citations.ts`:
 
-- Bull FC et al. *World Health Organization 2020 guidelines on physical activity and sedentary
-  behaviour.* Br J Sports Med 2020;54(24):1451-1462 — https://pubmed.ncbi.nlm.nih.gov/33239350/
-- Healy GN et al. *Breaks in sedentary time: beneficial associations with metabolic risk.*
-  Diabetes Care 2008;31(4):661-666 — https://pubmed.ncbi.nlm.nih.gov/18252901/
-- Dunstan DW et al. *Breaking up prolonged sitting reduces postprandial glucose and insulin
-  responses.* Diabetes Care 2012;35(5):976-983 — https://pubmed.ncbi.nlm.nih.gov/22374636/
+- Waongenngarm P, van der Beek AJ, Akkarakittichoke N, Janwantanakul P. *Effects of an active
+  break and postural shift intervention on preventing neck and low-back pain among high-risk
+  office workers: a 3-arm cluster-randomized controlled trial.* Scand J Work Environ Health,
+  2021;47:306-317. https://pubmed.ncbi.nlm.nih.gov/33906239/
+- Waongenngarm P, Areerak K, Janwantanakul P. *The effects of breaks on low back pain,
+  discomfort, and work productivity in office workers: A systematic review of randomized and
+  non-randomized controlled trials.* Appl Ergon, 2018;68:230-239.
+  https://pubmed.ncbi.nlm.nih.gov/29409639/ (note: concludes evidence on low back pain is
+  conflicting and evidence on discomfort is low-quality — hence the app's "comfortable" wording)
+- Bull FC, Al-Ansari SS, Biddle S, et al. *World Health Organization 2020 guidelines on physical
+  activity and sedentary behaviour.* Br J Sports Med, 2020;54(24):1451-1462.
+  https://pubmed.ncbi.nlm.nih.gov/33239350/
 
 **Reply:**
-> The "time to move" reminder reflects public-health guidance to break up long uninterrupted
-> sitting with short bouts of movement. Citations are now shown directly in the pop-up
+> The "time to move" reminder reflects research on short active breaks (walking/stretching)
+> and posture changes during long desk sitting, and public-health guidance to limit
+> uninterrupted sitting. The app frames this as staying comfortable, not preventing or treating
+> pain, since the evidence for back pain specifically is mixed. Citations are now shown directly in the pop-up
 > ("sources") and on the Sources & Methodology page (Settings → Sources & Methodology →
 > "movement & breaks — cited evidence").

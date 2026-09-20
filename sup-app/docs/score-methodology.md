@@ -214,16 +214,20 @@ posture quality score's recovery-rate asymmetry in §3d):
   Work-Rest Schedule.* Journal of Electromyography and Kinesiology, 2024;78:102916.
   https://pubmed.ncbi.nlm.nih.gov/38909410/
 
-**Movement & breaks** (the "time to move" reminder — break up long uninterrupted sitting with
-short bouts of movement; also linked from the pop-up itself):
+**Movement & breaks** (the "time to move" reminder — short active breaks and posture changes
+during long desk sitting; also linked from the pop-up itself):
+- Waongenngarm P, van der Beek AJ, Akkarakittichoke N, Janwantanakul P. *Effects of an active
+  break and postural shift intervention on preventing neck and low-back pain among high-risk
+  office workers: a 3-arm cluster-randomized controlled trial.* Scand J Work Environ Health,
+  2021;47:306-317. https://pubmed.ncbi.nlm.nih.gov/33906239/
+- Waongenngarm P, Areerak K, Janwantanakul P. *The effects of breaks on low back pain,
+  discomfort, and work productivity in office workers: A systematic review of randomized and
+  non-randomized controlled trials.* Appl Ergon, 2018;68:230-239.
+  https://pubmed.ncbi.nlm.nih.gov/29409639/ (note: concludes evidence on low back pain is
+  conflicting and evidence on discomfort is low-quality — hence the app's "comfortable" wording)
 - Bull FC, Al-Ansari SS, Biddle S, et al. *World Health Organization 2020 guidelines on physical
   activity and sedentary behaviour.* Br J Sports Med, 2020;54(24):1451-1462.
   https://pubmed.ncbi.nlm.nih.gov/33239350/
-- Healy GN, Dunstan DW, Salmon J, et al. *Breaks in sedentary time: beneficial associations with
-  metabolic risk.* Diabetes Care, 2008;31(4):661-666. https://pubmed.ncbi.nlm.nih.gov/18252901/
-- Dunstan DW, Kingwell BA, Larsen R, et al. *Breaking up prolonged sitting reduces postprandial
-  glucose and insulin responses.* Diabetes Care, 2012;35(5):976-983.
-  https://pubmed.ncbi.nlm.nih.gov/22374636/
 
 ---
 
