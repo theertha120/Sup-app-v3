@@ -183,6 +183,10 @@ export interface IMUContextValue {
   connect: (device: Device, slot: SensorSlot) => Promise<void>;
   disconnect: (slot: SensorSlot) => Promise<void>;
   disconnectAll: () => Promise<void>;
+  /** Ends the current session but leaves the s'pots connected. */
+  endSessionKeepConnected: () => void;
+  /** Lets the next packet from connected s'pots start a fresh session. */
+  startNewSession: () => void;
 
   calibration: CalibrationState;
   clinicalBaseline: ClinicalBaseline | null;
@@ -963,6 +967,22 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setPosture(null);
   }, [endCurrentSession]);
 
+  // Ends the session without touching BLE. Packets are suppressed by
+  // sessionEndedRef, so also clear live posture state to stop the SHS/CPL
+  // ticker and the UI from running on stale data.
+  const endSessionKeepConnected = useCallback(() => {
+    endCurrentSession();
+    lastPostureStateRef.current = null;
+    emaRef.current.initialised  = false;
+    lastPacketTimestampRef.current = null;
+    setPosture(null);
+  }, [endCurrentSession]);
+
+  // Lifts the post-end packet suppression; the next joint packet starts the session.
+  const startNewSession = useCallback(() => {
+    sessionEndedRef.current = false;
+  }, []);
+
   const bothConnected = topData.state.connected && bottomData.state.connected;
 
   return (
@@ -973,6 +993,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       bothConnected,
       sensorsReady,
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
+      endSessionKeepConnected, startNewSession,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,
       shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,

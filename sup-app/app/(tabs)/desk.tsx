@@ -305,8 +305,9 @@ export default function DeskScreen() {
     sessionDurationMs, cpl,
     isNeutralCalibrated, shs,
     sessionStartTimeMs,
-    disconnectAll,
+    endSessionKeepConnected, startNewSession,
   } = useIMUContext();
+  const sessionActive = sessionStartTimeMs !== null;
 
   // --- State declarations ---
   const [showCalibModal, setShowCalibModal] = useState(false);
@@ -394,7 +395,7 @@ export default function DeskScreen() {
 
   // use the throttled posture for the figure/label to avoid flicker
   const currentState   = (displayPosture?.state ?? posture?.state ?? "upright") as DeskPostureState;
-  const isTracking     = bothConnected && isNeutralCalibrated;
+  const isTracking     = bothConnected && isNeutralCalibrated && sessionActive;
   const figureColor    = isTracking ? STATE_COLORS[currentState] : STATE_COLORS["upright"];
   const currentDesc    = (displayPosture?.description ?? posture?.description) ?? "connect your s'pots via s'pot setup.";
 
@@ -509,8 +510,9 @@ export default function DeskScreen() {
     setShowSummaryModal(false);
     setSummaryMessage(null);
     setSummaryColor("yellow");
-    try { await disconnectAll(); } catch (e) { console.warn("[Desk] Failed to disconnect:", e); }
-  }, [disconnectAll]);
+    // End the session but keep the s'pots connected so it can be restarted from here.
+    endSessionKeepConnected();
+  }, [endSessionKeepConnected]);
 
   if (!fontsLoaded) return null;
 
@@ -648,6 +650,7 @@ export default function DeskScreen() {
           <View style={s.stateInfo}>
             <Text style={s.stateDescription}>
               {isTracking ? currentDesc
+                : bothConnected && isNeutralCalibrated ? "session ended. tap 'start new s'ession' to keep tracking."
                 : bothConnected ? "tap 'calibrate posture' below and complete step 1."
                 : "connect both s'pots to begin."}
             </Text>
@@ -704,12 +707,20 @@ export default function DeskScreen() {
             )}
 
             <View style={s.actionRow}>
-              <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
-                <Text style={s.updateBtnText}>s'update</Text>
-              </Pressable>
-              <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
-                <Text style={s.disconnectBtnText}>end s'ession</Text>
-              </Pressable>
+              {sessionActive || !bothConnected ? (
+                <>
+                  <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
+                    <Text style={s.updateBtnText}>s'update</Text>
+                  </Pressable>
+                  <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
+                    <Text style={s.disconnectBtnText}>end s'ession</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable style={s.updateBtn} onPress={startNewSession}>
+                  <Text style={s.updateBtnText}>start new s'ession</Text>
+                </Pressable>
+              )}
             </View>
           </>
         )}
