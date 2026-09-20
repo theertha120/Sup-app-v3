@@ -106,12 +106,12 @@ export default function SourcesMethodologyScreen() {
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          this page explains exactly what your s'pots measure, how every number in the app is
+          this page explains exactly what your s'pots record, how every number in the app is
           calculated, and which parts are s'up's own design versus findings from published
           research. it's always available here — you don't need an active session to read it.
         </Text>
 
-        <Section title="what the two s'pots measure">
+        <Section title="what the two s'pots record">
           <Text style={styles.body}>
             each s'pot contains a motion sensor (accelerometer + gyroscope) worn on your back —
             one at your upper back (roughly between the shoulder blades) and one at your lower
@@ -129,7 +129,7 @@ export default function SourcesMethodologyScreen() {
             and sensor mounting both vary person to person), then lean forward, backward, right,
             and left to your comfortable limit. calibration's job is orientation, not thresholds:
             the forward and right lean steps tell the app which way your s'pots are physically
-            worn, so "forward" and "right" are always measured correctly no matter which of the
+            worn, so "forward" and "right" are always interpreted correctly no matter which of the
             two possible mounting rotations your kit is in. the classification bands below are the
             same fixed values for every user once orientation is correctly resolved — calibration
             doesn't rescale them.
@@ -237,7 +237,7 @@ export default function SourcesMethodologyScreen() {
           </Text>
         </Section>
 
-        <Section title="wearable posture monitoring — cited evidence">
+        <Section title="wearable posture feedback — cited evidence">
           {WEARABLE_MONITORING_CITATIONS.map((c) => (
             <CitationRow key={c.url} citation={c} />
           ))}

@@ -16,7 +16,7 @@ on the upper and lower back, and turns that into a daily 0–100 "s'up s'core." 
 parts: **quality** (up to 50 points, based on how upright the user's posture was, averaged across
 the day's tracked sessions), **showing up** (up to 30 points, for tracking any time at all and a
 bonus for longer sessions), and **streak** (up to 20 points, for consecutive days of use). None of
-this is a medical diagnosis — it's a self-monitoring wellness metric, comparable to a step count
+this is a medical diagnosis — it's a self-tracking wellness metric, comparable to a step count
 or an activity ring, built on published ergonomics/biomechanics research about seated posture over
 time (citations in §6).
 
@@ -93,7 +93,7 @@ the sensors' physical mounting angle can vary too), then lean forward, backward,
 to their comfortable limit. Calibration's job is **orientation, not thresholds**: the forward and
 right lean steps tell the app which raw sensor-angle sign means "forward" and "right" for this
 particular physical s'pot mount (a kit can be worn in either of two rotations — calibration
-detects which one this is, rather than assuming one fixed mounting orientation for every kit). An
+works out which one this is, rather than assuming one fixed mounting orientation for every kit). An
 earlier version of this app also rescaled the classification bands themselves to each user's
 calibrated comfortable range; that made classification too sensitive in practice and was reverted
 — the bands below are fixed for every user once orientation is correctly resolved.
@@ -195,8 +195,8 @@ verbatim from the published papers — some use the authors' own anatomical term
 than paraphrased; this is distinct from the app's own copy (§3, §7, and the live UI), which is
 kept to plain posture language throughout.
 
-**Wearable posture monitoring and feedback** (general evidence base for IMU-based posture
-monitoring):
+**Wearable posture tracking and feedback** (general evidence base for IMU-based posture
+feedback):
 - Simpson L, Maharaj MM, Mobbs RJ. *The Role of Wearables in Spinal Posture Analysis: A
   Systematic Review.* 2019. https://pmc.ncbi.nlm.nih.gov/articles/PMC6368717/
 - Lee R, James C, Edwards S, et al. *Evidence for the Effectiveness of Feedback from Wearable
