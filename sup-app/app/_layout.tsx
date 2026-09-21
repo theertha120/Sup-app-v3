@@ -1,19 +1,33 @@
 import React from "react";
 import { Stack } from "expo-router";
-import { AuthProvider } from "@/src/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 import { TutorialProvider } from "@/src/contexts/TutorialContext";
+import { initSentry, setSentryUser, wrapWithSentry } from "@/src/lib/sentry";
 
-export default function RootLayout() {
+// Must run at module load so native + JS crash handlers are installed before render.
+initSentry();
+
+/** Tags crash reports with the signed-in user's id (renders nothing). */
+function SentryUserSync() {
+  const { userId } = useAuth();
+  React.useEffect(() => {
+    setSentryUser(userId);
+  }, [userId]);
+  return null;
+}
+
+function RootLayout() {
   // Initialize reminder notifications
   useReminderNotifications();
 
   return (
     <AuthProvider>
+      <SentryUserSync />
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>
@@ -63,3 +77,4 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
+export default wrapWithSentry(RootLayout);

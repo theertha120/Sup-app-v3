@@ -90,7 +90,8 @@
         {
           "healthSharePermission": "Sup uses your step count to track your daily activity."
         }
-      ]
+      ],
+      "@sentry/react-native/expo"
     ],
     "experiments": {
       "typedRoutes": true,

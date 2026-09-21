@@ -46,6 +46,7 @@ import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { useAuth } from "./AuthContext";
 import * as postureSync from "../services/posture/postureSyncService";
+import { sentryBreadcrumb } from "../lib/sentry";
 import {
   parseIMUPacket,
   classifySpinePosture,
@@ -461,6 +462,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const finalizeSession = useCallback(() => {
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
+    sentryBreadcrumb("posture session ended", { sessionId });
 
     const tickCount = sessionShsTickCountRef.current;
     const todayDK   = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
@@ -574,6 +576,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           postureSync.startSession(userIdRef.current).then((id) => {
             if (sessionStartTimeRef.current !== null) {
               sessionIdRef.current = id;
+              sentryBreadcrumb("posture session started", { sessionId: id });
             }
           });
         }
