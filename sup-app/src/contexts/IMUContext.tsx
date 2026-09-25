@@ -40,6 +40,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
@@ -75,6 +76,7 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 const STATIC_NUDGE_THRESHOLD_MS = 15 * 60 * 1000; // 15 min — fires regardless of posture quality, just staying static too long
 const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
+const SNAPSHOT_TICK_MS          = 20_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
 
@@ -459,31 +461,37 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // now only ends via endCurrentSession(): manual disconnect, the "end
   // s'ession" button, or "end session" from the reconnect prompt.
 
-  const finalizeSession = useCallback(() => {
-    const sessionId = sessionIdRef.current;
-    if (!sessionId) return;
-    sentryBreadcrumb("posture session ended", { sessionId });
-
+  const computeSessionAggregates = useCallback((): postureSync.SessionAggregates => {
     const tickCount = sessionShsTickCountRef.current;
-    const todayDK   = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
-    const uid       = userIdRef.current;
 
     // Duration excludes time the s'pots were disconnected — banked gaps plus a
-    // gap still open at end (session ended while disconnected). This keeps
-    // total_duration_ms in step with the tracked time in state_totals.
+    // gap still open right now (mid-session, or the session ended while
+    // disconnected). This keeps total_duration_ms in step with the tracked
+    // time in state_totals.
     const now      = Date.now();
     const openGapMs = disconnectedAtRef.current !== null ? now - disconnectedAtRef.current : 0;
     const rawMs     = sessionStartTimeRef.current ? now - sessionStartTimeRef.current : 0;
     const trackedMs = Math.max(0, rawMs - sessionGapMsRef.current - openGapMs);
 
-    postureSync.endSession(sessionId, {
+    return {
       avgShs: tickCount > 0 ? sessionShsSumRef.current / tickCount : null,
       minShs: sessionMinShsRef.current,
       maxCpl: sessionMaxCplRef.current,
       avgInstantScore: upperSumMsRef.current > 0 ? upperSumScoreMsRef.current / upperSumMsRef.current : null,
       totalDurationMs: trackedMs,
       stateTotals: sessionStateTotalsRef.current,
-    });
+    };
+  }, []);
+
+  const finalizeSession = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    sentryBreadcrumb("posture session ended", { sessionId });
+
+    const todayDK = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+    const uid     = userIdRef.current;
+
+    postureSync.endSession(sessionId, computeSessionAggregates());
 
     sessionIdRef.current          = null;
     sessionStateTotalsRef.current = {};
@@ -494,7 +502,13 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (uid) {
       setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
     }
-  }, []);
+  }, [computeSessionAggregates]);
+
+  const snapshotCurrentSession = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    postureSync.snapshotSession(sessionId, computeSessionAggregates());
+  }, [computeSessionAggregates]);
 
   // Deliberate end of the current session: writes it to Supabase
   // (finalizeSession) AND clears the local session timer so a brand-new
@@ -510,6 +524,21 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setSessionStartTimeMs(null);
     setSessionDurationMs(0);
   }, [finalizeSession]);
+
+  useEffect(() => {
+    const interval = setInterval(snapshotCurrentSession, SNAPSHOT_TICK_MS);
+    return () => clearInterval(interval);
+  }, [snapshotCurrentSession]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState === "background") {
+        sentryBreadcrumb("app backgrounded — flushing session snapshot", { sessionId: sessionIdRef.current });
+        snapshotCurrentSession();
+      }
+    });
+    return () => sub.remove();
+  }, [snapshotCurrentSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 

@@ -57,14 +57,18 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+function toSgtDateKey(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+}
+
 async function closeStaleSessions(userId: string): Promise<void> {
   try {
     const cutoff = toIso(Date.now() - STALE_SESSION_MS);
     const { data: staleSessions, error } = await supabase
       .from("posture_sessions")
-      .select("id, started_at")
+      .select("id, started_at, ended_at")
       .eq("user_id", userId)
-      .is("ended_at", null)
+      .eq("is_completed_session", false)
       .lt("started_at", cutoff);
 
     if (error || !staleSessions?.length) return;
@@ -80,11 +84,20 @@ async function closeStaleSessions(userId: string): Promise<void> {
     await Promise.all(
       staleSessions.map((row) => {
         const fallback =
-          lastDaily?.updated_at && lastDaily.updated_at > row.started_at
+          row.ended_at ??
+          (lastDaily?.updated_at && lastDaily.updated_at > row.started_at
             ? lastDaily.updated_at
-            : row.started_at;
-        return supabase.from("posture_sessions").update({ ended_at: fallback }).eq("id", row.id);
+            : row.started_at);
+        return supabase
+          .from("posture_sessions")
+          .update({ ended_at: fallback, is_completed_session: true })
+          .eq("id", row.id);
       })
+    );
+
+    const affectedDateKeys = new Set(staleSessions.map((row) => toSgtDateKey(row.started_at)));
+    await Promise.all(
+      [...affectedDateKeys].map((dateKey) => rebuildDailyFromSessions(userId, dateKey))
     );
   } catch (e) {
     console.warn("[postureSync] closeStaleSessions failed", e);
@@ -92,9 +105,12 @@ async function closeStaleSessions(userId: string): Promise<void> {
 }
 
 export async function startSession(userId: string | null): Promise<string | null> {
-  if (!userId) return null;
+  if (!userId) {
+    console.warn("[postureSync] startSession skipped — no userId (not logged in, or auth not resolved yet)");
+    return null;
+  }
   try {
-    await closeStaleSessions(userId);
+    closeStaleSessions(userId).catch((e) => console.warn("[postureSync] closeStaleSessions rejected", e));
 
     const { data, error } = await supabase
       .from("posture_sessions")
@@ -124,6 +140,7 @@ export async function endSession(
       .from("posture_sessions")
       .update({
         ended_at: new Date().toISOString(),
+        is_completed_session: true,
         avg_shs: aggregates.avgShs ?? null,
         min_shs: aggregates.minShs ?? null,
         max_cpl: aggregates.maxCpl ?? null,
@@ -136,6 +153,33 @@ export async function endSession(
     if (error) console.warn("[postureSync] endSession failed", error);
   } catch (e) {
     console.warn("[postureSync] endSession threw", e);
+  }
+}
+
+
+export async function snapshotSession(
+  sessionId: string | null,
+  aggregates: SessionAggregates
+): Promise<void> {
+  if (!sessionId) return;
+  try {
+    const { error } = await supabase
+      .from("posture_sessions")
+      .update({
+        ended_at: new Date().toISOString(),
+        is_completed_session: false,
+        avg_shs: aggregates.avgShs ?? null,
+        min_shs: aggregates.minShs ?? null,
+        max_cpl: aggregates.maxCpl ?? null,
+        avg_instant_score: aggregates.avgInstantScore ?? null,
+        total_duration_ms: Math.round(aggregates.totalDurationMs),
+        state_totals: aggregates.stateTotals ? fillStateTotals(aggregates.stateTotals) : null,
+      })
+      .eq("id", sessionId);
+
+    if (error) console.warn("[postureSync] snapshotSession failed", error);
+  } catch (e) {
+    console.warn("[postureSync] snapshotSession threw", e);
   }
 }
 
@@ -195,9 +239,13 @@ export async function upsertDailyRollup(
 }
 
 /**
- * Rebuild posture_daily for a given date by aggregating all completed
- * posture_sessions for that day. Call this after a session ends (with a
- * short delay so endSession has time to write to the DB first).
+ * Rebuild posture_daily for a given date by aggregating every
+ * is_completed_session posture_sessions row for that day — set only by a
+ * deliberate endSession() or a closeStaleSessions() recovery, never by the
+ * periodic snapshotSession() (see its own comment) — so a still-active or
+ * not-yet-recovered session's in-progress numbers never get folded in as if
+ * finished. Call this after a session ends (with a short delay so endSession
+ * has time to write to the DB first).
  */
 export async function rebuildDailyFromSessions(
   userId: string,
@@ -217,7 +265,7 @@ export async function rebuildDailyFromSessions(
       .eq("user_id", userId)
       .gte("started_at", startUtc.toISOString())
       .lt("started_at",  endUtc.toISOString())
-      .not("ended_at", "is", null);
+      .eq("is_completed_session", true);
 
     if (error) { console.warn("[postureSync] rebuildDailyFromSessions query failed", error); return; }
     if (!sessions?.length) return;
