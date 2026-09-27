@@ -51,7 +51,6 @@ export default function VerifyEmailScreen() {
         id: user.id,
         name: pendingSignup.firstName,
         last_name: pendingSignup.lastName,
-        phone: pendingSignup.phone,
         avatar_url: randomAvatarUrl(),
         current_streak: 0,
         weekly_avg_points: 0,
