@@ -22,7 +22,6 @@ export default function DetailsScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
@@ -32,11 +31,10 @@ export default function DetailsScreen() {
     !!lastName.trim() &&
     emailValid &&
     !!password.trim() &&
-    !!confirmPassword.trim() &&
-    !!phone.trim();
+    !!confirmPassword.trim();
 
   const handleNext = async () => {
-    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim() || !phone.trim()) return;
+    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim()) return;
     if (!emailValid) {
       setError("please enter a valid email");
       return;
@@ -70,7 +68,6 @@ export default function DetailsScreen() {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim(),
-      phone: phone.trim(),
     });
     router.push("/onboarding/verify-email" as any);
   };
@@ -141,13 +138,6 @@ export default function DetailsScreen() {
               secureTextEntry
             />
 
-            <Text style={styles.fieldLabel}>phone</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
           </View>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
