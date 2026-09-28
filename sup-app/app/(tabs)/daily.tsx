@@ -295,7 +295,7 @@ export default function DailyScreen() {
 
   const handleUsernameChange = async (newName: string) => {
     try {
-      const updatedProfile = await updateCurrentUserProfile({ name: newName });
+      const updatedProfile = await updateCurrentUserProfile({ username: newName });
       if (updatedProfile) {
         setCurrentUser(userProfileToUser(updatedProfile));
       }

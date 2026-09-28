@@ -26,6 +26,7 @@ import {
   userProfileToUser,
 } from "../../src/services/user/profileService";
 import type { LeaderboardEntry } from "../../src/services/social/leaderboardPeriodService";
+import { displayName } from "@/src/utils/displayName";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 
 type Scope = "everyone" | "friends";
@@ -254,7 +255,7 @@ function PodiumSlot({ entry, rank, size, badgeColor, style, nameStyle, isCurrent
       <View style={{ width: size, height: size }}>
         <UserSupsonaAvatar
           avatar={entry.user.avatar}
-          name={entry.user.name}
+          name={displayName(entry.user)}
           size={size}
           defaultAvatarBackgroundColor="#D9D9D9"
         />
@@ -266,7 +267,7 @@ function PodiumSlot({ entry, rank, size, badgeColor, style, nameStyle, isCurrent
         style={[styles.podiumName, nameStyle, isCurrentUser && styles.podiumNameCurrentUser]}
         numberOfLines={1}
       >
-        {isCurrentUser ? "You" : entry.user.name}
+        {isCurrentUser ? "You" : displayName(entry.user)}
       </Text>
     </View>
   );
@@ -285,7 +286,7 @@ function LeaderboardChip({ rank, entry, isCurrentUser }: LeaderboardChipProps) {
       <View style={styles.chipAvatarWrap}>
         <UserSupsonaAvatar
           avatar={entry.user.avatar}
-          name={entry.user.name}
+          name={displayName(entry.user)}
           size={40}
           defaultAvatarBackgroundColor="#D9D9D9"
         />
@@ -294,7 +295,7 @@ function LeaderboardChip({ rank, entry, isCurrentUser }: LeaderboardChipProps) {
         </View>
       </View>
       <Text style={[styles.chipName, isCurrentUser && styles.chipNameCurrentUser]}>
-        {isCurrentUser ? "You" : entry.user.name}
+        {isCurrentUser ? "You" : displayName(entry.user)}
       </Text>
     </View>
   );

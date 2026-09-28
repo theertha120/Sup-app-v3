@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingVi
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { isUsernameTaken } from "@/src/services/user/profileService";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
 
@@ -46,6 +47,13 @@ export default function DetailsScreen() {
       return;
     }
     setError("");
+
+    // Checked before registering, so a taken handle does not leave a stranded
+    // auth user behind.
+    if (await isUsernameTaken(username.trim())) {
+      setError("that username is taken, try another one");
+      return;
+    }
 
     const check = await checkEmailRegistered(email.trim());
     if (!check.success) {

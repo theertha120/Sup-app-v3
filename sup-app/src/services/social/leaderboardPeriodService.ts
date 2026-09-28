@@ -3,6 +3,7 @@ import {
   type PosturePageRow,
 } from "../posture/postureSyncService";
 import type { User } from "../../../constants/env";
+import { displayName } from "../../utils/displayName";
 
 export type LeaderboardPeriod = "day" | "week";
 
@@ -57,11 +58,11 @@ function round1(n: number): number {
 }
 
 /**
- * Returns the display name used for a user, for sorting/tie-breaking purposes.
- * Adjust this if `User` uses a different field (e.g. `displayName`, `username`).
+ * Ties are broken by the name the viewer actually sees, so equal scores read as
+ * alphabetical on screen rather than ordered by a hidden field.
  */
 function getDisplayName(user: User): string {
-  return (user as any).name ?? (user as any).displayName ?? (user as any).username ?? "";
+  return displayName(user);
 }
 
 /**

@@ -11,11 +11,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { User } from "../../../constants/env";
+import { displayName } from "../../utils/displayName";
 import {
   acceptFriendRequest,
   cancelFriendRequest,
   ensureFriendDirectory,
   getUsernameForUser,
+  fetchHandlesForUserIds,
   getFriendsForUser,
   getIncomingPendingRequests,
   getOutgoingPendingRequests,
@@ -43,6 +45,9 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
   const [friends, setFriends] = useState<string[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  // Handles for everyone referenced by requests/friends, looked up by id so a
+  // person missing from the roster still renders as a name.
+  const [handles, setHandles] = useState<Map<string, string>>(new Map());
   // Guards against a fast double-tap on "Send" firing two requests to the
   // same person before the optimistic update re-renders the button as "Cancel".
   const sendingToRef = useRef<Set<string>>(new Set());
@@ -56,8 +61,10 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || users.length === 0) return;
-    ensureFriendDirectory(users);
+    if (!visible) return;
+    // Names are resolved by id below, so request and friend data no longer wait
+    // on the roster — it only warms the username directory when present.
+    if (users.length > 0) ensureFriendDirectory(users);
 
     if (!currentUserId) {
       setIncomingRequests([]);
@@ -76,6 +83,14 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
         setIncomingRequests(inc);
         setOutgoingRequests(out);
         setFriends(fr);
+
+        setHandles(
+          await fetchHandlesForUserIds([
+            ...inc.map((r: any) => r.fromUserId),
+            ...out.map((r: any) => r.toUserId),
+            ...fr,
+          ])
+        );
       } catch (err) {
         console.warn("[FriendsModal] friend data load failed", err);
         setIncomingRequests([]);
@@ -92,8 +107,12 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
   const outgoingToSet = new Set(outgoingRequests.map((r) => r.toUserId));
   const friendSet = new Set(friends);
 
-  const getUserDisplayName = (userId: string): string =>
-    users.find((u) => u.id === userId)?.name ?? userId;
+  const getUserDisplayName = (userId: string): string => {
+    const known = handles.get(userId) ?? getUsernameForUser(userId);
+    if (known) return known;
+    // Never fall back to the raw uuid — it tells the viewer nothing.
+    return displayName(users.find((u) => u.id === userId)) || "unknown user";
+  };
 
   const getInitials = (name: string): string =>
     name
@@ -126,7 +145,7 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
           .filter(
             (user) =>
               (currentUserId ? user.id !== currentUserId : true) &&
-              user.name.toLowerCase().startsWith(normalizedSearch)
+              displayName(user).toLowerCase().startsWith(normalizedSearch)
           )
           .slice(0, 5);
 
@@ -153,7 +172,7 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
     };
     setOutgoingRequests((prev) => [optimistic, ...prev]);
 
-    const result = await sendFriendRequestByUsername(currentUserId, toUser.name, users);
+    const result = await sendFriendRequestByUsername(currentUserId, displayName(toUser), users);
     sendingToRef.current.delete(toUser.id);
     if (!result.ok) {
       setOutgoingRequests((prev) => prev.filter((r) => r.id !== tempId));
@@ -267,10 +286,10 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                         return (
                           <View key={user.id} style={styles.userRow}>
                             <View style={styles.avatar}>
-                              <Text style={styles.avatarText}>{getInitials(user.name)}</Text>
+                              <Text style={styles.avatarText}>{getInitials(displayName(user))}</Text>
                             </View>
                             <View style={styles.userInfo}>
-                              <Text style={styles.userName}>{user.name}</Text>
+                              <Text style={styles.userName}>{displayName(user)}</Text>
                               <Text style={styles.userStatus}>{getStatusLabel(status)}</Text>
                             </View>
 

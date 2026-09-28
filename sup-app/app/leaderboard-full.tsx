@@ -19,6 +19,7 @@ import type {
   LeaderboardEntry,
   LeaderboardPeriod,
 } from "../src/services/social/leaderboardPeriodService";
+import { displayName } from "../src/utils/displayName";
 import { UserSupsonaAvatar } from "../src/components/supsona/SupsonaAvatar";
 
 const PRIMARY_TEXT = "#1D014A";
@@ -186,14 +187,14 @@ function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
 
       <UserSupsonaAvatar
         avatar={entry.user.avatar}
-        name={entry.user.name}
+        name={displayName(entry.user)}
         size={40}
         defaultAvatarBackgroundColor="white"
       />
 
       <View style={styles.info}>
         <Text style={[styles.name, isCurrentUser && styles.currentUserText]}>
-          {entry.user.name}
+          {displayName(entry.user)}
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
