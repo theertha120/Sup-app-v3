@@ -96,14 +96,7 @@ export default function VerifyEmailScreen() {
 
         <Text style={styles.warningText}>💡 ensure that you check your spam/junk folder for the verification code!</Text>
 
-        <Pressable style={styles.codeRow} onPress={() => inputRef.current?.focus()}>
-          {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-            <View key={i} style={[styles.codeBox, i === code.length && styles.codeBoxActive]}>
-              <Text style={styles.codeDigit}>{code[i] ?? ""}</Text>
-            </View>
-          ))}
-        </Pressable>
-
+        <Text style={styles.fieldLabel}>verification code</Text>
         <TextInput
           ref={inputRef}
           value={code}
@@ -111,11 +104,29 @@ export default function VerifyEmailScreen() {
           keyboardType="number-pad"
           maxLength={CODE_LENGTH}
           autoFocus
-          style={styles.hiddenInput}
+          editable={!verifying}
+          placeholder="123456"
+          placeholderTextColor="#A9A9C7"
+          selectTextOnFocus
+          // Lets the OS offer the code from the email instead of retyping it.
+          textContentType="oneTimeCode"
+          autoComplete="sms-otp"
+          returnKeyType="done"
+          onSubmitEditing={() => {
+            if (code.length === CODE_LENGTH) handleVerify(code);
+          }}
+          style={styles.codeInput}
         />
 
+        <Pressable
+          style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
+          onPress={() => handleVerify(code)}
+          disabled={code.length !== CODE_LENGTH || verifying}
+        >
+          <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
+        </Pressable>
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {verifying ? <Text style={styles.statusText}>verifying...</Text> : null}
       </View>
     </LinearGradient>
   );
@@ -169,44 +180,46 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 18,
   },
-  codeRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 24,
+  fieldLabel: {
+    fontSize: 14,
+    fontFamily: "Agrandir-Regular",
+    color: "#333",
+    marginBottom: 8,
+    alignSelf: "center",
   },
-  codeBox: {
-    width: 34,
-    height: 46,
-    borderRadius: 10,
+  codeInput: {
+    width: "100%",
     backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: "#CBCBF7",
-  },
-  codeBoxActive: {
-    borderColor: "#5222AE",
-  },
-  codeDigit: {
-    fontSize: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    fontSize: 22,
     fontFamily: "Agrandir-GrandHeavy",
     color: "#333",
+    letterSpacing: 4,
+    textAlign: "center",
+    marginBottom: 20,
   },
-  hiddenInput: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    opacity: 0,
+  verifyBtn: {
+    backgroundColor: "#AB99FA",
+    borderRadius: 50,
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    marginBottom: 16,
+  },
+  verifyBtnDisabled: {
+    backgroundColor: "#ccc",
+  },
+  verifyBtnText: {
+    fontSize: 16,
+    fontFamily: "Agrandir-GrandHeavy",
+    color: "#ffffff",
+    textAlign: "center",
   },
   errorText: {
     color: "#c0392b",
-    fontSize: 14,
-    fontFamily: "Agrandir-Regular",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  statusText: {
-    color: "#5222AE",
     fontSize: 14,
     fontFamily: "Agrandir-Regular",
     marginBottom: 12,
