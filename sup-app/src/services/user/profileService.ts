@@ -42,6 +42,7 @@ async function setLocalSupsona(userId: string, value: string | null): Promise<vo
 type ProfileRow = {
   id: string;
   name: string;
+  username: string | null;
   avatar_url: string | null;
   current_streak: number | null;
   last_activity_date: string | null;
@@ -59,8 +60,10 @@ type ProfileRow = {
 export type UserProfile = {
   /** Supabase auth user id (profiles.id). */
   id: string;
-  /** Display name stored in `profiles.name`. */
+  /** First name stored in `profiles.name`. Not what the UI shows. */
   name: string;
+  /** Unique handle from `profiles.username`; undefined on older accounts. */
+  username?: string;
   /** Optional avatar URL derived from `profiles.avatar_url`. */
   avatar?: string;
   /** Current streak from `profiles.current_streak` (defaults to 0). */
@@ -92,12 +95,13 @@ export type UserProfile = {
  */
 export type ProfileUpdateInput = {
   name?: string;
+  username?: string;
   avatar?: string | null;
 };
 
 const localProfileOverrides = new Map<
   string,
-  Pick<User, "name" | "avatar">
+  Pick<User, "name" | "username" | "avatar">
 >();
 
 type ProfileSaveMode = "remote" | "local_offline";
@@ -155,6 +159,7 @@ function applyLocalProfileOverride(userId: string, updates: ProfileUpdateInput):
 
   localProfileOverrides.set(userId, {
     name: nextName,
+    username: updates.username?.trim() || undefined,
     avatar: nextAvatar,
   });
 }
@@ -177,10 +182,45 @@ export interface ProfilePreviewStats {
   hasActivity: boolean;
 }
 
+/**
+ * Whether a username is already taken, compared case-insensitively.
+ *
+ * This is a courtesy check for the signup form: it cannot prevent two people
+ * claiming the same handle at the same moment, so the `profiles.username`
+ * column still needs a unique index to be the real guarantee.
+ *
+ * On a query failure this returns `false` (treat as available) so a network
+ * blip cannot lock someone out of signing up — the database constraint is what
+ * rejects a genuine duplicate.
+ */
+export async function isUsernameTaken(username: string): Promise<boolean> {
+  const handle = username.trim();
+  if (!handle) return false;
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("username", handle)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[profile] isUsernameTaken query failed", error);
+      return false;
+    }
+    return !!data;
+  } catch (err) {
+    console.warn("[profile] isUsernameTaken threw", err);
+    return false;
+  }
+}
+
 function mapRowToUserProfile(row: ProfileRow): UserProfile {
   return {
     id: row.id,
     name: row.name || "User", // Fallback name if somehow null
+    username: row.username ?? undefined,
     avatar: row.avatar_url ?? undefined,
     currentStreak: row.current_streak ?? 0,
     lastActivityDate: row.last_activity_date ?? "",
@@ -193,6 +233,7 @@ function userToUserProfile(user: User): UserProfile {
   return {
     id: user.id,
     name: user.name,
+    username: user.username,
     avatar: user.avatar,
     currentStreak: user.currentStreak,
     lastActivityDate: user.lastActivityDate,
@@ -250,7 +291,7 @@ export async function fetchCurrentUserBasicProfile(): Promise<
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, created_at")
+      .select("id, name, username, avatar_url, created_at")
       .eq("id", userId)
       .single();
 
@@ -314,7 +355,7 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
+        "id, name, username, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
       )
       .eq("id", userId)
       .single();
@@ -379,6 +420,13 @@ export async function updateCurrentUserProfile(
     }
     payload.name = updates.name.trim();
   }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "username")) {
+    if (typeof updates.username !== "string" || updates.username.trim().length === 0) {
+      throw new Error("Username must be a non-empty string");
+    }
+    payload.username = updates.username.trim();
+  }
   
   if (Object.prototype.hasOwnProperty.call(updates, "avatar")) {
     // Map domain `avatar` -> DB `avatar_url`
@@ -406,7 +454,7 @@ export async function updateCurrentUserProfile(
     .update(payload)
     .eq("id", userId)
     .select(
-      "id, name, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
+      "id, name, username, avatar_url, current_streak, last_activity_date, created_at, weekly_avg_points"
     )
     .single();
 
@@ -536,7 +584,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
+        "id, name, username, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at"
       )
       .eq("id", userId)
       .single();
@@ -598,13 +646,13 @@ export async function updateUserProfile(
   updates: ProfileUpdateInput
 ): Promise<UserProfile | null> {
   // Validate that only editable fields are being updated
-  const allowedFields = ["name", "avatar"];
+  const allowedFields = ["name", "username", "avatar"];
   const updateKeys = Object.keys(updates);
   const invalidFields = updateKeys.filter((key) => !allowedFields.includes(key));
   
   if (invalidFields.length > 0) {
     throw new Error(
-      `Cannot update fields: ${invalidFields.join(", ")}. Only name and avatar can be updated.`
+      `Cannot update fields: ${invalidFields.join(", ")}. Only name, username and avatar can be updated.`
     );
   }
 
@@ -616,6 +664,13 @@ export async function updateUserProfile(
       throw new Error("Name must be a non-empty string");
     }
     updatePayload.name = updates.name.trim();
+  }
+
+  if (updates.username !== undefined) {
+    if (typeof updates.username !== "string" || updates.username.trim().length === 0) {
+      throw new Error("Username must be a non-empty string");
+    }
+    updatePayload.username = updates.username.trim();
   }
   
   if (updates.avatar !== undefined) {
@@ -644,7 +699,7 @@ export async function updateUserProfile(
     .from("profiles")
     .update(updatePayload)
     .eq("id", userId)
-    .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at")
+    .select("id, name, username, avatar_url, current_streak, last_activity_date, weekly_avg_points, created_at")
     .single();
 
   if (error) {
@@ -702,6 +757,7 @@ export function userProfileToUser(profile: UserProfile): User {
   return {
     id: profile.id,
     name: profile.name,
+    username: profile.username,
     avatar: profile.avatar,
     currentStreak: profile.currentStreak,
     lastActivityDate: profile.lastActivityDate,

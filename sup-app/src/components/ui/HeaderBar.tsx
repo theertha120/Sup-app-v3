@@ -12,12 +12,14 @@ import {
 import { BrandAlert } from "./BrandAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { displayName, normalizeUsername } from "@/src/utils/displayName";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
   updateCurrentUserProfile,
+  isUsernameTaken,
 } from "../../../src/services/user/profileService";
 import { useToast } from "../../../src/contexts/ToastContext";
 import { useTutorial } from "../../../src/contexts/TutorialContext";
@@ -65,7 +67,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     fetchCurrentUserProfileWithStats()
       .then((profile: any) => {
         if (!profile) return;
-        setUsername(profile.name ?? "you");
+        setUsername(displayName(profile, "you"));
         setStreakDays(profile.currentStreak ?? 0);
         setWeeklyPoints(profile.weeklyAvgPoints ?? 0);
       })
@@ -88,7 +90,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
       if (!userId || updatedProfile.id !== userId) return;
       const user = userProfileToUser(updatedProfile);
-      setUsername(user.name ?? "you");
+      setUsername(displayName(user, "you"));
     });
     return unsubscribe;
   }, [userId]);
@@ -118,10 +120,16 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
       setNameAlert(true);
       return;
     }
+    if (normalizeUsername(trimmed) !== normalizeUsername(username)) {
+      if (await isUsernameTaken(trimmed)) {
+        showToast("that username is taken, try another one", "error");
+        return;
+      }
+    }
     try {
-      const updatedProfile = await updateCurrentUserProfile({ name: trimmed });
+      const updatedProfile = await updateCurrentUserProfile({ username: trimmed });
       if (updatedProfile) {
-        setUsername(userProfileToUser(updatedProfile).name ?? trimmed);
+        setUsername(displayName(userProfileToUser(updatedProfile), trimmed));
       }
       showToast("username updated", "success");
     } catch (err) {

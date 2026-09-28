@@ -5,6 +5,7 @@ import { getLocalSupsona } from "../user/profileService";
 type ProfileRow = {
   id: string;
   name: string;
+  username: string | null;
   avatar_url: string | null;
   current_streak: number;
   last_activity_date: string | null;
@@ -16,7 +17,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points")
+      .select("id, name, username, avatar_url, current_streak, last_activity_date, weekly_avg_points")
       .order("current_streak", { ascending: false });
 
     if (error) {
@@ -32,6 +33,7 @@ export async function fetchLeaderboardByStreak(): Promise<User[]> {
     const users: User[] = rows.map((row) => ({
       id: row.id,
       name: row.name,
+      username: row.username ?? undefined,
       avatar: row.avatar_url ?? undefined,
       currentStreak: row.current_streak,
       lastActivityDate: row.last_activity_date ?? "",
@@ -64,7 +66,7 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, current_streak, last_activity_date, weekly_avg_points")
+      .select("id, name, username, avatar_url, current_streak, last_activity_date, weekly_avg_points")
       .order("weekly_avg_points", { ascending: false });
 
     if (error) {
@@ -80,6 +82,7 @@ export async function fetchLeaderboardByWeeklyPoints(): Promise<User[]> {
     const users: User[] = rows.map((row) => ({
       id: row.id,
       name: row.name,
+      username: row.username ?? undefined,
       avatar: row.avatar_url ?? undefined,
       currentStreak: row.current_streak,
       lastActivityDate: row.last_activity_date ?? "",

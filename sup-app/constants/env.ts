@@ -11,7 +11,14 @@ export interface PostureData {
 // User profile with streak tracking
 export interface User {
   id: string;
+  /** Legal/first name from `profiles.name`. Not what the UI shows. */
   name: string;
+  /**
+   * Unique handle from `profiles.username`, chosen at signup and what the UI
+   * displays. Optional because accounts created before the column existed
+   * have none — use `displayName()` rather than reading this directly.
+   */
+  username?: string;
   avatar?: string;
   currentStreak: number;
   lastActivityDate: string; // ISO 8601 format
