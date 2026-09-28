@@ -19,10 +19,10 @@ export default function DetailsScreen() {
   if (!fontsLoaded) return null;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
@@ -30,13 +30,13 @@ export default function DetailsScreen() {
   const isValid =
     !!firstName.trim() &&
     !!lastName.trim() &&
+    !!username.trim() &&
     emailValid &&
     !!password.trim() &&
-    !!confirmPassword.trim() &&
-    !!phone.trim();
+    !!confirmPassword.trim();
 
   const handleNext = async () => {
-    if (!firstName.trim() || !lastName.trim() || !password.trim() || !confirmPassword.trim() || !phone.trim()) return;
+    if (!firstName.trim() || !lastName.trim() || !username.trim() || !password.trim() || !confirmPassword.trim()) return;
     if (!emailValid) {
       setError("please enter a valid email");
       return;
@@ -70,7 +70,7 @@ export default function DetailsScreen() {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim(),
-      phone: phone.trim(),
+      username: username.trim(),
     });
     router.push("/onboarding/verify-email" as any);
   };
@@ -116,6 +116,15 @@ export default function DetailsScreen() {
               autoCapitalize="words"
             />
 
+            <Text style={styles.fieldLabel}>username</Text>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
             <Text style={styles.fieldLabel}>email</Text>
             <TextInput
               style={styles.input}
@@ -139,14 +148,6 @@ export default function DetailsScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
-            />
-
-            <Text style={styles.fieldLabel}>phone</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
             />
           </View>
 
