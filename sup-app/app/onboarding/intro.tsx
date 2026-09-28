@@ -63,19 +63,19 @@ export default function IntroScreen() {
           </Text>
         </View>
 
-        {/* Coach s'kipper — the mascot sits above the button that starts onboarding */}
+        {/* Coach s’kipper — the mascot leans in from the right of the button */}
         <View style={styles.skipperWrap}>
-          <Image
-            source={require("../../assets/images/mascot.png")}
-            style={styles.skipperImage}
-            resizeMode="contain"
-          />
           <Pressable
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
             onPress={() => router.push("/onboarding/heard" as any)}
           >
             <Text style={styles.buttonText}>with coach s&apos;kipper!</Text>
           </Pressable>
+          <Image
+            source={require("../../assets/images/mascot.png")}
+            style={styles.skipperImage}
+            resizeMode="contain"
+          />
         </View>
       </View>
     </Animated.View>
@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
     lineHeight: 42,
   },
   skipperWrap: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginTop: -10,
@@ -130,13 +131,17 @@ const styles = StyleSheet.create({
   skipperImage: {
     width: 130,
     height: 130,
+    marginLeft: -70,
+    marginRight: -50,
+    zIndex: 2,
   },
   button: {
     backgroundColor: "#AB99FA",
     borderRadius: 50,
     paddingVertical: 16,
     paddingHorizontal: 48,
-    marginTop: -6,
+    paddingRight: 56,
+    zIndex: 1,
   },
   buttonPressed: {
     opacity: 0.75,
