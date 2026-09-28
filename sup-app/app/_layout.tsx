@@ -7,6 +7,8 @@ import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 import { TutorialProvider } from "@/src/contexts/TutorialContext";
+import { LeaderboardProvider } from "@/src/contexts/LeaderboardContext";
+import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
 
 export default function RootLayout() {
   // Initialize reminder notifications
@@ -17,6 +19,11 @@ export default function RootLayout() {
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>
+        {/* Leaderboard data is fetched once per login and shared by both
+            leaderboard screens; refreshes are user-triggered. */}
+        <LeaderboardProvider>
+        {/* The signed-in user’s own posture history, fetched once per login. */}
+        <PostureHistoryProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
           <Stack
@@ -57,6 +64,8 @@ export default function RootLayout() {
           {/* Global auth modal */}
           <SignInModal />
         </IMUProvider>
+        </PostureHistoryProvider>
+        </LeaderboardProvider>
       </ToastProvider>
       </TutorialProvider>
       </OnboardingProvider>

@@ -6,21 +6,19 @@ import {
   Pressable,
   Animated,
 } from "react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 import HeaderBar from "../src/components/ui/HeaderBar";
+import RefreshButton from "../src/components/ui/RefreshButton";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useAuth } from "../src/contexts/AuthContext";
-import type { User } from "../constants/env";
-import { fetchLeaderboardByStreak } from "../src/services/social/leaderboardService";
-import {
-  fetchLeaderboardForPeriod,
-  type LeaderboardEntry,
-  type LeaderboardPeriod,
+import { useLeaderboard } from "../src/contexts/LeaderboardContext";
+import type {
+  LeaderboardEntry,
+  LeaderboardPeriod,
 } from "../src/services/social/leaderboardPeriodService";
-import { getFriendsForUser } from "../src/services/social/friendService";
 import { UserSupsonaAvatar } from "../src/components/supsona/SupsonaAvatar";
 
 const PRIMARY_TEXT = "#1D014A";
@@ -49,35 +47,21 @@ export default function FullLeaderboardScreen() {
 
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [scope, setScope] = useState<Scope>("everyone");
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [friendCount, setFriendCount] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  const load = useCallback(async (selectedPeriod: LeaderboardPeriod, selectedScope: Scope) => {
-    setIsLoading(true);
-    try {
-      const users: User[] = await fetchLeaderboardByStreak();
+  const {
+    getEntries,
+    isLoading,
+    isRefreshing,
+    lastUpdatedAt,
+    friendCount,
+    error,
+    refresh,
+    ensureFreshForToday,
+  } = useLeaderboard();
 
-      let roster = users;
-      if (selectedScope === "friends") {
-        const friendIds = userId ? await getFriendsForUser(userId) : [];
-        setFriendCount(friendIds.length);
-        const allowed = new Set([...friendIds, userId]);
-        roster = users.filter((u) => allowed.has(u.id));
-      }
-
-      const ranked = await fetchLeaderboardForPeriod(roster, selectedPeriod);
-      setEntries(ranked);
-    } catch (err) {
-      console.error("[FullLeaderboardScreen] Failed to load leaderboard", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    load(period, scope);
-  }, [period, scope, load]);
+  // Both toggles read the cache loaded at login, so switching period or scope
+  // is instant and costs no network call.
+  const entries: LeaderboardEntry[] = getEntries(scope, period);
 
   useFocusEffect(
     useCallback(() => {
@@ -87,7 +71,9 @@ export default function FullLeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-    }, [fadeAnim])
+      // Reloads only if the calendar day rolled over since the last pull.
+      ensureFreshForToday();
+    }, [fadeAnim, ensureFreshForToday])
   );
 
   if (!fontsLoaded) return null;
@@ -106,6 +92,11 @@ export default function FullLeaderboardScreen() {
           <Text style={styles.sectionLabel}>Full Leaderboard</Text>
         </View>
 
+        <RefreshButton
+          onPress={refresh}
+          isRefreshing={isRefreshing}
+          lastUpdatedAt={lastUpdatedAt}
+        />
         {/* Scope toggle — everyone vs friends only */}
         <View style={styles.periodToggle}>
           {(["everyone", "friends"] as Scope[]).map((s) => (
@@ -148,6 +139,8 @@ export default function FullLeaderboardScreen() {
 
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
+        ) : error ? (
+          <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>
             you haven't added any friends yet — add some from the profile menu to see them here.

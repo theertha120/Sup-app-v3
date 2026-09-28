@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import { supabase } from "../../src/lib/supabase";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,12 +18,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import {
-  fetchPosturePageRows,
-  type PosturePageRow,
-  type StateTotals,
+import RefreshButton from "@/src/components/ui/RefreshButton";
+import type {
+  PosturePageRow,
+  StateTotals,
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
@@ -121,47 +121,33 @@ function fmtFull(d: Date) {
   return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// ─── Page count — replace body with real Supabase query ───────────────────────
-// Returns how many historical pages exist for this range. No cap — the user
-// can swipe all the way back to the first ever recorded session.
-async function getAvailablePageCount(userId: string, range: Range): Promise<number> {
-  if (!userId) {
-    console.error("[getAvailablePageCount] missing userId");
-    return 0;
-  }
+// ─── Page count ───────────────────────────────────────────────────────────────
+// How many historical pages exist for this range. No cap — the user can swipe
+// all the way back to the first ever recorded session. Derived from the history
+// already in memory, so it costs no query of its own.
+function getPageCountFromRows(rows: PosturePageRow[], range: Range): number {
+  // Anchored on the oldest row we hold. Falls back to the same placeholder the
+  // previous query-based version used when the user has no rows at all.
+  const earliestKey = rows[0]?.date;
+  const dataStart = earliestKey
+    ? new Date(`${earliestKey}T00:00:00.000Z`)
+    : new Date(2026, 0, 1);
+  const now = new Date();
 
-  try {
-    const { data, error } = await supabase
-      .from('posture_daily')
-      .select('updated_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: true })
-      .limit(1)
-    
-    if (error) throw error;
-
-    const dataStart = new Date(data?.[0]?.updated_at || new Date(2026, 0, 1).toISOString())
-    const now = new Date();
-
-
-    if (range === "week") {
-      const msPerWeek = 7 * 86_400_000;
-      // No cap — pages go back to dataStart
-      return Math.max(1, Math.ceil((now.getTime() - dataStart.getTime()) / msPerWeek));
-    } else if (range === "month") {
-      const monthDiff =
-        (now.getFullYear() - dataStart.getFullYear()) * 12 +
-        (now.getMonth() - dataStart.getMonth());
-      return Math.max(1, monthDiff + 1);
-    } else {
-      const yearDiff = now.getFullYear() - dataStart.getFullYear();
-      return Math.max(1, yearDiff + 1);
-    }
-  } catch (error) {
-    console.error("[getAvailablePageCount] error:", error);
-    return 0; // fallback to 0 pages if error occurs
+  if (range === "week") {
+    const msPerWeek = 7 * 86_400_000;
+    return Math.max(1, Math.ceil((now.getTime() - dataStart.getTime()) / msPerWeek));
+  } else if (range === "month") {
+    const monthDiff =
+      (now.getFullYear() - dataStart.getFullYear()) * 12 +
+      (now.getMonth() - dataStart.getMonth());
+    return Math.max(1, monthDiff + 1);
+  } else {
+    const yearDiff = now.getFullYear() - dataStart.getFullYear();
+    return Math.max(1, yearDiff + 1);
   }
 }
+
 
 function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -201,27 +187,31 @@ function sessionMinsOf(row: PosturePageRow | undefined): number {
   return row.totalMinutes ?? 0;
 }
 
-async function generatePages(userId: string, range: Range): Promise<PageData[]> {
+// Builds every page for a range from the history already in memory. Pure, so
+// switching range or swiping pages costs no network call — this used to issue one
+// query per page, serially, on every range change.
+function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   const now    = new Date();
   const MS_DAY = 86_400_000;
-  const PAGES  = await getAvailablePageCount(userId, range);
+  const PAGES  = getPageCountFromRows(history, range);
+
+  // Rows arrive sorted by date, so a filtered slice keeps that order — matching
+  // what the old per-page query returned.
+  const sliceRows = (startKey: string, endKey: string) =>
+    history.filter((r) => r.date >= startKey && r.date <= endKey);
+  const rowByDate = new Map(history.map((r) => [r.date, r]));
 
   const pages: PageData[] = [];
 
   for (let p = 0; p < PAGES; p++) {
     const stateTotals: FullStateTotals = emptyStateTotals();
-    
     if (range === "week") {
       const end   = new Date(now.getTime() - p * 7 * MS_DAY);
       const start = new Date(end.getTime() - 6 * MS_DAY);
-      const startKey = toDateKey(start);
-      const endKey   = toDateKey(end);
-
-      const rows = await fetchPosturePageRows(userId, startKey, endKey);
 
       const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * MS_DAY));
       const dayKeys = days.map(toDateKey);
-      const dayRows = dayKeys.map((k) => rows.find((r) => r.date === k));
+      const dayRows = dayKeys.map((k) => rowByDate.get(k));
 
       dayRows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
@@ -246,7 +236,7 @@ async function generatePages(userId: string, range: Range): Promise<PageData[]> 
       const startKey = toDateKey(start);
       const endKey   = toDateKey(end);
 
-      const rows = await fetchPosturePageRows(userId, startKey, endKey);
+      const rows = sliceRows(startKey, endKey);
       rows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
       // 4 weekly buckets: 1-7, 8-14, 15-21, 22-end
@@ -289,7 +279,7 @@ async function generatePages(userId: string, range: Range): Promise<PageData[]> 
       const startKey = toDateKey(start);
       const endKey   = toDateKey(end);
 
-      const rows = await fetchPosturePageRows(userId, startKey, endKey);
+      const rows = sliceRows(startKey, endKey);
       rows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
       const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -810,20 +800,22 @@ export default function StatsScreen() {
   const [activeMetricInfo, setActiveMetricInfo] = useState<string | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
-  const [pages, setPages] = useState<PageData[]>([]);
+  const {
+    rows: history,
+    isRefreshing,
+    lastUpdatedAt,
+    error,
+    refresh,
+  } = usePostureHistory();
 
-  useEffect(() => {
-    if (!isAuthenticated || !userId) {
-      setPages([]);
-      return;
-    }
+  // Shown by each card while there is nothing to chart yet.
+  const emptyMessage = error ?? "loading…";
 
-    let mounted = true;
-    generatePages(userId, range).then((p) => { if (mounted) setPages(p); });
-    return () => { mounted = false; };
-  }, [isAuthenticated, userId, range]);
-
-  console.log("[StatsScreen] render — userId:", userId, "pages:", pages);
+  // Derived from the history loaded at login, so changing range is instant.
+  const pages = useMemo(
+    () => (isAuthenticated && userId ? buildPages(history, range) : []),
+    [history, range, isAuthenticated, userId]
+  );
 
   const closePopup = () => setActivePopup(null);
   const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
@@ -865,6 +857,11 @@ export default function StatsScreen() {
       >
         <HeaderBar />
         <RangeSelector range={range} onChange={handleRangeChange} />
+        <RefreshButton
+          onPress={refresh}
+          isRefreshing={isRefreshing}
+          lastUpdatedAt={lastUpdatedAt}
+        />
 
         {tutorialStep === "stats-tip" && (
           <View style={styles.tutorialTip}>
@@ -920,7 +917,7 @@ export default function StatsScreen() {
               </>
             )} />
           ) : (
-            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+            <Text style={styles.cardTitle}>{emptyMessage}</Text>
           )}
         </View>
 
@@ -960,7 +957,7 @@ export default function StatsScreen() {
               </>
             )} />
           ) : (
-            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+            <Text style={styles.cardTitle}>{emptyMessage}</Text>
           )}
         </View>
 
@@ -979,7 +976,7 @@ export default function StatsScreen() {
               </>
             )} />
           ) : (
-            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+            <Text style={styles.cardTitle}>{emptyMessage}</Text>
           )}
         </View> */}
 
@@ -1023,7 +1020,7 @@ export default function StatsScreen() {
               </>
             )} />
           ) : (
-            <Text style={styles.cardTitle}>loading…</Text> // or a spinner
+            <Text style={styles.cardTitle}>{emptyMessage}</Text>
           )}
         </View>
 

@@ -8,28 +8,24 @@ import {
   Dimensions,
   Image,
 } from "react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HeaderBar from "@/src/components/ui/HeaderBar";
+import RefreshButton from "@/src/components/ui/RefreshButton";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useLeaderboard } from "@/src/contexts/LeaderboardContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
-import type { User } from "../../constants/env";
 import { supabase } from "../../src/lib/supabase";
 import ProfileModal from "../../src/components/modals/ProfileModal";
 import {
   subscribeToProfileUpdates,
   userProfileToUser,
 } from "../../src/services/user/profileService";
-import { fetchLeaderboardByStreak } from "../../src/services/social/leaderboardService";
-import {
-  fetchLeaderboardForPeriod,
-  type LeaderboardEntry,
-} from "../../src/services/social/leaderboardPeriodService";
-import { getFriendsForUser } from "../../src/services/social/friendService";
+import type { LeaderboardEntry } from "../../src/services/social/leaderboardPeriodService";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 
 type Scope = "everyone" | "friends";
@@ -67,36 +63,21 @@ export default function LeaderboardScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    getEntries,
+    isLoading,
+    isRefreshing,
+    lastUpdatedAt,
+    friendCount,
+    error,
+    refresh,
+    ensureFreshForToday,
+  } = useLeaderboard();
   const [scope, setScope] = useState<Scope>("everyone");
-  const [friendCount, setFriendCount] = useState<number | null>(null);
 
-  const load = useCallback(async (selectedScope: Scope) => {
-    setIsLoading(true);
-    try {
-      const users: User[] = await fetchLeaderboardByStreak();
-
-      let roster = users;
-      if (selectedScope === "friends") {
-        const friendIds = userId ? await getFriendsForUser(userId) : [];
-        setFriendCount(friendIds.length);
-        const allowed = new Set([...friendIds, userId]);
-        roster = users.filter((u) => allowed.has(u.id));
-      }
-
-      const ranked = await fetchLeaderboardForPeriod(roster, SUMMARY_PERIOD);
-      setEntries(ranked);
-    } catch (err) {
-      console.error("[LeaderboardScreen] Failed to load leaderboard", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    load(scope);
-  }, [scope, load]);
+  // A read-only slice of the cache loaded at login. Switching scope costs no
+  // network call, and focusing the tab no longer refetches.
+  const entries: LeaderboardEntry[] = getEntries(scope, SUMMARY_PERIOD);
 
   useFocusEffect(
     useCallback(() => {
@@ -106,8 +87,9 @@ export default function LeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      load(scope);
-    }, [fadeAnim, load, scope])
+      // Reloads only if the calendar day rolled over since the last pull.
+      ensureFreshForToday();
+    }, [fadeAnim, ensureFreshForToday])
   );
 
   const top3 = entries.slice(0, 3);
@@ -147,6 +129,11 @@ export default function LeaderboardScreen() {
           </View>
         )}
 
+        <RefreshButton
+          onPress={refresh}
+          isRefreshing={isRefreshing}
+          lastUpdatedAt={lastUpdatedAt}
+        />
         {/* Scope toggle — everyone vs friends only */}
         <View style={styles.scopeToggle}>
           {(["everyone", "friends"] as Scope[]).map((s) => (
@@ -169,6 +156,8 @@ export default function LeaderboardScreen() {
 
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
+        ) : error ? (
+          <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>
             you haven't added any friends yet — add some from the profile menu to see them here.
