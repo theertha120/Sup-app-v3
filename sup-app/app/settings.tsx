@@ -11,6 +11,7 @@ import {
 import React, { useState } from "react";
 import { BrandAlert, BrandAlertButton } from "../src/components/ui/BrandAlert";
 import { router } from "expo-router";
+// import * as Sentry from "@sentry/react-native"; // needed only for the crash test buttons
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useToast } from "../src/contexts/ToastContext";
@@ -212,6 +213,31 @@ export default function SettingsScreen() {
           <Text style={styles.chevron}>›</Text>
         </Pressable>
       </View>
+
+      {/* Sentry crash-report test buttons — disabled for store release; uncomment to test
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Crash reporting test</Text>
+
+        <Pressable
+          style={styles.settingItem}
+          onPress={() => {
+            throw new Error("Sentry test: JS error from settings");
+          }}
+        >
+          <View style={styles.settingInfo}>
+            <Text style={[styles.settingLabel, styles.dangerLabel]}>Throw JS error</Text>
+            <Text style={styles.settingDescription}>Triggers an uncaught JavaScript error</Text>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.settingItem} onPress={() => Sentry.nativeCrash()}>
+          <View style={styles.settingInfo}>
+            <Text style={[styles.settingLabel, styles.dangerLabel]}>Trigger native crash</Text>
+            <Text style={styles.settingDescription}>Crashes the app; reported on next launch</Text>
+          </View>
+        </Pressable>
+      </View>
+      */}
 
       {/* Logout Section */}
       <View style={styles.section}>

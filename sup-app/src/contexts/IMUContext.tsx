@@ -40,13 +40,14 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { BrandAlert, BrandAlertButton } from "../components/ui/BrandAlert";
-import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { useAuth } from "./AuthContext";
 import * as postureSync from "../services/posture/postureSyncService";
+import { sentryBreadcrumb } from "../lib/sentry";
 import {
   parseIMUPacket,
   classifySpinePosture,
@@ -75,6 +76,7 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 const STATIC_NUDGE_THRESHOLD_MS = 15 * 60 * 1000; // 15 min — fires regardless of posture quality, just staying static too long
 const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
+const SNAPSHOT_TICK_MS          = 20_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
 
@@ -184,6 +186,10 @@ export interface IMUContextValue {
   connect: (device: Device, slot: SensorSlot) => Promise<void>;
   disconnect: (slot: SensorSlot) => Promise<void>;
   disconnectAll: () => Promise<void>;
+  /** Ends the current session but leaves the s'pots connected. */
+  endSessionKeepConnected: () => void;
+  /** Lets the next packet from connected s'pots start a fresh session. */
+  startNewSession: () => void;
 
   calibration: CalibrationState;
   clinicalBaseline: ClinicalBaseline | null;
@@ -449,55 +455,43 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
   }, []);
 
-  // App going to the background ends the current session — it's written to
-  // Supabase and the timer is reset, so reopening the app starts fresh. Guard
-  // on the timer (not sessionIdRef) so a session whose startSession() insert
-  // hasn't resolved yet is still torn down locally.
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      // "background" only — NOT "inactive", which also fires for transient
-      // interruptions (a phone call, the notification shade, the app
-      // switcher) that shouldn't end a session.
-      if (state === "background" && sessionStartTimeRef.current !== null) {
-        console.log("[IMUContext] App backgrounded — ending session");
-        endCurrentSessionRef.current();
-      }
-      // Back in the foreground with s'pots still streaming: allow a new
-      // session to start again (the previous one was ended on background).
-      if (state === "active") {
-        sessionEndedRef.current = false;
-      }
-    });
+  // App backgrounding no longer ends the session — s'pots keep streaming and
+  // accumulating SHS/CPL while backgrounded (react-native-ble-plx is
+  // configured with isBackgroundEnabled/central mode for this). The session
+  // now only ends via endCurrentSession(): manual disconnect, the "end
+  // s'ession" button, or "end session" from the reconnect prompt.
 
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  const finalizeSession = useCallback(() => {
-    const sessionId = sessionIdRef.current;
-    if (!sessionId) return;
-
+  const computeSessionAggregates = useCallback((): postureSync.SessionAggregates => {
     const tickCount = sessionShsTickCountRef.current;
-    const todayDK   = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
-    const uid       = userIdRef.current;
 
     // Duration excludes time the s'pots were disconnected — banked gaps plus a
-    // gap still open at end (session ended while disconnected). This keeps
-    // total_duration_ms in step with the tracked time in state_totals.
+    // gap still open right now (mid-session, or the session ended while
+    // disconnected). This keeps total_duration_ms in step with the tracked
+    // time in state_totals.
     const now      = Date.now();
     const openGapMs = disconnectedAtRef.current !== null ? now - disconnectedAtRef.current : 0;
     const rawMs     = sessionStartTimeRef.current ? now - sessionStartTimeRef.current : 0;
     const trackedMs = Math.max(0, rawMs - sessionGapMsRef.current - openGapMs);
 
-    postureSync.endSession(sessionId, {
+    return {
       avgShs: tickCount > 0 ? sessionShsSumRef.current / tickCount : null,
       minShs: sessionMinShsRef.current,
       maxCpl: sessionMaxCplRef.current,
       avgInstantScore: upperSumMsRef.current > 0 ? upperSumScoreMsRef.current / upperSumMsRef.current : null,
       totalDurationMs: trackedMs,
       stateTotals: sessionStateTotalsRef.current,
-    });
+    };
+  }, []);
+
+  const finalizeSession = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    sentryBreadcrumb("posture session ended", { sessionId });
+
+    const todayDK = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+    const uid     = userIdRef.current;
+
+    postureSync.endSession(sessionId, computeSessionAggregates());
 
     sessionIdRef.current          = null;
     sessionStateTotalsRef.current = {};
@@ -508,15 +502,21 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (uid) {
       setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
     }
-  }, []);
+  }, [computeSessionAggregates]);
+
+  const snapshotCurrentSession = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    postureSync.snapshotSession(sessionId, computeSessionAggregates());
+  }, [computeSessionAggregates]);
 
   // Deliberate end of the current session: writes it to Supabase
   // (finalizeSession) AND clears the local session timer so a brand-new
-  // session starts on the next packet. Used for a manual disconnect, the
-  // "end s'ession" button on the disconnect prompt, and the app going to the
-  // background. NOT used for an unexpected drop the user might still
-  // reconnect through — that path deliberately leaves the timer running so
-  // "reconnect s'pot" resumes the same session.
+  // session starts on the next packet. Used for a manual disconnect and the
+  // "end s'ession" button (including from the disconnect prompt). NOT used
+  // for an unexpected drop the user might still reconnect through — that
+  // path deliberately leaves the timer running so "reconnect s'pot" resumes
+  // the same session.
   const endCurrentSession = useCallback(() => {
     finalizeSession();
     sessionStartTimeRef.current = null;
@@ -525,11 +525,20 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setSessionDurationMs(0);
   }, [finalizeSession]);
 
-  // Ref so the mount-only AppState listener always calls the latest version.
-  const endCurrentSessionRef = useRef(endCurrentSession);
   useEffect(() => {
-    endCurrentSessionRef.current = endCurrentSession;
-  }, [endCurrentSession]);
+    const interval = setInterval(snapshotCurrentSession, SNAPSHOT_TICK_MS);
+    return () => clearInterval(interval);
+  }, [snapshotCurrentSession]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState === "background") {
+        sentryBreadcrumb("app backgrounded — flushing session snapshot", { sessionId: sessionIdRef.current });
+        snapshotCurrentSession();
+      }
+    });
+    return () => sub.remove();
+  }, [snapshotCurrentSession]);
 
   // ── BLE callbacks ─────────────────────────────────────────────────────────
 
@@ -567,8 +576,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
         // A session was just deliberately ended — ignore any packets still
         // draining out of the BLE stack during teardown so they can't spawn a
-        // phantom session. Cleared when the s'pots reconnect or the app
-        // returns to the foreground.
+        // phantom session. Cleared when the s'pots make a fresh connection.
         if (sessionEndedRef.current) return;
 
         // Both slots are streaming again after a mid-session disconnect —
@@ -597,6 +605,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           postureSync.startSession(userIdRef.current).then((id) => {
             if (sessionStartTimeRef.current !== null) {
               sessionIdRef.current = id;
+              sentryBreadcrumb("posture session started", { sessionId: id });
             }
           });
         }
@@ -990,6 +999,22 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setPosture(null);
   }, [endCurrentSession]);
 
+  // Ends the session without touching BLE. Packets are suppressed by
+  // sessionEndedRef, so also clear live posture state to stop the SHS/CPL
+  // ticker and the UI from running on stale data.
+  const endSessionKeepConnected = useCallback(() => {
+    endCurrentSession();
+    lastPostureStateRef.current = null;
+    emaRef.current.initialised  = false;
+    lastPacketTimestampRef.current = null;
+    setPosture(null);
+  }, [endCurrentSession]);
+
+  // Lifts the post-end packet suppression; the next joint packet starts the session.
+  const startNewSession = useCallback(() => {
+    sessionEndedRef.current = false;
+  }, []);
+
   const bothConnected = topData.state.connected && bottomData.state.connected;
 
   return (
@@ -1000,6 +1025,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       bothConnected,
       sensorsReady,
       discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
+      endSessionKeepConnected, startNewSession,
       calibration, clinicalBaseline, isNeutralCalibrated,
       startCalibrationStep, resetCalibration,
       shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
