@@ -4,6 +4,7 @@ export type TutorialStep =
   | "goals-tip"
   | "data-tip"
   | "snapshot-tip"
+  | "snapshot-tip-stats"
   | "settings-tip"
   | "coaching-tip"
   | "calibrate-tip"
@@ -16,6 +17,7 @@ export type TutorialStep =
   | "stats-tip-session"
   | "stats-tip-breakdown"
   | "community-tip"
+  | "community-tip-full"
   | "add-friends-tip"
   | null;
 

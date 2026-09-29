@@ -121,13 +121,17 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                this is the leaderboard. everyone's ranked by their weekly points, earned from staying consistent with good posture. it's a fun way to see how you're doing against others and stay motivated to keep showing up. tap 'see full leaderboard' below to see everyone and where you're placed.
+                this is the leaderboard. everyone's ranked by their weekly points, earned from staying consistent with good posture. it's a fun way to see how you're doing against others!
               </Text>
-              <Pressable onPress={() => setTutorialStep("add-friends-tip")}>
+              <Pressable onPress={() => setTutorialStep("community-tip-full")}>
                 <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
               </Pressable>
             </View>
           </View>
+        )}
+
+        {tutorialStep === "community-tip-full" && (
+          <FullLeaderboardTip onNext={() => setTutorialStep("add-friends-tip")} />
         )}
 
         <RefreshButton
@@ -225,7 +229,10 @@ export default function LeaderboardScreen() {
 
             {/* ── See full leaderboard ── */}
             <Pressable
-              style={styles.fullLeaderboardButton}
+              style={[
+                styles.fullLeaderboardButton,
+                tutorialStep === "community-tip-full" && styles.fullLeaderboardButtonHighlighted,
+              ]}
               onPress={() =>
                 router.push({ pathname: "/leaderboard-full", params: { period: SUMMARY_PERIOD } })
               }
@@ -236,6 +243,29 @@ export default function LeaderboardScreen() {
         )}
       </ScrollView>
     </Animated.View>
+  );
+}
+
+// Shown at the top of the screen; the button it refers to is highlighted at the
+// same time, further down the page.
+const FULL_LEADERBOARD_TIP =
+  "tap 'see full leaderboard' at the bottom of this page to see everyone and where you're placed.";
+
+function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
+  return (
+    <View style={styles.tutorialTip}>
+      <Image
+        source={require("../../assets/images/mascot.png")}
+        style={styles.tutorialTipMascot}
+        resizeMode="contain"
+      />
+      <View style={styles.tutorialTipTextWrap}>
+        <Text style={styles.tutorialTipText}>{FULL_LEADERBOARD_TIP}</Text>
+        <Pressable onPress={onNext}>
+          <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -507,6 +537,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.55)",
+  },
+  fullLeaderboardButtonHighlighted: {
+    borderWidth: 3,
+    borderColor: "#5222AE",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
   fullLeaderboardButtonText: {
     fontFamily: "Agrandir-Regular",
