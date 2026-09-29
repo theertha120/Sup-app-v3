@@ -414,7 +414,40 @@ export default function DailyScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                here's your snapshot, the % of time in each posture state you spent today. You can also see your total session time, and your s'up score, all for today's s'pot sessions.
+                here's your snapshot, the % of time in each posture state you spent today.
+              </Text>
+              <Pressable onPress={() => setTutorialStep("snapshot-tip-stats")}>
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* S'napshot card */}
+        <View
+          style={[
+            styles.card,
+            styles.shadow,
+            styles.highlightable,
+            tutorialStep === "snapshot-tip" && styles.highlighted,
+          ]}
+        >
+          <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
+          <Text style={styles.statLabel}>s'napshot</Text>
+          <ScoreBar postureAverages={POSTURE_AVERAGES} />
+          <PostureBreakdown stats={POSTURE_STATS} />
+        </View>
+
+        {tutorialStep === "snapshot-tip-stats" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../assets/images/mascot.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                you can also see your total session time, and your s'up score, all for today's s'pot sessions.
               </Text>
               <Pressable
                 onPress={() => {
@@ -428,18 +461,18 @@ export default function DailyScreen() {
           </View>
         )}
 
-        {/* S'napshot card */}
-        <View style={[styles.card, styles.shadow]}>
-          <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
-          <Text style={styles.statLabel}>s'napshot</Text>
-          <ScoreBar postureAverages={POSTURE_AVERAGES} />
-          <PostureBreakdown stats={POSTURE_STATS} />
-        </View>
-
         {/* Stats grid */}
         <View style={styles.grid}>
           {/* S'ession */}
-          <View style={[styles.card, styles.gridCell, styles.shadow]}>
+          <View
+            style={[
+              styles.card,
+              styles.gridCell,
+              styles.shadow,
+              styles.highlightable,
+              tutorialStep === "snapshot-tip-stats" && styles.highlighted,
+            ]}
+          >
             <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
             {showBadges && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
@@ -449,7 +482,15 @@ export default function DailyScreen() {
           </View>
 
           {/* S'core */}
-          <View style={[styles.card, styles.gridCell, styles.shadow]}>
+          <View
+            style={[
+              styles.card,
+              styles.gridCell,
+              styles.shadow,
+              styles.highlightable,
+              tutorialStep === "snapshot-tip-stats" && styles.highlighted,
+            ]}
+          >
             <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
             {showBadges && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
@@ -568,6 +609,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.10,
     shadowRadius: 10,
     elevation: 5,
+  },
+  highlightable: {
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  highlighted: {
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
   snapshotMessage: {
     fontFamily: "Agrandir-Regular",

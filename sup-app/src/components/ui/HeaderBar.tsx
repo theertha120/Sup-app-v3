@@ -186,7 +186,13 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
  
           {/* Profile icon — measure position for dropdown */}
           <View ref={profileButtonRef} collapsable={false}>
-            <Pressable style={styles.iconButton} onPress={openDropdown}>
+            <Pressable
+              style={[
+                styles.iconButton,
+                tutorialStep === "add-friends-tip" && styles.iconButtonHighlighted,
+              ]}
+              onPress={openDropdown}
+            >
               <Ionicons name="person-circle-outline" size={22} color={PRIMARY_TEXT} />
             </Pressable>
           </View>
@@ -204,10 +210,10 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                add friends here to make the leaderboard about people you actually know — flip it to "friends" once you've added some, to compete, cheer each other on, and keep each other accountable for good posture. tap the profile icon and pick 'friends' to search for people and add them. you're all set!
+                add friends by username by choosing the profile icon here. then you're all set!
               </Text>
               <Pressable onPress={dismissTutorial}>
-                <Text style={styles.tutorialTipNext}>start exploring!</Text>
+                <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
               </Pressable>
             </View>
           </View>
@@ -348,6 +354,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  iconButtonHighlighted: {
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
 
   /* Tutorial tip — anchored under the profile icon (last icon, right-aligned) */

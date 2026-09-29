@@ -103,7 +103,10 @@ export default function SettingsScreen() {
         )}
 
         <Pressable
-          style={styles.settingItem}
+          style={[
+            styles.settingItem,
+            tutorialStep === "settings-tip" && styles.settingItemHighlighted,
+          ]}
           onPress={async () => {
             if (tutorialStep === "settings-tip") setTutorialStep("coaching-tip");
             setLoadingCoachingProfile(true);
@@ -302,6 +305,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#F6F6FA",
+  },
+  settingItemHighlighted: {
+    borderWidth: 3,
+    borderColor: "#5222AE",
+    // settingItem sets borderBottomWidth/Color for its divider, and those
+    // specific keys beat the shorthands above — without restating them the
+    // bottom edge stays a 1px grey line and the box looks open at the bottom.
+    borderBottomWidth: 3,
+    borderBottomColor: "#5222AE",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(82, 34, 174, 0.06)",
   },
   tutorialTip: {
     flexDirection: "row",
