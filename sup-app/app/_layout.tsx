@@ -8,6 +8,8 @@ import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 import { TutorialProvider } from "@/src/contexts/TutorialContext";
 import { initSentry, setSentryUser, wrapWithSentry } from "@/src/lib/sentry";
+import { LeaderboardProvider } from "@/src/contexts/LeaderboardContext";
+import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
 
 // Must run at module load so native + JS crash handlers are installed before render.
 initSentry();
@@ -31,6 +33,11 @@ function RootLayout() {
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>
+        {/* Leaderboard data is fetched once per login and shared by both
+            leaderboard screens; refreshes are user-triggered. */}
+        <LeaderboardProvider>
+        {/* The signed-in user’s own posture history, fetched once per login. */}
+        <PostureHistoryProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
           <Stack
@@ -71,6 +78,8 @@ function RootLayout() {
           {/* Global auth modal */}
           <SignInModal />
         </IMUProvider>
+        </PostureHistoryProvider>
+        </LeaderboardProvider>
       </ToastProvider>
       </TutorialProvider>
       </OnboardingProvider>

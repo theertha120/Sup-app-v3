@@ -12,9 +12,11 @@ import {
 import { router } from "expo-router";
 import { colours } from "../../../theme/colours";
 import type { User } from "../../../constants/env";
+import { displayName, normalizeUsername } from "../../utils/displayName";
 import {
   fetchUserProfile,
   updateUserProfile,
+  isUsernameTaken,
   userProfileToUser,
   type ProfileUpdateInput,
 } from "../../services/user/profileService";
@@ -72,7 +74,7 @@ export default function ProfileModal({
 
   const handleEdit = () => {
     if (!profileData) return;
-    setEditedName(profileData.name);
+    setEditedName(displayName(profileData));
     setError("");
     setIsEditing(true);
   };
@@ -85,7 +87,7 @@ export default function ProfileModal({
 
   const handleSave = async () => {
     if (!editedName.trim()) {
-      setError("Name cannot be empty");
+      setError("Username cannot be empty");
       return;
     }
 
@@ -94,12 +96,21 @@ export default function ProfileModal({
       return;
     }
 
+    const nextHandle = editedName.trim();
+    const currentHandle = displayName(profileData);
+    if (normalizeUsername(nextHandle) !== normalizeUsername(currentHandle)) {
+      if (await isUsernameTaken(nextHandle)) {
+        setError("That username is taken, try another one");
+        return;
+      }
+    }
+
     setIsSaving(true);
     setError("");
 
     try {
       const updates: ProfileUpdateInput = {
-        name: editedName.trim(),
+        username: nextHandle,
       };
 
       // Update via profileService
@@ -171,8 +182,8 @@ export default function ProfileModal({
                 avatar={profileData?.avatar}
                 name={
                   isEditing
-                    ? editedName || profileData?.name || ""
-                    : profileData?.name || ""
+                    ? editedName || displayName(profileData)
+                    : displayName(profileData)
                 }
                 size={80}
                 style={styles.avatarLarge}
@@ -191,12 +202,12 @@ export default function ProfileModal({
                   {isEditing ? (
                     <>
                       <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Display Name</Text>
+                        <Text style={styles.label}>Username</Text>
                         <TextInput
                           style={styles.input}
                           value={editedName}
                           onChangeText={setEditedName}
-                          placeholder="Enter your name"
+                          placeholder="Enter your username"
                           placeholderTextColor="#999"
                         />
                       </View>
@@ -209,7 +220,7 @@ export default function ProfileModal({
                     </>
                   ) : (
                     <>
-                      <Text style={styles.name}>{profileData?.name || "Loading..."}</Text>
+                      <Text style={styles.name}>{displayName(profileData) || "Loading..."}</Text>
                       {isCurrentUser && (
                         <Pressable
                           style={styles.supsonaButton}

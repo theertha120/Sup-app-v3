@@ -614,6 +614,114 @@ export async function fetchPosturePageRows(
   }
 }
 
+// Batched sibling of fetchPosturePageRows: one round-trip for many users over
+// the same window. The leaderboard needs every ranked user's rows for the same
+// date range, and querying per user meant N requests for an N-person board.
+// Returns a map keyed by user id; users with no rows in the window are absent.
+export async function fetchPosturePageRowsForUsers(
+  userIds: string[],
+  startDateKey: string, // YYYY-MM-DD
+  endDateKey: string    // YYYY-MM-DD
+): Promise<Map<string, PosturePageRow[]>> {
+  const byUser = new Map<string, PosturePageRow[]>();
+
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (!ids.length) return byUser;
+
+  if (isNaN(new Date(`${startDateKey}T00:00:00.000Z`).getTime()) ||
+      isNaN(new Date(`${endDateKey}T00:00:00.000Z`).getTime())) {
+    console.warn("[postureSync] fetchPosturePageRowsForUsers: invalid date range", { startDateKey, endDateKey });
+    return byUser;
+  }
+
+  // `.in()` travels in the query string, so chunk to keep the URL bounded.
+  const CHUNK_SIZE = 200;
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    chunks.push(ids.slice(i, i + CHUNK_SIZE));
+  }
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const { data, error } = await supabase
+          .from("posture_daily")
+          .select(`user_id, ${DAILY_COLUMNS}`)
+          .in("user_id", chunk)
+          .gte("date", startDateKey)
+          .lte("date", endDateKey)
+          .order("date", { ascending: true });
+
+        if (error) {
+          console.warn("[postureSync] fetchPosturePageRowsForUsers query failed", error);
+          return;
+        }
+        if (!data?.length) return;
+
+        const rows = data as unknown as Array<
+          Record<string, unknown> & { date: string; user_id: string }
+        >;
+        for (const row of rows) {
+          const mapped = mapRowToDailyPostureRow(row);
+          if (!mapped) continue;
+          const entry: PosturePageRow = { date: row.date, ...mapped };
+          const existing = byUser.get(row.user_id);
+          if (existing) existing.push(entry);
+          else byUser.set(row.user_id, [entry]);
+        }
+      } catch (e) {
+        console.warn("[postureSync] fetchPosturePageRowsForUsers threw", e);
+      }
+    })
+  );
+
+  return byUser;
+}
+
+// Every posture_daily row a user has, oldest first, in as few round-trips as
+// possible. The stats screen derives all of its week/month/year pages from one
+// contiguous history, so fetching per page (which it used to do, serially) meant
+// dozens of requests for a user with a few months of data.
+export async function fetchAllPostureRows(
+  userId: string | null
+): Promise<PosturePageRow[]> {
+  if (!userId) return [];
+
+  // PostgREST caps rows per response, so page through until short-read.
+  const PAGE_SIZE = 1000;
+  const all: PosturePageRow[] = [];
+
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    try {
+      const { data, error } = await supabase
+        .from("posture_daily")
+        .select(DAILY_COLUMNS)
+        .eq("user_id", userId)
+        .order("date", { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        console.warn("[postureSync] fetchAllPostureRows query failed", error);
+        break;
+      }
+      if (!data?.length) break;
+
+      const rows = data as unknown as Array<Record<string, unknown> & { date: string }>;
+      for (const row of rows) {
+        const mapped = mapRowToDailyPostureRow(row);
+        if (mapped) all.push({ date: row.date, ...mapped });
+      }
+
+      if (rows.length < PAGE_SIZE) break; // last page
+    } catch (e) {
+      console.warn("[postureSync] fetchAllPostureRows threw", e);
+      break;
+    }
+  }
+
+  return all;
+}
+
 // past 7 days
 export async function fetchLast7DaysPosture(
   userId: string | null,

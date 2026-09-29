@@ -12,12 +12,14 @@ import {
 import { BrandAlert } from "./BrandAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { displayName, normalizeUsername } from "@/src/utils/displayName";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
   updateCurrentUserProfile,
+  isUsernameTaken,
 } from "../../../src/services/user/profileService";
 import { useToast } from "../../../src/contexts/ToastContext";
 import { useTutorial } from "../../../src/contexts/TutorialContext";
@@ -65,7 +67,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     fetchCurrentUserProfileWithStats()
       .then((profile: any) => {
         if (!profile) return;
-        setUsername(profile.name ?? "you");
+        setUsername(displayName(profile, "you"));
         setStreakDays(profile.currentStreak ?? 0);
         setWeeklyPoints(profile.weeklyAvgPoints ?? 0);
       })
@@ -88,7 +90,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
       if (!userId || updatedProfile.id !== userId) return;
       const user = userProfileToUser(updatedProfile);
-      setUsername(user.name ?? "you");
+      setUsername(displayName(user, "you"));
     });
     return unsubscribe;
   }, [userId]);
@@ -118,10 +120,16 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
       setNameAlert(true);
       return;
     }
+    if (normalizeUsername(trimmed) !== normalizeUsername(username)) {
+      if (await isUsernameTaken(trimmed)) {
+        showToast("that username is taken, try another one", "error");
+        return;
+      }
+    }
     try {
-      const updatedProfile = await updateCurrentUserProfile({ name: trimmed });
+      const updatedProfile = await updateCurrentUserProfile({ username: trimmed });
       if (updatedProfile) {
-        setUsername(userProfileToUser(updatedProfile).name ?? trimmed);
+        setUsername(displayName(userProfileToUser(updatedProfile), trimmed));
       }
       showToast("username updated", "success");
     } catch (err) {
@@ -178,7 +186,13 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
  
           {/* Profile icon — measure position for dropdown */}
           <View ref={profileButtonRef} collapsable={false}>
-            <Pressable style={styles.iconButton} onPress={openDropdown}>
+            <Pressable
+              style={[
+                styles.iconButton,
+                tutorialStep === "add-friends-tip" && styles.iconButtonHighlighted,
+              ]}
+              onPress={openDropdown}
+            >
               <Ionicons name="person-circle-outline" size={22} color={PRIMARY_TEXT} />
             </Pressable>
           </View>
@@ -196,10 +210,10 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                add friends here to make the leaderboard about people you actually know — flip it to "friends" once you've added some, to compete, cheer each other on, and keep each other accountable for good posture. tap the profile icon and pick 'friends' to search for people and add them. you're all set!
+                add friends by username by choosing the profile icon here. then you're all set!
               </Text>
               <Pressable onPress={dismissTutorial}>
-                <Text style={styles.tutorialTipNext}>start exploring!</Text>
+                <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
               </Pressable>
             </View>
           </View>
@@ -340,6 +354,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  iconButtonHighlighted: {
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
 
   /* Tutorial tip — anchored under the profile icon (last icon, right-aligned) */

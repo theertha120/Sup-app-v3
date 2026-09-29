@@ -632,7 +632,13 @@ export default function DeskScreen() {
         )}
 
         {/* Figure card */}
-        <View style={[s.figureCard, { borderColor: figureColor + "33" }]}>
+        <View
+          style={[
+            s.figureCard,
+            { borderColor: figureColor + "33" },
+            tutorialStep === "figure-tip" && s.tutorialHighlight,
+          ]}
+        >
           {isTracking && (
             <View style={[s.stateLabelStrip, { backgroundColor: STATE_BG_COLORS[currentState] }]}>
               <Ionicons name={STATE_INFO[currentState].icon as any} size={14} color={figureColor} />
@@ -709,10 +715,16 @@ export default function DeskScreen() {
             <View style={s.actionRow}>
               {sessionActive || !bothConnected ? (
                 <>
-                  <Pressable style={s.updateBtn} onPress={handleOpenUpdateModal}>
+                  <Pressable 
+                    style={[s.updateBtn, tutorialStep === "supdate-tip" && s.tutorialHighlight]}
+                    onPress={handleOpenUpdateModal}
+                  >
                     <Text style={s.updateBtnText}>s'update</Text>
                   </Pressable>
-                  <Pressable style={s.disconnectBtn} onPress={handleEndSession}>
+                  <Pressable 
+                    style={[s.disconnectBtn, tutorialStep === "end-session-tip" && s.tutorialHighlight]} 
+                    onPress={handleEndSession}>
+                   >
                     <Text style={s.disconnectBtnText}>end s'ession</Text>
                   </Pressable>
                 </>
@@ -954,6 +966,15 @@ const s = StyleSheet.create({
   sensorDetailValue: { fontSize: 12, color: colours.textSecondary, lineHeight: 18, fontFamily: "Agrandir-Regular" },
 
   actionRow:         { alignSelf: "stretch", flexDirection: "row", gap: 12, marginBottom: 24 },
+
+  tutorialHighlight: {
+    borderWidth: 3,
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
+  },
 
   updateBtn:         { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, backgroundColor: "#AB99FA" },
   updateBtnText:     { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },

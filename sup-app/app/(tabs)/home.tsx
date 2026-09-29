@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useFonts } from "expo-font";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { displayName } from "@/src/utils/displayName";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -155,7 +156,7 @@ export default function HomeScreen() {
     if (hasAnimatedRef.current) return;
     hasAnimatedRef.current = true;
 
-    const name = currentUser?.name ?? "";
+    const name = displayName(currentUser);
     runEntrySequence(name);
   }, [isLoadingProfile, currentUser, runEntrySequence]);
   // ─────────────────────────────────────────────────────────────────────────
@@ -290,7 +291,7 @@ export default function HomeScreen() {
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, bubbleAnimStyle(greetingBubbleAnim)]}>
             <Text style={styles.bubbleText}>
               {nameFullyTyped
-                ? (currentUser?.name ? `${currentUser.name}!\nyou're back :)` : "hey!\nyou're back :)")
+                ? (displayName(currentUser) ? `${displayName(currentUser)}!\nyou're back :)` : "hey!\nyou're back :)")
                 : (typedName
                   ? `${typedName}\nyou're back :)`
                   : "hey!\nyou're back :)")}
@@ -298,7 +299,17 @@ export default function HomeScreen() {
           </Animated.View>
 
           {/* Status bubble */}
-          <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.bubbleLeftLast, styles.shadow, bubbleAnimStyle(statusBubbleAnim)]}>
+          <Animated.View
+            style={[
+              styles.bubble,
+              styles.bubbleLeft,
+              styles.bubbleLeftLast,
+              styles.shadow,
+              styles.highlightable,
+              tutorialStep === "goals-tip" && styles.highlighted,
+              bubbleAnimStyle(statusBubbleAnim),
+            ]}
+          >
             <View style={styles.skipperHeaderRow}>
               <Text style={styles.bubbleText}>
                 s'kipper says:
@@ -329,7 +340,13 @@ export default function HomeScreen() {
           <View style={styles.actionBubbleWrap}>
             <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
               <Pressable
-                style={[styles.bubble, styles.bubbleRight, styles.shadow]}
+                style={[
+                  styles.bubble,
+                  styles.bubbleRight,
+                  styles.shadow,
+                  styles.highlightable,
+                  tutorialStep === "data-tip" && styles.highlighted,
+                ]}
                 onPress={() => {
                   logNavbarClick(userId, "today_summary");
                   if (tutorialStep === "data-tip") {
@@ -429,6 +446,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     padding: 20,
     borderRadius: 28,
+  },
+  highlightable: {
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  highlighted: {
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
   shadow: {
     shadowColor: "#1D014A",

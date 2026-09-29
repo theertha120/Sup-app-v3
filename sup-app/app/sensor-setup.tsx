@@ -523,7 +523,10 @@ export default function SensorSetupScreen() {
 
         {/* QR pairing — primary path for new s'pots */}
         {!bothConnected && (
-          <Pressable style={styles.qrPairBtn} onPress={() => setShowQRPairModal(true)}>
+          <Pressable
+            style={[styles.qrPairBtn, tutorialStep === "connect-tip" && styles.tutorialHighlight]}
+            onPress={() => setShowQRPairModal(true)}
+          >
             <Ionicons name="qr-code-outline" size={18} color="#fff" />
             <Text style={styles.qrPairBtnText}>s'can to pair</Text>
           </Pressable>
@@ -683,7 +686,7 @@ export default function SensorSetupScreen() {
         )}
 
         {/* Calibration section */}
-        <View style={styles.card}>
+        <View style={[styles.card, tutorialStep === "calibrate-tip" && styles.tutorialHighlight]}>
           <Text style={styles.cardTitle}>posture calibration</Text>
           <Text style={styles.cardDesc}>
             5-position calibration captures your personal range of motion in all directions.
@@ -856,6 +859,14 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff", borderRadius: 20, padding: 16, marginBottom: 16,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8,
+  },
+  tutorialHighlight: {
+    borderWidth: 3,
+    borderColor: "#5222AE",
+    shadowColor: "#5222AE",
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
   },
   cardTitle: { fontSize: 16, color: colours.textPrimary, marginBottom: 12, fontFamily: "Agrandir-GrandHeavy" },
   cardDesc:  { fontSize: 13, color: colours.textSecondary, lineHeight: 19, marginBottom: 16, fontFamily: "Agrandir-Regular" },

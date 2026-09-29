@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { displayName, normalizeUsername } from "@/src/utils/displayName";
 import type { User } from "@/constants/env";
 
 export type FriendRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
@@ -15,16 +16,16 @@ export interface FriendRequest {
 const usernameByUserId = new Map<string, string>();
 const userIdByUsername = new Map<string, string>();
 
-function normalizeUsername(value: string): string {
-  return value.trim().toLowerCase();
-}
+// Re-exported from the shared helper so the directory, the lookup and the
+// signup form all agree on what counts as the same handle.
 
 export function ensureFriendDirectory(users: User[]): void {
   users.forEach((user) => {
-    const normalized = normalizeUsername(user.name);
+    const handle = displayName(user);
+    const normalized = normalizeUsername(handle);
     if (!normalized) return;
 
-    usernameByUserId.set(user.id, user.name);
+    usernameByUserId.set(user.id, handle);
     if (!userIdByUsername.has(normalized)) {
       userIdByUsername.set(normalized, user.id);
     }
@@ -33,6 +34,57 @@ export function ensureFriendDirectory(users: User[]): void {
 
 export function getUsernameForUser(userId: string): string | undefined {
   return usernameByUserId.get(userId);
+}
+
+/**
+ * Resolves display handles for specific user ids, in one batched query.
+ *
+ * Request rows and the friends list reference people who are not necessarily in
+ * the roster a screen happens to have loaded, and rendering a raw uuid in that
+ * case tells the viewer nothing. Ids already known to the directory are served
+ * from it; only the rest are queried.
+ */
+export async function fetchHandlesForUserIds(
+  userIds: string[]
+): Promise<Map<string, string>> {
+  const handles = new Map<string, string>();
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (!ids.length) return handles;
+
+  const missing: string[] = [];
+  for (const id of ids) {
+    const known = usernameByUserId.get(id);
+    if (known) handles.set(id, known);
+    else missing.push(id);
+  }
+  if (!missing.length) return handles;
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name, username")
+      .in("id", missing);
+
+    if (error) {
+      console.warn("[friend] fetchHandlesForUserIds failed", error);
+      return handles;
+    }
+
+    for (const row of (data ?? []) as any[]) {
+      const handle = displayName(row);
+      if (!handle) continue;
+      handles.set(row.id, handle);
+      usernameByUserId.set(row.id, handle);
+      const normalized = normalizeUsername(handle);
+      if (normalized && !userIdByUsername.has(normalized)) {
+        userIdByUsername.set(normalized, row.id);
+      }
+    }
+  } catch (err) {
+    console.warn("[friend] fetchHandlesForUserIds threw", err);
+  }
+
+  return handles;
 }
 
 // Get friends for a user (accepted relationships)
@@ -118,8 +170,8 @@ async function resolveUserIdByUsername(username: string): Promise<string | null>
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name")
-      .ilike("name", username)
+      .select("id, name, username")
+      .ilike("username", username)
       .limit(1)
       .maybeSingle();
 
@@ -127,7 +179,7 @@ async function resolveUserIdByUsername(username: string): Promise<string | null>
     if (!data) return null;
     const id = (data as any).id as string;
     userIdByUsername.set(normalized, id);
-    usernameByUserId.set(id, (data as any).name as string);
+    usernameByUserId.set(id, displayName(data as any));
     return id;
   } catch (err) {
     console.warn("[friend] resolveUserIdByUsername failed", err);
