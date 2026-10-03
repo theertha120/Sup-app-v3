@@ -11,6 +11,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 export default function IntroScreen() {
   const [fontsLoaded] = useFonts({
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
+    "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -62,25 +63,20 @@ export default function IntroScreen() {
           </Text>
         </View>
 
-        {/* Coach s'kipper badge */}
+        {/* Coach s’kipper — the mascot leans in from the right of the button */}
         <View style={styles.skipperWrap}>
-          <View style={styles.skipperBadge}>
-            <Text style={styles.skipperBadgeText}>with coach s'kipper!</Text>
-          </View>
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() => router.push("/onboarding/heard" as any)}
+          >
+            <Text style={styles.buttonText}>with coach s&apos;kipper!</Text>
+          </Pressable>
           <Image
             source={require("../../assets/images/mascot.png")}
             style={styles.skipperImage}
             resizeMode="contain"
           />
         </View>
-
-        {/* Button */}
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-          onPress={() => router.push("/onboarding/heard" as any)}
-        >
-          <Text style={styles.buttonText}>Let's gooooo</Text>
-        </Pressable>
       </View>
     </Animated.View>
   );
@@ -139,26 +135,13 @@ const styles = StyleSheet.create({
     marginRight: -50,
     zIndex: 2,
   },
-  skipperBadge: {
-    backgroundColor: "#5222AE",
-    borderRadius: 50,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    paddingRight: 56,
-    zIndex: 1,
-  },
-  skipperBadgeText: {
-    fontSize: 16,
-    fontFamily: "Agrandir-GrandHeavy",
-    color: "#fff",
-    textAlign: "center",
-  },
   button: {
     backgroundColor: "#AB99FA",
     borderRadius: 50,
     paddingVertical: 16,
     paddingHorizontal: 48,
-    marginTop: -20,
+    paddingRight: 56,
+    zIndex: 1,
   },
   buttonPressed: {
     opacity: 0.75,
