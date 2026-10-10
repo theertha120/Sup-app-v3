@@ -36,6 +36,15 @@ const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before actio
 
 const SKIPPER_INFO: Record<string, InfoModalEntry> = {
   skipper: SKIPPER_DISCLAIMER,
+  // Explains the daily AI insight — mirrors generate-daily-summaries (8am SGT, last 7 days of posture_daily)
+  dailyInsight: {
+    title: "about your daily insight",
+    body:
+      "s'kipper writes this insight only once a day, at 8 am (singapore time).\n\n" +
+      "what goes in: your last 7 days of s'pot data, including your posture session data, plus your daily s'up s'core " +
+      "and total tracked time. if you haven't tracked in the past 7 days, no new insight is made.\n\n" +
+      "what it's for: to spot trends across your week and give you a personalised focus for today. ",
+  },
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -204,6 +213,7 @@ export default function HomeScreen() {
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [hasSummaryData, setHasSummaryData] = useState<boolean | null>(null); // null = unknown
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+  const [showDailyInsightInfo, setShowDailyInsightInfo] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -310,6 +320,8 @@ export default function HomeScreen() {
               bubbleAnimStyle(statusBubbleAnim),
             ]}
           >
+            {/* Daily insight explainer — default InfoButton top-right placement */}
+            <InfoButton onPress={() => setShowDailyInsightInfo(true)} color={PRIMARY_TEXT} />
             <View style={styles.skipperHeaderRow}>
               <Text style={styles.bubbleText}>
                 s'kipper says:
@@ -332,6 +344,13 @@ export default function HomeScreen() {
           <InfoModal
             metricKey={showSkipperInfo ? "skipper" : null}
             onClose={() => setShowSkipperInfo(false)}
+            metricInfo={SKIPPER_INFO}
+            accentColor={PRIMARY_TEXT}
+          />
+
+          <InfoModal
+            metricKey={showDailyInsightInfo ? "dailyInsight" : null}
+            onClose={() => setShowDailyInsightInfo(false)}
             metricInfo={SKIPPER_INFO}
             accentColor={PRIMARY_TEXT}
           />
