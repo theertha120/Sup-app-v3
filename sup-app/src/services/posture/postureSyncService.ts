@@ -183,6 +183,49 @@ export async function snapshotSession(
   }
 }
 
+export interface PreviousSessionSnapshot {
+  startedAt: string;
+  totalDurationMs: number;
+  stateTotals: StateTotals;
+}
+
+/**
+ * The user's most recent completed session that started before `beforeMs`
+ * (the current session's start), for the end-of-session comparison. Sessions
+ * under a minute are skipped as too short to compare against.
+ */
+export async function fetchPreviousSession(
+  userId: string | null,
+  beforeMs: number
+): Promise<PreviousSessionSnapshot | null> {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("posture_sessions")
+      .select("started_at, total_duration_ms, state_totals")
+      .eq("user_id", userId)
+      .eq("is_completed_session", true)
+      .lt("started_at", toIso(beforeMs))
+      .gte("total_duration_ms", 60_000)
+      .not("state_totals", "is", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) { console.warn("[postureSync] fetchPreviousSession failed", error); return null; }
+    if (!data || !isStateTotals(data.state_totals)) return null;
+
+    return {
+      startedAt: data.started_at as string,
+      totalDurationMs: Number(data.total_duration_ms ?? 0),
+      stateTotals: data.state_totals,
+    };
+  } catch (e) {
+    console.warn("[postureSync] fetchPreviousSession threw", e);
+    return null;
+  }
+}
+
 export async function upsertDailyRollup(
   userId: string | null,
   dateKey: string,
