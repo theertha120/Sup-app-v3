@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { captureFunctionError } from "@/src/lib/sentry";
 import { AIProvider, InsightColor, SessionInsightData, SessionInsightResult, SessionSummaryData, SessionSummaryResult } from "./aiProvider";
 
 // Prompt-building and the actual Claude call live server-side, in
@@ -21,7 +22,11 @@ async function invokeCoach<TResult>(
   const { data: result, error } = await supabase.functions.invoke("session-coach", {
     body: { kind, data },
   });
-  if (error) throw error;
+  if (error) {
+    // Callers swallow this and show a fallback message, so report it here.
+    void captureFunctionError("session-coach", error);
+    throw error;
+  }
   return result as TResult;
 }
 

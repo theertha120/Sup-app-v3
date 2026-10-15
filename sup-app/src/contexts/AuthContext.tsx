@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
+import { captureError, captureFunctionError } from "@/src/lib/sentry";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
 import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
 
@@ -192,11 +193,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) {
         console.warn("[auth] checkEmailRegistered failed", error);
+        void captureFunctionError("check-email", error);
         return { success: false, error: error.message };
       }
       return { success: true, exists: !!data?.exists };
     } catch (err) {
       console.error("[auth] checkEmailRegistered error", err);
+      captureError(err, "check-email");
       return { success: false, error: String(err) };
     }
   }
@@ -301,6 +304,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         const message = payload?.error || responseText || `Delete failed with status ${response.status}`;
         console.warn("[auth] delete-account function failed", response.status, message);
+        void captureFunctionError("delete-account", new Error(`delete-account failed with status ${response.status}`), {
+          status: response.status,
+          body: responseText,
+        });
         return { success: false, error: message };
       }
 
@@ -322,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err) {
       console.error("[auth] deleteAccount error", err);
+      captureError(err, "delete-account");
       return { success: false, error: String(err) };
     }
   }
