@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
@@ -77,6 +78,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listener?.subscription.unsubscribe();
     };
   }, []);
+
+  // Keep user_profile.timezone_offset_minutes current — the server-side daily
+  // AI summary job uses it to work out each user's local hour and date. Saved
+  // on launch and whenever the app returns to the foreground (not just at
+  // login), so it follows users who travel or cross a daylight-saving change.
+  useEffect(() => {
+    if (!userId) return;
+    autoDetectAndSaveTimezone(userId);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") autoDetectAndSaveTimezone(userId);
+    });
+    return () => sub.remove();
+  }, [userId]);
 
   function startRegistration() {
     setRegistrationMode(true);

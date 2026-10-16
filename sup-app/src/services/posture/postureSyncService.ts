@@ -1,5 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { DeskPostureState } from "../../components/desk/mockDeskPostureData";
+import { toLocalDateKey, addDaysToDateKey, localDayRange } from "@/src/lib/dateKey";
 
 export type StateTotals = Partial<Record<DeskPostureState, number>>;
 
@@ -57,9 +58,6 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-function toSgtDateKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
-}
 
 async function closeStaleSessions(userId: string): Promise<void> {
   try {
@@ -95,7 +93,7 @@ async function closeStaleSessions(userId: string): Promise<void> {
       })
     );
 
-    const affectedDateKeys = new Set(staleSessions.map((row) => toSgtDateKey(row.started_at)));
+    const affectedDateKeys = new Set(staleSessions.map((row) => toLocalDateKey(new Date(row.started_at))));
     await Promise.all(
       [...affectedDateKeys].map((dateKey) => rebuildDailyFromSessions(userId, dateKey))
     );
@@ -249,15 +247,12 @@ export async function upsertDailyRollup(
  */
 export async function rebuildDailyFromSessions(
   userId: string,
-  dateKey: string  // YYYY-MM-DD (SGT)
+  dateKey: string  // YYYY-MM-DD (phone's local day)
 ): Promise<void> {
   try {
-    // dateKey is an SGT calendar date (SGT = UTC+8, no DST).
-    // The SGT day [00:00, 24:00) maps to this UTC range:
-    const startUtc = new Date(`${dateKey}T00:00:00.000Z`);
-    startUtc.setUTCHours(startUtc.getUTCHours() - 8);
-    const endUtc = new Date(startUtc);
-    endUtc.setUTCDate(endUtc.getUTCDate() + 1);
+    // dateKey is a calendar day in the phone's timezone; select the sessions
+    // that started between that day's local midnight and the next one.
+    const { start: startUtc, end: endUtc } = localDayRange(dateKey);
 
     const { data: sessions, error } = await supabase
       .from("posture_sessions")
@@ -326,14 +321,16 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await updateStreakAndActivity(userId);
-      const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
+      // Streak is still tracked (shown in the header), it just no longer
+      // feeds into sup_score.
+      await updateStreakAndActivity(userId);
+      const supScore = computeSupScore(stateTotals);
       await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
         .eq("user_id", userId)
         .eq("date", dateKey);
-      console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
+      console.log(`[postureSync] sup_score=${supScore}`);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -342,38 +339,46 @@ export async function rebuildDailyFromSessions(
 
 // ── Sup Score helpers ─────────────────────────────────────────────────────────
 
-function computeShowingUpScore(totalDeskMs: number): number {
-  if (totalDeskMs <= 0) return 0;
-  const base = 15;
-  let duration = 0;
-  if      (totalDeskMs >= 120 * 60_000) duration = 15;
-  else if (totalDeskMs >=  60 * 60_000) duration = 10;
-  else if (totalDeskMs >=  30 * 60_000) duration = 5;
-  return base + duration;
-}
+// Credit (0–100) earned per tracked minute in each posture state.
+const POSTURE_CREDIT: Record<DeskPostureState, number> = {
+  upright:      100,
+  transition:    75,
+  forward_lean:  50,
+  tilted_left:   50,
+  tilted_right:  50,
+  slouched:      25,
+  severe:         0,
+};
 
-function computeSupScore(avgShs: number | null, totalDeskMs: number, streak: number): number {
-  const quality    = avgShs != null ? (avgShs / 100) * 50 : 0;
-  const showingUp  = computeShowingUpScore(totalDeskMs);
-  const streakPts  = Math.min(20, streak * 3);
-  return Math.round(quality + showingUp + streakPts);
-}
+// Every day starts as if it already had SUP_SCORE_PRIOR_MS of average
+// (SUP_SCORE_PRIOR_SCORE) posture tracked. Short sessions therefore stay near
+// 50 instead of swinging to 0 or 100, and the score settles onto the user's
+// real posture as tracked time grows (half-weight at 10 min, ~86% at 1 hour).
+const SUP_SCORE_PRIOR_SCORE = 50;
+const SUP_SCORE_PRIOR_MS    = 10 * 60_000;
 
-function formatLocalDateKey(date: Date): string {
-  const year  = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day   = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+/**
+ * Daily s'up s'core, 0–100: time-weighted posture credit across the day's
+ * tracked time, blended with a 10-minute prior of 50. Null if nothing was
+ * tracked (a day off has no score rather than a free 50).
+ */
+function computeSupScore(stateTotals: StateTotals): number | null {
+  let trackedMs = 0;
+  let creditMs  = 0;
+  for (const state of ALL_STATES) {
+    const ms = stateTotals[state] ?? 0;
+    trackedMs += ms;
+    creditMs  += ms * POSTURE_CREDIT[state];
+  }
+  if (trackedMs <= 0) return null;
+  return Math.round(
+    (creditMs + SUP_SCORE_PRIOR_SCORE * SUP_SCORE_PRIOR_MS) / (trackedMs + SUP_SCORE_PRIOR_MS)
+  );
 }
 
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return {
-    todayLocal:     formatLocalDateKey(now),
-    yesterdayLocal: formatLocalDateKey(yesterday),
-  };
+  const todayLocal = toLocalDateKey();
+  return { todayLocal, yesterdayLocal: addDaysToDateKey(todayLocal, -1) };
 }
 
 /**
@@ -532,9 +537,7 @@ export async function fetchDailyPosturePair(
     console.warn("[postureSync] fetchDailyPosturePair: invalid dateKey", dateKey);
     return empty;
   }
-  const prevDate = new Date(targetDate);
-  prevDate.setUTCDate(prevDate.getUTCDate() - 1);
-  const prevDateKey = prevDate.toISOString().slice(0, 10);
+  const prevDateKey = addDaysToDateKey(dateKey, -1);
 
   try {
     const { data, error } = await supabase
@@ -731,11 +734,7 @@ export async function fetchLast7DaysPosture(
 
   // Build array of last 7 date keys
   const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(`${todayKey}T00:00:00.000Z`);
-    d.setUTCDate(d.getUTCDate() - i);
-    dates.push(d.toISOString().slice(0, 10));
-  }
+  for (let i = 0; i < 7; i++) dates.push(addDaysToDateKey(todayKey, -i));
 
   const { data, error } = await supabase
     .from("posture_daily")

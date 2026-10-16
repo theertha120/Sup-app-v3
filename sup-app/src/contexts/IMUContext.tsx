@@ -65,6 +65,7 @@ import {
   DEFAULT_LATERAL_SIGN,
 } from "../lib/imuParser";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
+import { toLocalDateKey } from "../lib/dateKey";
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
@@ -488,7 +489,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (!sessionId) return;
     sentryBreadcrumb("posture session ended", { sessionId });
 
-    const todayDK = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+    // posture_daily groups sessions by the local day they STARTED on, so a
+    // session that runs past midnight is rebuilt under its start day.
+    const todayDK = toLocalDateKey(new Date(sessionStartTimeRef.current ?? Date.now()));
     const uid     = userIdRef.current;
 
     postureSync.endSession(sessionId, computeSessionAggregates());
