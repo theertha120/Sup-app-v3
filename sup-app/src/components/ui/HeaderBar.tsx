@@ -30,13 +30,14 @@ const PRIMARY_TEXT = "#1D014A";
 const DROPDOWN_BG = "#FFFFFF";
 const DIVIDER = "#CBCBF7";
 const STREAK_COLOUR = "#EC555E";
+// Width / height of sup-logo-purple.png (539×253).
+const LOGO_ASPECT_RATIO = 539 / 253;
  
 interface HeaderBarProps {
-  suffix?: string;
   logoSize?: number;
 }
- 
-export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarProps) {
+
+export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const router = useRouter();
   const { isAuthenticated, userId } = useAuth();
   const { showToast } = useToast();
@@ -158,9 +159,13 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
     <>
       <View style={styles.topBar}>
         {/* Wordmark */}
-        <Text style={[styles.logo, { fontSize: logoSize }]}>
-          s<Text style={styles.logoApostrophe}>'</Text>{suffix}
-        </Text>
+        <Image
+          source={require("../../../assets/images/sup-logo-purple.png")}
+          style={{ height: logoSize, width: logoSize * LOGO_ASPECT_RATIO }}
+          resizeMode="contain"
+          accessibilityRole="image"
+          accessibilityLabel="s'up"
+        />
  
         {/* Icon row */}
         <View style={styles.headerButtons}>
@@ -333,14 +338,6 @@ const styles = StyleSheet.create({
     paddingTop: 56,
     paddingHorizontal: 24,
     paddingBottom: 8,
-  },
-  logo: {
-    color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 50,
-  },
-  logoApostrophe: {
-    fontFamily: "Arial",
   },
   headerButtons: {
     flexDirection: "row",

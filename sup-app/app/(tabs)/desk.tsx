@@ -582,7 +582,7 @@ export default function DeskScreen() {
       <MovementNudgeModal />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <HeaderBar suffix="it up" logoSize={28} />
+        <HeaderBar />
 
         <View style={s.container}>
         {/* Connection pills */}
@@ -723,8 +723,8 @@ export default function DeskScreen() {
                   </Pressable>
                   <Pressable 
                     style={[s.disconnectBtn, tutorialStep === "end-session-tip" && s.tutorialHighlight]} 
-                    onPress={handleEndSession}>
-                   >
+                    onPress={handleEndSession}
+                  >
                     <Text style={s.disconnectBtnText}>end s'ession</Text>
                   </Pressable>
                 </>
