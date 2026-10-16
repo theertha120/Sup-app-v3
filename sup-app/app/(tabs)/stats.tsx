@@ -64,7 +64,7 @@ const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   },
   session: {
     title: "s'ession time",
-    body: "how long you tracked posture sessions in each period. more tracked time contributes to your s'up s'core's \"showing up\" component.",
+    body: "how long you tracked posture sessions in each period. the more you track, the more your s'up s'core reflects your real posture.",
   },
   breakdown: {
     title: "posture breakdown",
@@ -934,7 +934,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  s'ession time is how long you tracked posture in each period. more tracked time boosts the "showing up" part of your s'up s'core.
+                  s'ession time is how long you tracked posture in each period. the more you track, the more your s'up s'core reflects your real posture.
                 </Text>
                 <Pressable onPress={() => setTutorialStep("stats-tip-breakdown")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>

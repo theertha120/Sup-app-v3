@@ -371,12 +371,12 @@ export default function DailyScreen() {
     },
     session: {
       title: "s'ession",
-      body: "total time tracked in active posture sessions today. longer sessions unlock more duration points toward your s'core.",
+      body: "total time tracked in active posture sessions today. the more you track, the more your s'core reflects your real posture.",
     },
     score: {
       title: "s'core",
       body:
-        "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average posture quality for the day.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts for every consecutive day you keep it going.",
+        "your daily posture score out of 100, based on how good your posture was across all the time you tracked today.\n\n• every tracked minute earns credit: upright 100, transition 75, forward lean or tilted 50, slouched 25, severe 0.\n• your s'core starts at 50 each day and moves towards your real posture as you track — after 10 minutes your posture counts for half, after an hour it's almost all you.",
     },
   };
 

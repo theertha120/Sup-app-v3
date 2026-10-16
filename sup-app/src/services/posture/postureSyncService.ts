@@ -326,14 +326,16 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await updateStreakAndActivity(userId);
-      const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
+      // Streak is still tracked (shown in the header), it just no longer
+      // feeds into sup_score.
+      await updateStreakAndActivity(userId);
+      const supScore = computeSupScore(stateTotals);
       await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
         .eq("user_id", userId)
         .eq("date", dateKey);
-      console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
+      console.log(`[postureSync] sup_score=${supScore}`);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -342,21 +344,41 @@ export async function rebuildDailyFromSessions(
 
 // ── Sup Score helpers ─────────────────────────────────────────────────────────
 
-function computeShowingUpScore(totalDeskMs: number): number {
-  if (totalDeskMs <= 0) return 0;
-  const base = 15;
-  let duration = 0;
-  if      (totalDeskMs >= 120 * 60_000) duration = 15;
-  else if (totalDeskMs >=  60 * 60_000) duration = 10;
-  else if (totalDeskMs >=  30 * 60_000) duration = 5;
-  return base + duration;
-}
+// Credit (0–100) earned per tracked minute in each posture state.
+const POSTURE_CREDIT: Record<DeskPostureState, number> = {
+  upright:      100,
+  transition:    75,
+  forward_lean:  50,
+  tilted_left:   50,
+  tilted_right:  50,
+  slouched:      25,
+  severe:         0,
+};
 
-function computeSupScore(avgShs: number | null, totalDeskMs: number, streak: number): number {
-  const quality    = avgShs != null ? (avgShs / 100) * 50 : 0;
-  const showingUp  = computeShowingUpScore(totalDeskMs);
-  const streakPts  = Math.min(20, streak * 3);
-  return Math.round(quality + showingUp + streakPts);
+// Every day starts as if it already had SUP_SCORE_PRIOR_MS of average
+// (SUP_SCORE_PRIOR_SCORE) posture tracked. Short sessions therefore stay near
+// 50 instead of swinging to 0 or 100, and the score settles onto the user's
+// real posture as tracked time grows (half-weight at 10 min, ~86% at 1 hour).
+const SUP_SCORE_PRIOR_SCORE = 50;
+const SUP_SCORE_PRIOR_MS    = 10 * 60_000;
+
+/**
+ * Daily s'up s'core, 0–100: time-weighted posture credit across the day's
+ * tracked time, blended with a 10-minute prior of 50. Null if nothing was
+ * tracked (a day off has no score rather than a free 50).
+ */
+function computeSupScore(stateTotals: StateTotals): number | null {
+  let trackedMs = 0;
+  let creditMs  = 0;
+  for (const state of ALL_STATES) {
+    const ms = stateTotals[state] ?? 0;
+    trackedMs += ms;
+    creditMs  += ms * POSTURE_CREDIT[state];
+  }
+  if (trackedMs <= 0) return null;
+  return Math.round(
+    (creditMs + SUP_SCORE_PRIOR_SCORE * SUP_SCORE_PRIOR_MS) / (trackedMs + SUP_SCORE_PRIOR_MS)
+  );
 }
 
 function formatLocalDateKey(date: Date): string {
