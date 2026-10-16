@@ -38,15 +38,10 @@ import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/d
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
-const now = new Date();
-const year = now.getFullYear();
-const month = String(now.getMonth() + 1).padStart(2, "0");
-const day = String(now.getDate()).padStart(2, "0");
-const TODAY_KEY = `${year}-${month}-${day}`;
-// const TODAY_KEY = `2026-07-15`; // hardcoded for testing
 
 const SEGMENT_COLORS: Record<string, string> = {
   upright:  "#6DC96D",
@@ -219,6 +214,9 @@ export default function DailyScreen() {
   const loadDailyPosture = useCallback(async (background = false) => {
     if (!userId) return;
     if (!background) setIsLoadingDaily(true);
+    // Worked out on every load (not once at app start) so the screen rolls
+    // over to the new day if the app stays open past midnight.
+    const TODAY_KEY = toLocalDateKey();
  
     // show cached data immediately so UI and AI prompt unblock right away
     const cached = await getCachedDailyPair(userId, TODAY_KEY);

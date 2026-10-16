@@ -28,6 +28,7 @@ import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -149,9 +150,8 @@ function getPageCountFromRows(rows: PosturePageRow[], range: Range): number {
 }
 
 
-function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
-}
+// Phone-local YYYY-MM-DD — must match how posture_daily.date is written.
+const toDateKey = (d: Date): string => toLocalDateKey(d);
 
 type FullStateTotals = Required<Omit<StateTotals, "transition">>;
 
@@ -192,7 +192,6 @@ function sessionMinsOf(row: PosturePageRow | undefined): number {
 // query per page, serially, on every range change.
 function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   const now    = new Date();
-  const MS_DAY = 86_400_000;
   const PAGES  = getPageCountFromRows(history, range);
 
   // Rows arrive sorted by date, so a filtered slice keeps that order — matching
@@ -206,10 +205,13 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   for (let p = 0; p < PAGES; p++) {
     const stateTotals: FullStateTotals = emptyStateTotals();
     if (range === "week") {
-      const end   = new Date(now.getTime() - p * 7 * MS_DAY);
-      const start = new Date(end.getTime() - 6 * MS_DAY);
+      // Calendar-day steps (setDate) rather than fixed 24h ms steps, so a
+      // daylight-saving change can't shift a bar onto the wrong day.
+      const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - p * 7);
+      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
 
-      const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * MS_DAY));
+      const days = Array.from({ length: 7 }, (_, i) =>
+        new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
       const dayKeys = days.map(toDateKey);
       const dayRows = dayKeys.map((k) => rowByDate.get(k));
 

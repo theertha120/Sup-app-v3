@@ -30,15 +30,9 @@ import {
   resolveTimeRangeFromPresets,
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
 type StepId = 0 | 1 | 2 | 3 | 4;
-
-/** Today's date in SGT (UTC+8) as YYYY-MM-DD */
-function todayInSGT(): string {
-  const now = new Date();
-  const sgt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return sgt.toISOString().slice(0, 10);
-}
 
 export default function CoachingSetupModal({
   visible,
@@ -95,7 +89,7 @@ export default function CoachingSetupModal({
         .from("daily_ai_summary")
         .select("user_id")
         .eq("user_id", user.id)
-        .eq("date", todayInSGT())
+        .eq("date", toLocalDateKey())
         .maybeSingle();
 
       setSummaryGeneratedToday(!!data);

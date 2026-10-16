@@ -1,5 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { DeskPostureState } from "../../components/desk/mockDeskPostureData";
+import { toLocalDateKey, addDaysToDateKey, localDayRange } from "@/src/lib/dateKey";
 
 export type StateTotals = Partial<Record<DeskPostureState, number>>;
 
@@ -57,9 +58,6 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-function toSgtDateKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
-}
 
 async function closeStaleSessions(userId: string): Promise<void> {
   try {
@@ -95,7 +93,7 @@ async function closeStaleSessions(userId: string): Promise<void> {
       })
     );
 
-    const affectedDateKeys = new Set(staleSessions.map((row) => toSgtDateKey(row.started_at)));
+    const affectedDateKeys = new Set(staleSessions.map((row) => toLocalDateKey(new Date(row.started_at))));
     await Promise.all(
       [...affectedDateKeys].map((dateKey) => rebuildDailyFromSessions(userId, dateKey))
     );
@@ -249,15 +247,12 @@ export async function upsertDailyRollup(
  */
 export async function rebuildDailyFromSessions(
   userId: string,
-  dateKey: string  // YYYY-MM-DD (SGT)
+  dateKey: string  // YYYY-MM-DD (phone's local day)
 ): Promise<void> {
   try {
-    // dateKey is an SGT calendar date (SGT = UTC+8, no DST).
-    // The SGT day [00:00, 24:00) maps to this UTC range:
-    const startUtc = new Date(`${dateKey}T00:00:00.000Z`);
-    startUtc.setUTCHours(startUtc.getUTCHours() - 8);
-    const endUtc = new Date(startUtc);
-    endUtc.setUTCDate(endUtc.getUTCDate() + 1);
+    // dateKey is a calendar day in the phone's timezone; select the sessions
+    // that started between that day's local midnight and the next one.
+    const { start: startUtc, end: endUtc } = localDayRange(dateKey);
 
     const { data: sessions, error } = await supabase
       .from("posture_sessions")
@@ -381,21 +376,9 @@ function computeSupScore(stateTotals: StateTotals): number | null {
   );
 }
 
-function formatLocalDateKey(date: Date): string {
-  const year  = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day   = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return {
-    todayLocal:     formatLocalDateKey(now),
-    yesterdayLocal: formatLocalDateKey(yesterday),
-  };
+  const todayLocal = toLocalDateKey();
+  return { todayLocal, yesterdayLocal: addDaysToDateKey(todayLocal, -1) };
 }
 
 /**
@@ -554,9 +537,7 @@ export async function fetchDailyPosturePair(
     console.warn("[postureSync] fetchDailyPosturePair: invalid dateKey", dateKey);
     return empty;
   }
-  const prevDate = new Date(targetDate);
-  prevDate.setUTCDate(prevDate.getUTCDate() - 1);
-  const prevDateKey = prevDate.toISOString().slice(0, 10);
+  const prevDateKey = addDaysToDateKey(dateKey, -1);
 
   try {
     const { data, error } = await supabase
@@ -753,11 +734,7 @@ export async function fetchLast7DaysPosture(
 
   // Build array of last 7 date keys
   const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(`${todayKey}T00:00:00.000Z`);
-    d.setUTCDate(d.getUTCDate() - i);
-    dates.push(d.toISOString().slice(0, 10));
-  }
+  for (let i = 0; i < 7; i++) dates.push(addDaysToDateKey(todayKey, -i));
 
   const { data, error } = await supabase
     .from("posture_daily")

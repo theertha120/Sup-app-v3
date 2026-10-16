@@ -26,6 +26,7 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
+import { toLocalDateKey } from "../../src/lib/dateKey";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -439,8 +440,7 @@ export default function DeskScreen() {
       let dailySummary: string | null = null;
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const d = new Date();
-        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const today = toLocalDateKey();
         console.log("[s'update] querying daily goal for user:", user.id, "date:", today);
         const { data, error } = await supabase
           .from("daily_ai_summary")

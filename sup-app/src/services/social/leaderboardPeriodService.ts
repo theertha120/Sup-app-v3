@@ -4,6 +4,7 @@ import {
 } from "../posture/postureSyncService";
 import type { User } from "../../../constants/env";
 import { displayName } from "../../utils/displayName";
+import { toLocalDateKey } from "../../lib/dateKey";
 
 export type LeaderboardPeriod = "day" | "week";
 
@@ -23,12 +24,8 @@ export type LeaderboardRowsByUser = Map<string, PosturePageRow[]>;
  */
 export const WIDEST_LEADERBOARD_PERIOD: LeaderboardPeriod = "week";
 
-export function toDateKey(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+/** Kept as a named export for existing callers; same as toLocalDateKey. */
+export const toDateKey = (d: Date): string => toLocalDateKey(d);
 
 /**
  * Returns the [startDateKey, endDateKey] (inclusive, YYYY-MM-DD) window for a given period,
