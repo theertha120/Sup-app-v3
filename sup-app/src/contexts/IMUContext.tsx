@@ -50,7 +50,7 @@ import * as postureSync from "../services/posture/postureSyncService";
 import { sentryBreadcrumb } from "../lib/sentry";
 import {
   parseIMUPacket,
-  classifySpinePosture,
+  createPostureStabilizer,
   ParsedIMU,
   ClinicalBaseline,
   NeutralOffset,
@@ -298,7 +298,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     topRoll: 0, topPitch: 0, bottomRoll: 0, bottomPitch: 0, initialised: false,
   });
   const lastUIUpdateRef         = useRef<number>(0);
-  const lastClassificationRef   = useRef<ReturnType<typeof classifySpinePosture> | null>(null);
+  const postureStabilizerRef    = useRef(createPostureStabilizer());
 
   const stateStartTimeRef       = useRef<number>(Date.now());
   const lastPostureStateRef     = useRef<PostureState | null>(null);
@@ -344,6 +344,13 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     sagittalSign: null, lateralSign: null,
   });
 
+  const resetPostureStability = useCallback(() => {
+    postureStabilizerRef.current.reset();
+    lastPostureStateRef.current = null;
+    lastUIUpdateRef.current = 0;
+    setPosture(null);
+  }, []);
+
   useEffect(() => { userIdRef.current = userId; }, [userId]);
 
   // ── Load persisted data on mount ──────────────────────────────────────────
@@ -354,6 +361,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       const saved: ClinicalBaseline = JSON.parse(raw);
       baselineRef.current      = saved;
       neutralOffsetRef.current = saved.neutral;
+      resetPostureStability();
       setClinicalBaseline(saved);
       setIsNeutralCalibrated(true);
       setCalibration((prev) => ({
@@ -366,6 +374,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       const saved: NeutralOffset = JSON.parse(raw);
       if (!neutralOffsetRef.current) {
         neutralOffsetRef.current = saved;
+        resetPostureStability();
         setIsNeutralCalibrated(true);
         setCalibration((prev) => {
           const updated = [...prev.stepComplete]; updated[0] = true;
@@ -373,7 +382,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         });
       }
     }).catch((e) => console.warn("[IMUContext] Failed to load neutral offset:", e));
-  }, []);
+  }, [resetPostureStability]);
 
   // ── SHS + CPL accumulation — ticks every second ───────────────────────────
   //
@@ -519,11 +528,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // the same session.
   const endCurrentSession = useCallback(() => {
     finalizeSession();
+    resetPostureStability();
     sessionStartTimeRef.current = null;
     sessionEndedRef.current = true;
     setSessionStartTimeMs(null);
     setSessionDurationMs(0);
-  }, [finalizeSession]);
+  }, [finalizeSession, resetPostureStability]);
 
   useEffect(() => {
     const interval = setInterval(snapshotCurrentSession, SNAPSHOT_TICK_MS);
@@ -627,8 +637,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const smoothedBottom: ParsedIMU = { ...bottom, angle: { ...bottom.angle, roll: ema.bottomRoll, pitch: ema.bottomPitch } };
 
         const offsetToUse = baselineRef.current ?? neutralOffsetRef.current;
-        const result      = classifySpinePosture(smoothedTop, smoothedBottom, offsetToUse);
-        lastClassificationRef.current = result;
+        const result = postureStabilizerRef.current.update(
+          smoothedTop, smoothedBottom, offsetToUse, Date.now(),
+        );
         // --- Upper-back time-weighted accumulation (per-packet) ---
         try {
           const pktNow = Date.now();
@@ -663,7 +674,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           // defensive: do not crash the BLE handler
         }
 
-        // State change detection — runs every packet at ~10Hz
+        // All consumers use the same confirmed state, including scores and timers.
         if (result.state !== lastPostureStateRef.current) {
           lastPostureStateRef.current  = result.state;
           stateStartTimeRef.current    = Date.now();
@@ -671,20 +682,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           staticNudgeFiredRef.current  = false;
           setTimeInCurrentStateMs(0);
           setShouldNudge(false);
-          // Deliberately NOT clearing activeIntervention here (no
-          // setActiveIntervention(null)) — this block runs on every raw
-          // per-packet classification change, ~10Hz, with no hysteresis.
-          // Sitting near a threshold boundary (e.g. right around 28°) for
-          // an extended time causes the smoothed angle to drift back and
-          // forth across it, so "state changed" fires many times a minute
-          // without the user actually moving. That used to null the popup
-          // within ~100ms of it appearing — often before it could even be
-          // seen — and since interventionFiredRef below usually doesn't
-          // reset once CPL is already high, the alert would then be
-          // permanently blocked from ever firing again for the rest of
-          // that bout. An active intervention should only go away via the
-          // user's explicit "did you move?" answer — see
-          // dismissIntervention() — not an unrelated classification flicker.
+          // An active intervention still requires the user's explicit answer;
+          // even a confirmed posture change must not dismiss it automatically.
 
           // Reset intervention fired flag when state changes
           // BUT only reset if CPL drops below 80% of threshold
@@ -736,8 +735,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           setTopData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             topLatestRef.current = null;
-            setPosture(null);
-            lastPostureStateRef.current = null;
+            resetPostureStability();
             emaRef.current.initialised  = false;
             // Drop the per-packet timestamp so the first packet after a
             // reconnect doesn't fold the whole disconnected gap into the
@@ -752,8 +750,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           setBottomData((prev) => ({ ...prev, state }));
           if (!state.connected) {
             bottomLatestRef.current = null;
-            setPosture(null);
-            lastPostureStateRef.current = null;
+            resetPostureStability();
             emaRef.current.initialised  = false;
             lastPacketTimestampRef.current = null;
             // Not ready until this slot streams enough fresh packets again
@@ -793,11 +790,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         });
       }
     );
-  }, []);
+  }, [endCurrentSession, resetPostureStability]);
 
   // ── 5-position calibration ────────────────────────────────────────────────
 
   const startCalibrationStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => {
+    resetPostureStability();
     // Clear any stale low-confidence warning from a previous attempt at this
     // (or another) step — it only applies to the capture that's about to happen.
     setCalibration((prev) => ({ ...prev, currentStep: step, countdown: 3, lowConfidenceStep: null }));
@@ -832,6 +830,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         const offset: NeutralOffset = { topPitch, topRoll, bottomPitch, bottomRoll };
         captureRef.current.neutral   = offset;
         neutralOffsetRef.current     = offset;
+        resetPostureStability();
         setIsNeutralCalibrated(true);
         emaRef.current.initialised   = false;
         AsyncStorage.setItem(NEUTRAL_OFFSET_STORAGE_KEY, JSON.stringify(offset))
@@ -897,6 +896,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
               lateralSign:  lateralSign  ?? DEFAULT_LATERAL_SIGN,
             };
             baselineRef.current = baseline;
+            emaRef.current.initialised = false;
+            resetPostureStability();
             setClinicalBaseline(baseline);
             AsyncStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(baseline))
               .catch((e) => console.warn("[IMUContext] Failed to save baseline:", e));
@@ -914,9 +915,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
 
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearInterval(samplingInterval); };
-  }, []);
+  }, [resetPostureStability]);
 
   const resetCalibration = useCallback(() => {
+    resetPostureStability();
     captureRef.current = {
       neutral: null, maxForward: null, maxBackward: null, maxRight: null, maxLeft: null,
       sagittalSign: null, lateralSign: null,
@@ -927,7 +929,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setCalibration(defaultCalibration);
     AsyncStorage.removeItem(BASELINE_STORAGE_KEY).catch(() => {});
     AsyncStorage.removeItem(NEUTRAL_OFFSET_STORAGE_KEY).catch(() => {});
-  }, []);
+  }, [resetPostureStability]);
 
   // ── User actions ──────────────────────────────────────────────────────────
 
