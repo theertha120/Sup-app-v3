@@ -25,7 +25,7 @@ import type {
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
-import { useTutorial } from "@/src/contexts/TutorialContext";
+import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 
@@ -793,6 +793,28 @@ const bdStyles = StyleSheet.create({
 export default function StatsScreen() {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
+  const scrollRef = useRef<ScrollView>(null);
+  const tutorialScrollFrame = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+      tutorialScrollFrame.current = null;
+    }
+  }, [tutorialStep]);
+
+  // Measure after the tip is inserted: removing the previous tip also moves
+  // the following cards, so positions saved before Next would be stale.
+  const scrollToTutorialCard = (step: TutorialStep, y: number) => {
+    if (tutorialStep !== step) return;
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+    }
+    tutorialScrollFrame.current = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 48), animated: true });
+      tutorialScrollFrame.current = null;
+    });
+  };
 
   const [range, setRange]             = useState<Range>("week");
   const [resetKey, setResetKey]       = useState("week");
@@ -847,6 +869,7 @@ export default function StatsScreen() {
     <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={closePopup}
@@ -864,7 +887,10 @@ export default function StatsScreen() {
         />
 
         {tutorialStep === "stats-tip" && (
-          <View style={styles.tutorialTip}>
+          <View
+            style={styles.tutorialTip}
+            onLayout={() => scrollToTutorialCard("stats-tip", 0)}
+          >
             <Image
               source={require("../../assets/images/mascot.png")}
               style={styles.tutorialTipMascot}
@@ -922,7 +948,10 @@ export default function StatsScreen() {
         </View>
 
         {/* S'ESSION TIME */}
-        <View style={[styles.card, styles.shadow]}>
+        <View
+          style={[styles.card, styles.shadow]}
+          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-session", nativeEvent.layout.y)}
+        >
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
 
           {tutorialStep === "stats-tip-session" && (
@@ -981,7 +1010,10 @@ export default function StatsScreen() {
         </View> */}
 
         {/* POSTURE BREAKDOWN */}
-        <View style={[styles.card, styles.shadow]}>
+        <View
+          style={[styles.card, styles.shadow]}
+          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-breakdown", nativeEvent.layout.y)}
+        >
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
 
           {tutorialStep === "stats-tip-breakdown" && (

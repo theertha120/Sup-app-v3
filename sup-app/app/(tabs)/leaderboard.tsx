@@ -8,7 +8,7 @@ import {
   Dimensions,
   Image,
 } from "react-native";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -55,6 +55,32 @@ export default function LeaderboardScreen() {
   const router = useRouter();
   const { userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
+  const scrollRef = useRef<ScrollView>(null);
+  const tutorialScrollFrame = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+      tutorialScrollFrame.current = null;
+    }
+  }, [tutorialStep]);
+
+  const scrollToFullLeaderboardTip = (y: number) => {
+    if (tutorialStep !== "community-tip-full") return;
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+    }
+    // Wait for the newly inserted tip and the content height to be laid out.
+    tutorialScrollFrame.current = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 48), animated: true });
+      tutorialScrollFrame.current = null;
+    });
+  };
+
+  const showAddFriendsTip = () => {
+    setTutorialStep("add-friends-tip");
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
@@ -98,6 +124,8 @@ export default function LeaderboardScreen() {
   const ownIndex = userId ? entries.findIndex((e) => e.user.id === userId) : -1;
   const ownEntry = ownIndex >= 0 ? entries[ownIndex] : undefined;
   const showOwnRankCard = ownIndex >= 5;
+  const showLeaderboard = !isLoading && !error && entries.length > 0
+    && (scope !== "friends" || (friendCount ?? 0) > 0);
 
   if (!fontsLoaded) return null;
 
@@ -106,6 +134,7 @@ export default function LeaderboardScreen() {
       <BackgroundBlobs />
 
       <ScrollView
+        ref={scrollRef}
         style={styles.container}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
@@ -128,10 +157,6 @@ export default function LeaderboardScreen() {
               </Pressable>
             </View>
           </View>
-        )}
-
-        {tutorialStep === "community-tip-full" && (
-          <FullLeaderboardTip onNext={() => setTutorialStep("add-friends-tip")} />
         )}
 
         <RefreshButton
@@ -226,34 +251,41 @@ export default function LeaderboardScreen() {
                 <LeaderboardChip rank={ownEntry.rank} entry={ownEntry} isCurrentUser />
               </View>
             )}
-
-            {/* ── See full leaderboard ── */}
-            <Pressable
-              style={[
-                styles.fullLeaderboardButton,
-                tutorialStep === "community-tip-full" && styles.fullLeaderboardButtonHighlighted,
-              ]}
-              onPress={() =>
-                router.push({ pathname: "/leaderboard-full", params: { period: SUMMARY_PERIOD } })
-              }
-            >
-              <Text style={styles.fullLeaderboardButtonText}>see full leaderboard</Text>
-            </Pressable>
           </>
+        )}
+
+        {tutorialStep === "community-tip-full" && (
+          <View onLayout={({ nativeEvent }) => scrollToFullLeaderboardTip(nativeEvent.layout.y)}>
+            <FullLeaderboardTip onNext={showAddFriendsTip} />
+          </View>
+        )}
+
+        {/* ── See full leaderboard ── */}
+        {showLeaderboard && (
+          <Pressable
+            style={[
+              styles.fullLeaderboardButton,
+              tutorialStep === "community-tip-full" && styles.fullLeaderboardButtonHighlighted,
+            ]}
+            onPress={() =>
+              router.push({ pathname: "/leaderboard-full", params: { period: SUMMARY_PERIOD } })
+            }
+          >
+            <Text style={styles.fullLeaderboardButtonText}>see full leaderboard</Text>
+          </Pressable>
         )}
       </ScrollView>
     </Animated.View>
   );
 }
 
-// Shown at the top of the screen; the button it refers to is highlighted at the
-// same time, further down the page.
+// Shown after the final person, directly above the highlighted leaderboard button.
 const FULL_LEADERBOARD_TIP =
   "see the full leaderboard here.";
 
 function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
   return (
-    <View style={styles.tutorialTip}>
+    <View style={[styles.tutorialTip, { marginTop: 8 }]}>
       <Image
         source={require("../../assets/images/mascot.png")}
         style={styles.tutorialTipMascot}
@@ -539,6 +571,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.55)",
   },
   fullLeaderboardButtonHighlighted: {
+    marginTop: -5,
     borderWidth: 3,
     borderColor: "#5222AE",
     backgroundColor: "#FFFFFF",
