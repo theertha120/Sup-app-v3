@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
+import { checkEmailRegistered as checkEmail, type EmailCheckResult } from "@/src/lib/checkEmail";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
 import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
 
@@ -22,7 +23,7 @@ interface AuthContextType {
     token: string
   ) => Promise<{ success: boolean; error?: string }>;
   resendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
-  checkEmailRegistered: (email: string) => Promise<{ success: boolean; exists?: boolean; error?: string }>;
+  checkEmailRegistered: (email: string) => Promise<EmailCheckResult>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyPasswordResetOtp: (
     email: string,
@@ -185,20 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkEmailRegistered(
     email: string
-  ): Promise<{ success: boolean; exists?: boolean; error?: string }> {
-    try {
-      const { data, error } = await supabase.functions.invoke("check-email", {
-        body: { email },
-      });
-      if (error) {
-        console.warn("[auth] checkEmailRegistered failed", error);
-        return { success: false, error: error.message };
-      }
-      return { success: true, exists: !!data?.exists };
-    } catch (err) {
-      console.error("[auth] checkEmailRegistered error", err);
-      return { success: false, error: String(err) };
-    }
+  ): Promise<EmailCheckResult> {
+    return checkEmail(email, (name, options) => supabase.functions.invoke(name, options));
   }
 
   async function requestPasswordReset(

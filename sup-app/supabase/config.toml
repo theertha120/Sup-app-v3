@@ -1,0 +1,6 @@
+# The app's legacy anon JWT supports signed-out requests. Keep verification on.
+# This changes only check-email; other functions retain their configuration.
+[functions.check-email]
+verify_jwt = true
+entrypoint = "./functions/check-email/index.ts"
+import_map = "./functions/check-email/deno.json"

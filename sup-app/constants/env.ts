@@ -1,3 +1,5 @@
+import { normalizeSupabaseUrl } from "../src/lib/supabaseUrl";
+
 // User posture data model
 export interface PostureData {
   userId: string;
@@ -40,7 +42,7 @@ export interface LeaderboardEntry {
 // Supabase configuration – values should be set via Expo env:
 // EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
 export const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
+  normalizeSupabaseUrl(process.env.EXPO_PUBLIC_SUPABASE_URL ?? "");
 
 export const SUPABASE_ANON_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
