@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import {
@@ -224,6 +225,7 @@ export default function CoachingSetupModal({
                     ? "you can personalise your s'up experience here!"
                     : "you can set this time as the time you will start your first session."}
                 </Text>
+                <TutorialActions />
               </View>
             </View>
           )}

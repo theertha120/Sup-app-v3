@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
@@ -152,9 +153,11 @@ export default function LeaderboardScreen() {
               <Text style={styles.tutorialTipText}>
                 see how your weekly points stack up against the community!
               </Text>
-              <Pressable onPress={() => setTutorialStep("community-tip-full")}>
-                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable onPress={() => setTutorialStep("community-tip-full")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -293,9 +296,11 @@ function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
       />
       <View style={styles.tutorialTipTextWrap}>
         <Text style={styles.tutorialTipText}>{FULL_LEADERBOARD_TIP}</Text>
-        <Pressable onPress={onNext}>
-          <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-        </Pressable>
+        <TutorialActions>
+          <Pressable onPress={onNext}>
+            <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+          </Pressable>
+        </TutorialActions>
       </View>
     </View>
   );

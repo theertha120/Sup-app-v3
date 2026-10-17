@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
@@ -624,9 +625,11 @@ export default function DeskScreen() {
               <Text style={s.tutorialTipText}>
                 see real-time feedback on your posture here: this figure updates live to show how you're sitting right now.
               </Text>
-              <Pressable onPress={() => setTutorialStep("supdate-tip")}>
-                <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable onPress={() => setTutorialStep("supdate-tip")}>
+                  <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -682,9 +685,11 @@ export default function DeskScreen() {
                   <Text style={s.tutorialTipText}>
                     click the 's'update' button to get a mid-session update on how you are doing overall and how close you are to your daily goal. you can use it once every 2 hours.
                   </Text>
-                  <Pressable onPress={() => setTutorialStep("end-session-tip")}>
-                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  <TutorialActions>
+                    <Pressable onPress={() => setTutorialStep("end-session-tip")}>
+                      <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                    </Pressable>
+                  </TutorialActions>
                 </View>
               </View>
             )}
@@ -700,14 +705,16 @@ export default function DeskScreen() {
                   <Text style={s.tutorialTipText}>
                     click 'end session' button to end your session.
                   </Text>
-                  <Pressable
-                    onPress={() => {
-                      setTutorialStep("stats-tip");
-                      router.replace("/(tabs)/stats" as any);
-                    }}
-                  >
-                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  <TutorialActions>
+                    <Pressable
+                      onPress={() => {
+                        setTutorialStep("stats-tip");
+                        router.replace("/(tabs)/stats" as any);
+                      }}
+                    >
+                      <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                    </Pressable>
+                  </TutorialActions>
                 </View>
               </View>
             )}
@@ -724,7 +731,6 @@ export default function DeskScreen() {
                   <Pressable 
                     style={[s.disconnectBtn, tutorialStep === "end-session-tip" && s.tutorialHighlight]} 
                     onPress={handleEndSession}>
-                   >
                     <Text style={s.disconnectBtnText}>end s'ession</Text>
                   </Pressable>
                 </>

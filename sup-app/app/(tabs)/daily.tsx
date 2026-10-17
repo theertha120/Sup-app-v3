@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
@@ -415,9 +416,11 @@ export default function DailyScreen() {
               <Text style={styles.tutorialTipText}>
                 here's your snapshot, the % of time you spent in each posture state today.
               </Text>
-              <Pressable onPress={() => setTutorialStep("snapshot-tip-stats")}>
-                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable onPress={() => setTutorialStep("snapshot-tip-stats")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -448,14 +451,16 @@ export default function DailyScreen() {
               <Text style={styles.tutorialTipText}>
                 here's your total session time and s'up score for today's s'pot sessions.
               </Text>
-              <Pressable
-                onPress={() => {
-                  setTutorialStep("settings-tip");
-                  router.push("/settings");
-                }}
-              >
-                <Text style={styles.tutorialTipNext}>got it</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable
+                  onPress={() => {
+                    setTutorialStep("settings-tip");
+                    router.push("/settings");
+                  }}
+                >
+                  <Text style={styles.tutorialTipNext}>got it</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         )}

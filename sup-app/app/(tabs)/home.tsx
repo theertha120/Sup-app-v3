@@ -370,9 +370,11 @@ export default function HomeScreen() {
                 />
                 <View style={styles.tutorialTipTextWrap}>
                   <Text style={styles.tutorialTipText}>get daily personalised goals here every morning!</Text>
-                  <Pressable onPress={() => setTutorialStep("data-tip")}>
-                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  <TutorialActions>
+                    <Pressable onPress={() => setTutorialStep("data-tip")}>
+                      <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                    </Pressable>
+                  </TutorialActions>
                 </View>
               </View>
             )}
@@ -386,6 +388,7 @@ export default function HomeScreen() {
                 />
                 <View style={styles.tutorialTipTextWrap}>
                   <Text style={styles.tutorialTipText}>click on the "see today's data" button to see your posture data for today</Text>
+                  <TutorialActions />
                 </View>
               </View>
             )}

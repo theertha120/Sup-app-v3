@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect } from "react";
 import {
   View,
@@ -212,9 +213,11 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
               <Text style={styles.tutorialTipText}>
                 add friends by username by choosing the profile icon here. then you're all set!
               </Text>
-              <Pressable onPress={dismissTutorial}>
-                <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable onPress={dismissTutorial}>
+                  <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         </View>

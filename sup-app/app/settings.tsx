@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
@@ -99,6 +100,7 @@ export default function SettingsScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>click here to set your coaching preferences.</Text>
+              <TutorialActions />
             </View>
           </View>
         )}

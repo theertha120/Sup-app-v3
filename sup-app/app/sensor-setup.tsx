@@ -1,3 +1,4 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 /**
  * sensor-setup.tsx
  *
@@ -602,14 +603,16 @@ export default function SensorSetupScreen() {
                 <Text style={styles.tutorialTipText}>
                   scan the qr code provided and turn on both your top and bottom s'pots to connect them. once they're both connected, a session starts automatically.
                 </Text>
-                <Pressable
-                  onPress={() => {
-                    setTutorialStep("stats-tip");
-                    router.replace("/(tabs)/stats" as any);
-                  }}
-                >
-                  <Text style={styles.tutorialTipNext}>skip for now and go to stats</Text>
-                </Pressable>
+                <TutorialActions>
+                  <Pressable
+                    onPress={() => {
+                      setTutorialStep("stats-tip");
+                      router.replace("/(tabs)/stats" as any);
+                    }}
+                  >
+                    <Text style={styles.tutorialTipNext}>skip for now and go to stats</Text>
+                  </Pressable>
+                </TutorialActions>
               </View>
             </View>
           )}
@@ -673,14 +676,16 @@ export default function SensorSetupScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>{calibrationTipText}</Text>
-              <Pressable
-                onPress={() => {
-                  setTutorialStep("figure-tip");
-                  router.push("/desk" as any);
-                }}
-              >
-                <Text style={styles.tutorialTipNext}>skip and do calibration later</Text>
-              </Pressable>
+              <TutorialActions>
+                <Pressable
+                  onPress={() => {
+                    setTutorialStep("figure-tip");
+                    router.push("/desk" as any);
+                  }}
+                >
+                  <Text style={styles.tutorialTipNext}>skip and do calibration later</Text>
+                </Pressable>
+              </TutorialActions>
             </View>
           </View>
         )}
