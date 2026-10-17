@@ -221,8 +221,8 @@ export default function CoachingSetupModal({
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
                   {step < 4
-                    ? "this is a preference for the reminder push notifications which will give you posture tips."
-                    : "set the time you want the daily personalised goal on the home page to appear at. you can set this time as the time when you will start your first session."}
+                    ? "you can personalise your s'up experience here!"
+                    : "you can set this time as the time you will start your first session."}
                 </Text>
               </View>
             </View>

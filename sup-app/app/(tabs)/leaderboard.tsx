@@ -121,7 +121,7 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                this is the leaderboard. everyone's ranked by their weekly points, earned from staying consistent with good posture. it's a fun way to see how you're doing against others!
+                see how your weekly points stack up against the community!
               </Text>
               <Pressable onPress={() => setTutorialStep("community-tip-full")}>
                 <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -249,7 +249,7 @@ export default function LeaderboardScreen() {
 // Shown at the top of the screen; the button it refers to is highlighted at the
 // same time, further down the page.
 const FULL_LEADERBOARD_TIP =
-  "tap 'see full leaderboard' at the bottom of this page to see everyone and where you're placed.";
+  "see the full leaderboard here.";
 
 function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
   return (

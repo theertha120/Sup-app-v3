@@ -894,7 +894,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  this is your s'up s'core trend. each bar is one day's (or week's, or month's) score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
+                  this is your s'up s'core trend. each bar is a score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
                 </Text>
                 <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -993,7 +993,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more. tap any "?" anytime for the full details.
+                  posture breakdown shows the share of your tracked time in each posture state. tap "?" for the full details.
                 </Text>
                 <Pressable
                   onPress={() => {
