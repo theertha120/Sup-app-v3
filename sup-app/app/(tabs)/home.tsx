@@ -24,6 +24,7 @@ import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "@/src/services/ai/aiProvider";
+import { toLocalDateKey, addDaysToDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -48,20 +49,6 @@ const SKIPPER_INFO: Record<string, InfoModalEntry> = {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-const getLocalDateKey = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-  // return `2026-07-20`; // hardcoded for testing
-};
-
-const getPreviousDateKey = (dateKey: string) => {
-  const date = new Date(dateKey + "T12:00:00"); // noon avoids DST edge cases
-  date.setDate(date.getDate() - 1);
-  return date.toISOString().split("T")[0];
-};
 
 export default function HomeScreen() {
 
@@ -217,8 +204,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!userId) return;
-    const todayKey = getLocalDateKey();
-    const yesterdayKey = getPreviousDateKey(todayKey);
+    const todayKey = toLocalDateKey();
+    const yesterdayKey = addDaysToDateKey(todayKey, -1);
 
     fetchDailyAiSummary(userId, todayKey)
       .then((summary) => {

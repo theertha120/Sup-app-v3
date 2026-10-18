@@ -28,18 +28,27 @@ interface PostureRow {
 
 interface UserProfile {
   id: string;
-  daily_run: string; // "HH:00" format e.g. "08:00"
+  daily_run: string | null;                 // "HH:00" in the user's LOCAL time, e.g. "08:00"
+  timezone_offset_minutes: number | null;   // minutes east of UTC, saved by the app (SGT = 480)
+}
+
+/** One user to summarise, with the local calendar date the summary is for. */
+interface Job {
+  userId: string;
+  today: string; // YYYY-MM-DD in the user's timezone
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Current date in SGT (UTC+8) as YYYY-MM-DD */
-function todayInSGT(): string {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Singapore" })
-  )
-    .toISOString()
-    .slice(0, 10);
+// Users with no saved offset yet (profiles created before it was recorded)
+// fall back to Singapore time, which is what this job always used before.
+const DEFAULT_OFFSET_MINUTES = 480;
+
+/** The user's local hour (0–23) and date (YYYY-MM-DD) at `now`. */
+function localNow(now: Date, offsetMinutes: number | null): { hour: number; date: string } {
+  const local = new Date(now.getTime() + (offsetMinutes ?? DEFAULT_OFFSET_MINUTES) * 60_000);
+  // UTC getters on the shifted instant read off the user's wall-clock time.
+  return { hour: local.getUTCHours(), date: local.toISOString().slice(0, 10) };
 }
 
 /** Parse "HH:00" → hour number, returns null if malformed */
@@ -288,7 +297,7 @@ async function processUser(
     .upsert(
       {
         user_id: userId,
-        date: today,                  // SGT date
+        date: today,                  // user's local date — matches the app's toLocalDateKey()
         insight,
         concised_summary: concisedSummary,
       },
@@ -312,16 +321,15 @@ const CHUNK_SIZE = 10;          // parallel Claude calls per chunk
 const INTER_CHUNK_DELAY_MS = 500; // breathing room between chunks
 
 async function processBatch(
-  userIds: string[],
-  today: string
+  jobs: Job[]
 ): Promise<{ ok: number; skipped: number; error: number }> {
   const results = { ok: 0, skipped: 0, error: 0 };
 
-  for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
-    const chunk = userIds.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < jobs.length; i += CHUNK_SIZE) {
+    const chunk = jobs.slice(i, i + CHUNK_SIZE);
 
     const chunkResults = await Promise.allSettled(
-      chunk.map((uid) => processUser(uid, today))
+      chunk.map((job) => processUser(job.userId, job.today))
     );
 
     for (const r of chunkResults) {
@@ -330,7 +338,7 @@ async function processBatch(
     }
 
     // Don't delay after the last chunk
-    if (i + CHUNK_SIZE < userIds.length) {
+    if (i + CHUNK_SIZE < jobs.length) {
       await new Promise((resolve) => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
     }
   }
@@ -339,6 +347,11 @@ async function processBatch(
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
+//
+// Must be scheduled to run EVERY hour (on the hour). Each run picks the users
+// whose own local time is currently their chosen daily_run hour, using the
+// timezone_offset_minutes the app saves — so "08:00" means 8am wherever the
+// user is, not 8am Singapore time.
 
 // OLD: per-user scheduled run — matched the cron's SGT hour against each
 // user_profile.daily_run. Disabled: the summary now runs at 8am SGT for all users.
@@ -592,7 +605,7 @@ Deno.serve(async (req) => {
   // Fallback (e.g. local runtime without EdgeRuntime): process inline
   const results = await work;
   return new Response(
-    JSON.stringify({ date: today, hour: targetDailyRun, ...results }),
+    JSON.stringify({ users: thisBatch.length, ...results }),
     { headers: { "content-type": "application/json" } }
   );
 });

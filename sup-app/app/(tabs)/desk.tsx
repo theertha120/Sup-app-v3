@@ -30,6 +30,7 @@ import { fetchPreviousSession } from "../../src/services/posture/postureSyncServ
 import {
   compareSessions, computeSessionHighlights, SessionComparisonMetric, SessionHighlight,
 } from "../../src/lib/sessionHighlights";
+import { toLocalDateKey } from "../../src/lib/dateKey";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
 
@@ -445,8 +446,7 @@ export default function DeskScreen() {
       let dailySummary: string | null = null;
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const d = new Date();
-        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const today = toLocalDateKey();
         console.log("[s'update] querying daily goal for user:", user.id, "date:", today);
         const { data, error } = await supabase
           .from("daily_ai_summary")
@@ -640,7 +640,7 @@ export default function DeskScreen() {
       <MovementNudgeModal />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <HeaderBar suffix="it up" logoSize={28} />
+        <HeaderBar />
 
         <View style={s.container}>
         {/* Connection pills */}
@@ -781,7 +781,8 @@ export default function DeskScreen() {
                   </Pressable>
                   <Pressable 
                     style={[s.disconnectBtn, tutorialStep === "end-session-tip" && s.tutorialHighlight]} 
-                    onPress={handleEndSession}>
+                    onPress={handleEndSession}
+                  >
                     <Text style={s.disconnectBtnText}>end s'ession</Text>
                   </Pressable>
                 </>

@@ -15,6 +15,7 @@ import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 import { PostureSegment } from "../lib/sessionHighlights";
 import { useAuth } from "../contexts/AuthContext";
 import { useIMUContext } from "../contexts/IMUContext";
+import { toLocalDateKey } from "../lib/dateKey";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ const STATS_KEY_PREFIX = "sup_posture_stats_";
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function dateToKey(d: Date): string {
-  return STATS_KEY_PREFIX + d.toISOString().slice(0, 10);
+  return STATS_KEY_PREFIX + toLocalDateKey(d);
 }
 
 function todayKey(): string {
@@ -57,7 +58,7 @@ function last7Days(): { key: string; label: string; dateKey: string; isToday: bo
     result.push({
       key:     dateToKey(d),
       label:   DAY_LABELS[d.getDay()],
-      dateKey: d.toISOString().slice(0, 10),
+      dateKey: toLocalDateKey(d),
       isToday: i === 0,
     });
   }
@@ -124,7 +125,7 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
         persistedWeekRef.current = dayMap;
 
         // Today's persisted base
-        const todayDK = new Date().toISOString().slice(0, 10);
+        const todayDK = toLocalDateKey();
         persistedTodayRef.current = dayMap[todayDK] ?? {};
         setTodayStats(persistedTodayRef.current);
 
@@ -175,7 +176,7 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       setTodayStats(todayLive);
 
       // Persist today
-      const todayDK = new Date().toISOString().slice(0, 10);
+      const todayDK = toLocalDateKey();
       AsyncStorage.setItem(
         STATS_KEY_PREFIX + todayDK,
         JSON.stringify(todayLive)
@@ -211,7 +212,7 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
     // Only fold if there was a real session before this change.
     if (prevSessionStartRef.current !== null) {
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
-      const todayDK = new Date().toISOString().slice(0, 10);
+      const todayDK = toLocalDateKey();
       AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};

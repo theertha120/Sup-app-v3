@@ -9,17 +9,12 @@ import React, {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
+import { toLocalDateKey } from "../lib/dateKey";
 import {
   fetchAllPostureRows,
   type PosturePageRow,
 } from "@/src/services/posture/postureSyncService";
 
-function localDateKey(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 interface PostureHistorySnapshot {
   /** The signed-in user's posture_daily rows, oldest first. */
@@ -90,7 +85,7 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
 
         const next: PostureHistorySnapshot = {
           rows,
-          dateKey: localDateKey(new Date()),
+          dateKey: toLocalDateKey(),
           loadedAt: Date.now(),
         };
         snapshotRef.current = next;
@@ -131,7 +126,7 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
   const ensureFreshForToday = useCallback(() => {
     const current = snapshotRef.current;
     if (!current) return;
-    if (current.dateKey === localDateKey(new Date())) return;
+    if (current.dateKey === toLocalDateKey()) return;
     load("refresh");
   }, [load]);
 
