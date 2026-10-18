@@ -65,7 +65,8 @@ export function createHandler(createLookup: () => ListUsers) {
             throw new Error("Invalid user record");
           }
           if (user.email?.trim().toLowerCase() === email) {
-            return json({ exists: true });
+            // Unverified accounts can retry signup and receive another code.
+            return json({ exists: Boolean(user.email_confirmed_at) });
           }
         }
         if (data.users.length === 0) return json({ exists: false });
