@@ -1,14 +1,13 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Animated,
   Dimensions,
   Modal,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   Image,
 } from "react-native";
@@ -399,9 +398,9 @@ export default function DailyScreen() {
 
         {/* Section label with back arrow */}
         <View style={styles.sectionRow}>
-          <Pressable onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
+          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
             <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
-          </Pressable>
+          </PressFeedback>
           <Text style={styles.sectionLabel}>today:</Text>
         </View>
 
@@ -417,9 +416,9 @@ export default function DailyScreen() {
                 here's your snapshot, the % of time you spent in each posture state today.
               </Text>
               <TutorialActions>
-                <Pressable onPress={() => setTutorialStep("snapshot-tip-stats")}>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("snapshot-tip-stats")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </Pressable>
+                </PressFeedback>
               </TutorialActions>
             </View>
           </View>
@@ -452,14 +451,14 @@ export default function DailyScreen() {
                 here's your total session time and s'up score for today's s'pot sessions.
               </Text>
               <TutorialActions>
-                <Pressable
+                <PressFeedback feedback="link"
                   onPress={() => {
                     setTutorialStep("settings-tip");
                     router.push("/settings");
                   }}
                 >
                   <Text style={styles.tutorialTipNext}>got it</Text>
-                </Pressable>
+                </PressFeedback>
               </TutorialActions>
             </View>
           </View>

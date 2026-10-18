@@ -1,8 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useRef, useCallback, useEffect } from "react";
-import { Animated, StyleSheet, Text, View, Image, Pressable, TouchableOpacity } from "react-native";
+import { Animated, StyleSheet, Text, View, Image } from "react-native";
 import { useFonts } from "expo-font";
 
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { supabase } from "../../src/lib/supabase";
@@ -45,7 +46,7 @@ export default function IntroScreen() {
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <BackgroundBlobs />
 
-      <TouchableOpacity
+      <PressFeedback feedback="scale"
         onPress={() => {
           stopRegistration();
           router.back();
@@ -53,7 +54,7 @@ export default function IntroScreen() {
         style={styles.backBtn}
       >
         <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
-      </TouchableOpacity>
+      </PressFeedback>
 
       <View style={styles.content}>
         {/* Card */}
@@ -65,12 +66,12 @@ export default function IntroScreen() {
 
         {/* Coach s’kipper — the mascot leans in from the right of the button */}
         <View style={styles.skipperWrap}>
-          <Pressable
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+          <PressFeedback
+            style={styles.button}
             onPress={() => router.push("/onboarding/heard" as any)}
           >
             <Text style={styles.buttonText}>with coach s&apos;kipper!</Text>
-          </Pressable>
+          </PressFeedback>
           <Image
             source={require("../../assets/images/mascot.png")}
             style={styles.skipperImage}
@@ -142,9 +143,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     paddingRight: 56,
     zIndex: 1,
-  },
-  buttonPressed: {
-    opacity: 0.75,
   },
   buttonText: {
     fontSize: 16,

@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { colours } from "@/theme/colours";
 import { useRouter } from "expo-router";
 import { useTutorial } from "@/src/contexts/TutorialContext";
@@ -66,12 +67,12 @@ export default function TutorialActions({ children, onBeforeSkip, skipDisabled =
     <View style={styles.actions}>
       {children}
       <View style={styles.row}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Skip page" onPress={handleSkip} disabled={skipDisabled} style={styles.button}>
+        <PressFeedback feedback="link" accessibilityRole="button" accessibilityLabel="Skip page" onPress={handleSkip} disabled={skipDisabled} style={styles.button}>
           <Text style={styles.text}>skip page</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Exit tutorial" onPress={dismissTutorial} style={styles.button}>
+        </PressFeedback>
+        <PressFeedback feedback="link" accessibilityRole="button" accessibilityLabel="Exit tutorial" onPress={dismissTutorial} style={styles.button}>
           <Text style={styles.text}>exit</Text>
-        </Pressable>
+        </PressFeedback>
       </View>
     </View>
   );

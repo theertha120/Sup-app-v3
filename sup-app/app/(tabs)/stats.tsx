@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
@@ -402,9 +403,9 @@ function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range)
         <View style={rangeStyles.shineBottom} />
         <Animated.View style={[rangeStyles.activeBubble, { transform: [{ translateX: bubbleX }] }]} />
         {RANGES.map((r) => (
-          <Pressable key={r} style={rangeStyles.tab} onPress={() => handlePress(r)}>
+          <PressFeedback feedback="scale" key={r} style={rangeStyles.tab} onPress={() => handlePress(r)}>
             <Text style={[rangeStyles.label, r === range && rangeStyles.labelActive]}>{r}</Text>
-          </Pressable>
+          </PressFeedback>
         ))}
       </BlurView>
     </View>
@@ -902,9 +903,9 @@ export default function StatsScreen() {
                 switch between weekly, monthly, and yearly data here. let me walk you through what each card below means!
               </Text>
               <TutorialActions>
-                <Pressable onPress={() => setTutorialStep("stats-tip-trend")}>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-trend")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </Pressable>
+                </PressFeedback>
               </TutorialActions>
             </View>
           </View>
@@ -926,9 +927,9 @@ export default function StatsScreen() {
                   this is your s'up s'core trend. each bar is a score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
                 </Text>
                 <TutorialActions>
-                  <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
+                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-session")}>
                     <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </TutorialActions>
               </View>
             </View>
@@ -971,9 +972,9 @@ export default function StatsScreen() {
                   s'ession time is how long you tracked posture in each period. more tracked time boosts the "showing up" part of your s'up s'core.
                 </Text>
                 <TutorialActions>
-                  <Pressable onPress={() => setTutorialStep("stats-tip-breakdown")}>
+                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-breakdown")}>
                     <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </TutorialActions>
               </View>
             </View>
@@ -1035,14 +1036,14 @@ export default function StatsScreen() {
                   posture breakdown shows the share of your tracked time in each posture state. tap "?" for the full details.
                 </Text>
                 <TutorialActions>
-                  <Pressable
+                  <PressFeedback feedback="link"
                     onPress={() => {
                       setTutorialStep("community-tip");
                       router.replace("/leaderboard" as any);
                     }}
                   >
                     <Text style={styles.tutorialTipNext}>got it! {'>>'}</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </TutorialActions>
               </View>
             </View>

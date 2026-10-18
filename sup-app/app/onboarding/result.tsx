@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { StyleSheet, View, Text, Image, ScrollView, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Text, Image, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -77,7 +78,7 @@ export default function ResultScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
+        <PressFeedback
           style={styles.downloadBtn}
           onPress={async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -94,7 +95,7 @@ export default function ResultScreen() {
           }}
         >
           <Text style={styles.downloadBtnText}>start your posture health journey</Text>
-        </TouchableOpacity>
+        </PressFeedback>
       </ScrollView>
     </LinearGradient>
   );

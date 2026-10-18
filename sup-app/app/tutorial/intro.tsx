@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
@@ -36,7 +37,7 @@ export default function TutorialIntroScreen() {
           Let's start off with a tutorial!
         </Text>
 
-        <TouchableOpacity
+        <PressFeedback
           style={styles.startBtn}
           onPress={() => {
             startTutorial();
@@ -44,7 +45,7 @@ export default function TutorialIntroScreen() {
           }}
         >
           <Text style={styles.startBtnText}>s'tart now</Text>
-        </TouchableOpacity>
+        </PressFeedback>
       </View>
     </View>
   );

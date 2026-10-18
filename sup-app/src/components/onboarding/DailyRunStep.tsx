@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFonts } from "expo-font";
 import React from "react";
 
@@ -39,13 +40,13 @@ export default function DailyRunStep({
         <Text style={styles.title}>When should your daily prompt appear?</Text>
 
         {/* Trigger */}
-        <Pressable
+        <PressFeedback
           style={[styles.trigger, open && styles.triggerOpen]}
           onPress={() => setOpen((prev) => !prev)}
         >
           <Text style={styles.triggerText}>{selected.label}</Text>
           <Text style={styles.caret}>{open ? "▲" : "▼"}</Text>
-        </Pressable>
+        </PressFeedback>
 
         {/* Dropdown — rendered in normal flow, no negative margin */}
         {open && (
@@ -58,7 +59,7 @@ export default function DailyRunStep({
               {HOURS.map(({ label, value: hour }) => {
                 const isSelected = value === hour;
                 return (
-                  <Pressable
+                  <PressFeedback
                     key={hour}
                     style={[styles.option, isSelected && styles.optionSelected]}
                     onPress={() => {
@@ -75,7 +76,7 @@ export default function DailyRunStep({
                       {label}
                     </Text>
                     {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </Pressable>
+                  </PressFeedback>
                 );
               })}
             </ScrollView>

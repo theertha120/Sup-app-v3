@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 const PRIMARY_TEXT = "#1D014A";
@@ -37,13 +38,13 @@ export default function RefreshButton({
   return (
     <View style={styles.wrap}>
       {showTimestamp && <Text style={styles.timestamp}>{formatAge(lastUpdatedAt)}</Text>}
-      <Pressable
+      <PressFeedback
         onPress={onPress}
         disabled={isRefreshing}
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel="Refresh leaderboard"
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        style={styles.button}
       >
         {isRefreshing ? (
           <ActivityIndicator size="small" color={PRIMARY_TEXT} />
@@ -51,7 +52,7 @@ export default function RefreshButton({
           <Ionicons name="refresh" size={16} color={PRIMARY_TEXT} />
         )}
         <Text style={styles.label}>{isRefreshing ? "refreshing…" : "refresh"}</Text>
-      </Pressable>
+      </PressFeedback>
     </View>
   );
 }
@@ -81,9 +82,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.65)",
     minWidth: 104,
     justifyContent: "center",
-  },
-  buttonPressed: {
-    opacity: 0.6,
   },
   label: {
     fontFamily: "Agrandir-Regular",

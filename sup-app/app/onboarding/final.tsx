@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking, Image } from "react-native";
+import { StyleSheet, View, Text, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -61,13 +62,13 @@ export default function FinalScreen() {
         <Text style={styles.fieldLabel}>gender</Text>
         <View style={styles.genderRow}>
           {GENDERS.map((g) => (
-            <TouchableOpacity
+            <PressFeedback
               key={g}
               style={[styles.genderBtn, gender === g && styles.genderBtnSelected]}
               onPress={() => setGender(g)}
             >
               <Text style={[styles.genderText, gender === g && styles.genderTextSelected]}>{g}</Text>
-            </TouchableOpacity>
+            </PressFeedback>
           ))}
         </View>
 
@@ -87,7 +88,7 @@ export default function FinalScreen() {
               onContentSizeChange={() => scrollToAge(age, false)}
             >
               {AGES.map((value) => (
-                <TouchableOpacity
+                <PressFeedback
                   key={value}
                   style={styles.agePickerItem}
                   onPress={() => { setAge(value); scrollToAge(value, true); }}
@@ -95,7 +96,7 @@ export default function FinalScreen() {
                   <Text style={[styles.agePickerItemText, value === age && styles.agePickerItemTextSelected]}>
                     {value}
                   </Text>
-                </TouchableOpacity>
+                </PressFeedback>
               ))}
             </ScrollView>
           </View>
@@ -104,11 +105,11 @@ export default function FinalScreen() {
 
         {/* Checkbox */}
         <View style={styles.checkboxRow}>
-          <TouchableOpacity onPress={() => setAccepted(!accepted)}>
+          <PressFeedback onPress={() => setAccepted(!accepted)}>
             <View style={[styles.checkbox, accepted && styles.checkboxChecked]}>
               {accepted && <Ionicons name="checkmark" size={18} color="#5222AE" />}
             </View>
-          </TouchableOpacity>
+          </PressFeedback>
           <Text style={styles.checkboxLabel}>
             i accept the s'uper{" "}
             <Text style={styles.link} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
@@ -118,7 +119,7 @@ export default function FinalScreen() {
         </View>
       </View>
 
-      <TouchableOpacity
+      <PressFeedback
         style={[styles.nextBtn, !accepted && styles.nextBtnDisabled]}
         onPress={async () => {
           if (!accepted) return;
@@ -140,7 +141,7 @@ export default function FinalScreen() {
         }}
       >
         <Text style={styles.nextBtnText}>start your posture health journey</Text>
-      </TouchableOpacity>
+      </PressFeedback>
     </LinearGradient>
   );
 }

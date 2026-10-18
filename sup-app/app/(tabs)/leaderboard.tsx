@@ -1,10 +1,10 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Animated,
   Dimensions,
   Image,
@@ -159,9 +159,9 @@ export default function LeaderboardScreen() {
                 see how your weekly points stack up against the community!
               </Text>
               <TutorialActions>
-                <Pressable onPress={() => setTutorialStep("community-tip-full")}>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("community-tip-full")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </Pressable>
+                </PressFeedback>
               </TutorialActions>
             </View>
           </View>
@@ -175,7 +175,7 @@ export default function LeaderboardScreen() {
         {/* Scope toggle — everyone vs friends only */}
         <View style={styles.scopeToggle}>
           {(["everyone", "friends"] as Scope[]).map((s) => (
-            <Pressable
+            <PressFeedback
               key={s}
               style={[styles.scopeButton, scope === s && styles.scopeButtonActive]}
               onPress={() => setScope(s)}
@@ -188,7 +188,7 @@ export default function LeaderboardScreen() {
               >
                 {s === "everyone" ? "Everyone" : "Friends"}
               </Text>
-            </Pressable>
+            </PressFeedback>
           ))}
         </View>
 
@@ -270,7 +270,7 @@ export default function LeaderboardScreen() {
 
         {/* ── See full leaderboard ── */}
         {showLeaderboard && (
-          <Pressable
+          <PressFeedback
             style={[
               styles.fullLeaderboardButton,
               tutorialStep === "community-tip-full" && styles.fullLeaderboardButtonHighlighted,
@@ -280,7 +280,7 @@ export default function LeaderboardScreen() {
             }
           >
             <Text style={styles.fullLeaderboardButtonText}>see full leaderboard</Text>
-          </Pressable>
+          </PressFeedback>
         )}
       </ScrollView>
     </Animated.View>
@@ -302,9 +302,9 @@ function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
       <View style={styles.tutorialTipTextWrap}>
         <Text style={styles.tutorialTipText}>{FULL_LEADERBOARD_TIP}</Text>
         <TutorialActions>
-          <Pressable onPress={onNext}>
+          <PressFeedback feedback="link" onPress={onNext}>
             <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-          </Pressable>
+          </PressFeedback>
         </TutorialActions>
       </View>
     </View>

@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useFonts } from "expo-font";
 import { colours } from "@/theme/colours";
 import type { ActiveTimePreset } from "@/src/services/user/behaviorProfileService";
@@ -60,14 +61,14 @@ function Chip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressFeedback
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
       <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

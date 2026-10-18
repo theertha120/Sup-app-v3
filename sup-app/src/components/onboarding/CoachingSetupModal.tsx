@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import { useEffect, useMemo, useState } from "react";
 import React from "react";
@@ -5,7 +6,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -189,14 +189,14 @@ export default function CoachingSetupModal({
               <Text style={styles.kicker}>Coaching setup</Text>
               <Text style={styles.title}>Set up your behaviour engine</Text>
             </View>
-            <Pressable
+            <PressFeedback
               onPress={handleCancel}
               disabled={saving}
               style={styles.cancelButton}
               hitSlop={8}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
-            </Pressable>
+            </PressFeedback>
           </View>
 
           {/* Progress */}
@@ -278,16 +278,16 @@ export default function CoachingSetupModal({
           <View style={styles.footer}>
             <View style={styles.primaryActions}>
               {canGoBack && (
-                <Pressable
+                <PressFeedback feedback="scale"
                   style={styles.backButton}
                   onPress={() => setStep((current) => (current - 1) as StepId)}
                   disabled={saving}
                 >
                   <Text style={styles.backButtonText}>Back</Text>
-                </Pressable>
+                </PressFeedback>
               )}
 
-              <Pressable
+              <PressFeedback
                 style={styles.primaryButton}
                 onPress={handleNext}
                 disabled={saving}
@@ -299,7 +299,7 @@ export default function CoachingSetupModal({
                     {isLastStep ? "Done" : "Next"}
                   </Text>
                 )}
-              </Pressable>
+              </PressFeedback>
             </View>
           </View>
         </View>

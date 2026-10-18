@@ -1,9 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Animated,
 } from "react-native";
 import React, { useCallback, useRef, useState } from "react";
@@ -87,9 +87,9 @@ export default function FullLeaderboardScreen() {
         <HeaderBar />
 
         <View style={styles.sectionRow}>
-          <Pressable onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
+          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
             <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
-          </Pressable>
+          </PressFeedback>
           <Text style={styles.sectionLabel}>Full Leaderboard</Text>
         </View>
 
@@ -101,7 +101,7 @@ export default function FullLeaderboardScreen() {
         {/* Scope toggle — everyone vs friends only */}
         <View style={styles.periodToggle}>
           {(["everyone", "friends"] as Scope[]).map((s) => (
-            <Pressable
+            <PressFeedback
               key={s}
               style={[styles.periodButton, scope === s && styles.periodButtonActive]}
               onPress={() => setScope(s)}
@@ -114,14 +114,14 @@ export default function FullLeaderboardScreen() {
               >
                 {s === "everyone" ? "Everyone" : "Friends"}
               </Text>
-            </Pressable>
+            </PressFeedback>
           ))}
         </View>
 
         {/* Period toggle */}
         <View style={styles.periodToggle}>
           {PERIODS.map((p) => (
-            <Pressable
+            <PressFeedback
               key={p.key}
               style={[styles.periodButton, period === p.key && styles.periodButtonActive]}
               onPress={() => setPeriod(p.key)}
@@ -134,7 +134,7 @@ export default function FullLeaderboardScreen() {
               >
                 {p.label}
               </Text>
-            </Pressable>
+            </PressFeedback>
           ))}
         </View>
 

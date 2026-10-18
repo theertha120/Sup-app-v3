@@ -1,8 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { View, Pressable, Dimensions, StyleSheet, Image } from "react-native";
+import { View, Dimensions, StyleSheet, Image } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Defs, Mask, Rect } from "react-native-svg";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BottomTabBarProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Animated, {
@@ -112,7 +113,8 @@ export default function LiquidGlass({
           }));
 
           return (
-            <Pressable
+            <PressFeedback
+              feedback="scale"
               key={route.key}
               onPress={onPress}
               style={styles.tab}
@@ -128,7 +130,7 @@ export default function LiquidGlass({
                   <DailyIcon color={isFocused ? "#111" : "#888"} />
                 )}
               </Animated.View>
-            </Pressable>
+            </PressFeedback>
           );
         })}
       </BlurView>

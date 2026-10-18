@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Animated, Dimensions, Image } from "react-native";
 import { router } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -376,7 +377,7 @@ export default function HomeScreen() {
           {/* Action bubble — navigate to daily summary */}
           <View style={styles.actionBubbleWrap}>
             <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
-              <Pressable
+              <PressFeedback
                 style={[
                   styles.bubble,
                   styles.bubbleRight,
@@ -395,7 +396,7 @@ export default function HomeScreen() {
                 }}
               >
                 <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
-              </Pressable>
+              </PressFeedback>
             </Animated.View>
 
             {tutorialStep === "goals-tip" && (
@@ -408,9 +409,9 @@ export default function HomeScreen() {
                 <View style={styles.tutorialTipTextWrap}>
                   <Text style={styles.tutorialTipText}>get daily personalised goals here every morning!</Text>
                   <TutorialActions>
-                    <Pressable onPress={() => setTutorialStep("data-tip")}>
+                    <PressFeedback feedback="link" onPress={() => setTutorialStep("data-tip")}>
                       <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                    </Pressable>
+                    </PressFeedback>
                   </TutorialActions>
                 </View>
               </View>

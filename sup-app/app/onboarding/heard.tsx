@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, Image } from "react-native";
+import { StyleSheet, View, Text, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
@@ -26,9 +27,9 @@ export default function HeardScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
         <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
-      </TouchableOpacity>
+      </PressFeedback>
 
       <View style={styles.questionBubble}>
         <Text style={styles.questionText}>How did you{"\n"}hear about s'up?</Text>
@@ -36,7 +37,7 @@ export default function HeardScreen() {
 
       <View style={styles.options}>
         {OPTIONS.map((option) => (
-          <TouchableOpacity
+          <PressFeedback
             key={option}
             style={[styles.option, selected === option && styles.optionSelected]}
             onPress={() => { setSelected(option); setHowHeard(option); router.push("/onboarding/details" as any); }}
@@ -44,7 +45,7 @@ export default function HeardScreen() {
             <Text style={[styles.optionText, selected === option && styles.optionTextSelected]}>
               {option}
             </Text>
-          </TouchableOpacity>
+          </PressFeedback>
         ))}
       </View>
     </LinearGradient>
