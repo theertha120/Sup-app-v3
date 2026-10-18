@@ -62,7 +62,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   trend: {
     title: "s'core trend",
-    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or week's, or month's) score out of 100; tap a bar to see that period's exact score.",
+    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or the average of the week's, or month's) score out of 100; tap a bar to see that period's exact score.",
   },
   session: {
     title: "s'ession time",
@@ -960,7 +960,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  this is your s'up s'core trend. each bar is one day's (or week's, or month's) score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
+                  this is your s'up s'core trend. each bar is one day's (or the average of the week's, or month's) score out of 100. tap a bar to see the exact number.
                 </Text>
                 <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -1059,7 +1059,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more. tap any "?" anytime for the full details.
+                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more.
                 </Text>
                 <Pressable
                   onPress={() => {

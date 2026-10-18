@@ -18,12 +18,19 @@ Deno.serve(async (req) => {
     // The admin API is the only way to check whether an account exists for
     // an email — generateLink errors when there's no matching user, and
     // succeeds (without actually sending anything) when there is.
-    const { error } = await supabaseAdmin.auth.admin.generateLink({
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email,
     });
 
-    return new Response(JSON.stringify({ exists: !error }), {
+    // Only a VERIFIED account counts as registered. An unverified one is a
+    // signup that was started but never finished (e.g. the user backed out of
+    // the code screen) — signing up again just re-sends the code, so the app
+    // must be allowed through instead of being stuck: blocked here, and unable
+    // to sign in because the email isn't confirmed.
+    const exists = !error && !!data?.user?.email_confirmed_at;
+
+    return new Response(JSON.stringify({ exists }), {
       headers: { "content-type": "application/json" },
     });
   } catch (err) {

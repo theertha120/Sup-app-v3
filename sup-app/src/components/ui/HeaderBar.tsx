@@ -30,6 +30,46 @@ const PRIMARY_TEXT = "#1D014A";
 const DROPDOWN_BG = "#FFFFFF";
 const DIVIDER = "#CBCBF7";
 const STREAK_COLOUR = "#EC555E";
+// ── Header tour (last steps of the app tutorial) ─────────────────────────────
+// Order: profile → settings → s'pot setup → streak, then the tutorial ends.
+// `slot` is the icon's position counted from the RIGHT of the icon row
+// (0 = profile, 1 = streak, 2 = s'pot setup, 3 = settings) — used to put the
+// tip's caret under the right icon.
+type HeaderTipStep = "add-friends-tip" | "header-settings-tip" | "header-sensor-tip" | "header-streak-tip";
+
+const HEADER_TIPS: Record<HeaderTipStep, {
+  text: string;
+  slot: number;
+  next: HeaderTipStep | null; // null = last tip, ends the tutorial
+}> = {
+  "add-friends-tip": {
+    text: "tap your profile to add friends, see your average weekly points, edit your username or log out.",
+    slot: 0,
+    next: "header-settings-tip",
+  },
+  "header-settings-tip": {
+    text: "settings - you can replay this tutorial here anytime.",
+    slot: 3,
+    next: "header-sensor-tip",
+  },
+  "header-sensor-tip": {
+    text: "tap here to set up or check your s'pots.",
+    slot: 2,
+    next: "header-streak-tip",
+  },
+  "header-streak-tip": {
+    text: "this is your streak. do sessions every day to keep it going!",
+    slot: 1,
+    next: null,
+  },
+};
+
+const ICON_SIZE = 40; // styles.iconButton width
+const ICON_GAP  = 8;  // styles.headerButtons gap
+const CARET_SIZE = 14;
+const caretRightFor = (slot: number) =>
+  slot * (ICON_SIZE + ICON_GAP) + ICON_SIZE / 2 - CARET_SIZE / 2;
+
 // Width / height of sup-logo-purple.png (539×253).
 const LOGO_ASPECT_RATIO = 539 / 253;
  
@@ -42,7 +82,10 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const { isAuthenticated, userId, streakVersion } = useAuth();
   const { showToast } = useToast();
   const { logout } = useAuth();
-  const { tutorialStep, dismissTutorial } = useTutorial();
+  const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
+  const headerTip = tutorialStep && tutorialStep in HEADER_TIPS
+    ? HEADER_TIPS[tutorialStep as HeaderTipStep]
+    : null;
  
   const [streakDays, setStreakDays] = useState(0);
   const [weeklyPoints, setWeeklyPoints] = useState(0);
@@ -170,19 +213,26 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         {/* Icon row */}
         <View style={styles.headerButtons}>
  
-          <Pressable style={styles.iconButton} onPress={handleSettingsPress}>
+          <Pressable
+            style={[styles.iconButton, tutorialStep === "header-settings-tip" && styles.iconButtonHighlighted]}
+            onPress={handleSettingsPress}
+          >
             <Ionicons name="settings-outline" size={22} color={PRIMARY_TEXT} />
           </Pressable>
  
           <Pressable
-            style={styles.iconButton}
+            style={[styles.iconButton, tutorialStep === "header-sensor-tip" && styles.iconButtonHighlighted]}
             onPress={() => router.push("/sensor-setup")}
           >
             <Ionicons name="hardware-chip-outline" size={22} color={PRIMARY_TEXT} />
           </Pressable>
  
           {/* Streak badge — not pressable */}
-          <View style={[styles.iconButton, styles.streakBadge]}>
+          <View style={[
+            styles.iconButton,
+            styles.streakBadge,
+            tutorialStep === "header-streak-tip" && styles.iconButtonHighlighted,
+          ]}>
             <Ionicons name="flame" size={20} color={streakColor} />
             <Text style={[styles.streakCount, { color: streakColor }]}>
               {streakDays}
@@ -204,9 +254,9 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         </View>
       </View>
 
-      {tutorialStep === "add-friends-tip" && (
+      {headerTip && (
         <View style={styles.tutorialTipAnchor}>
-          <View style={styles.tutorialTipCaret} />
+          <View style={[styles.tutorialTipCaret, { marginRight: caretRightFor(headerTip.slot) }]} />
           <View style={styles.tutorialTip}>
             <Image
               source={require("../../../assets/images/mascot.png")}
@@ -214,11 +264,13 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                add friends by username by choosing the profile icon here. then you're all set!
-              </Text>
-              <Pressable onPress={dismissTutorial}>
-                <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
+              <Text style={styles.tutorialTipText}>{headerTip.text}</Text>
+              <Pressable
+                onPress={() => (headerTip.next ? setTutorialStep(headerTip.next) : dismissTutorial())}
+              >
+                <Text style={styles.tutorialTipNext}>
+                  {headerTip.next ? "next" : "start exploring the app!"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -369,9 +421,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   tutorialTipCaret: {
-    width: 14,
-    height: 14,
-    marginRight: 12,
+    width: CARET_SIZE,
+    height: CARET_SIZE,
     marginBottom: -7,
     backgroundColor: "rgba(30, 24, 46, 0.94)",
     borderRadius: 3,
