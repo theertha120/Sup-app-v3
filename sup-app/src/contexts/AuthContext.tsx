@@ -1,15 +1,17 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
 import { captureError, captureFunctionError } from "@/src/lib/sentry";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
-import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
+import { checkStreakOnAppOpen } from "@/src/services/posture/postureSyncService";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   userId: string | null;
+  streakVersion: number;
   registrationMode: boolean;
   startRegistration: () => void;
   stopRegistration: () => void;
@@ -41,6 +43,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [registrationMode, setRegistrationMode] = useState(false);
+  // Bumped after each streak check so streak displays (HeaderBar) can refetch.
+  const [streakVersion, setStreakVersion] = useState(0);
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = userId;
+
+  async function runStreakCheck(uid: string) {
+    await checkStreakOnAppOpen(uid);
+    setStreakVersion((v) => v + 1);
+  }
+
+  // Re-check the streak each time the app returns from the background.
+  useEffect(() => {
+    let wasBackgrounded = false;
+    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState === "background") {
+        wasBackgrounded = true;
+      } else if (nextState === "active" && wasBackgrounded) {
+        wasBackgrounded = false;
+        if (userIdRef.current) runStreakCheck(userIdRef.current);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // Listen for auth state changes so UI stays in sync
   useEffect(() => {
@@ -53,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
-        if (user) await checkStreakOnLogin(user.id);
+        if (user) await runStreakCheck(user.id);
       } catch {
         if (!mounted) return;
         setIsAuthenticated(false);
@@ -69,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserId(session?.user?.id ?? null);
       if (session?.user) {
         setRegistrationMode(false);
-        if (event === "SIGNED_IN") checkStreakOnLogin(session.user.id);
+        if (event === "SIGNED_IN") runStreakCheck(session.user.id);
       }
     });
 
@@ -346,7 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, streakVersion, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
       {children}
     </AuthContext.Provider>
   );

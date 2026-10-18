@@ -369,7 +369,7 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await updateStreakAndActivity(userId);
+      const newStreak = await getCurrentStreak(userId);
       const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
       await supabase
         .from("posture_daily")
@@ -420,18 +420,38 @@ function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
 }
 
 /**
- * Updates current_streak and last_activity_date in profiles.
- * Returns the new streak value so the caller can compute sup_score.
- *
- * Uses existing profile values — no need to fetch all posture_daily dates:
- *   last_activity == today     → streak unchanged (multiple sessions same day)
+ * Reads current_streak for sup_score. Read-only — the streak is maintained by
+ * checkStreakOnAppOpen, which has always run before a session can end.
+ */
+async function getCurrentStreak(userId: string): Promise<number> {
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("current_streak")
+      .eq("id", userId)
+      .single();
+
+    if (error) { console.warn("[postureSync] getCurrentStreak fetch failed", error); return 1; }
+    return Math.max(1, Number(profile?.current_streak ?? 1));
+  } catch (e) {
+    console.warn("[postureSync] getCurrentStreak threw", e);
+    return 1;
+  }
+}
+
+/**
+ * Updates current_streak and last_activity_date in profiles. Call when a user logs
+ * in, the app cold-starts with a session, or the app returns to the foreground —
+ * opening the app is what counts as a streak day:
+ *   last_activity == today     → streak unchanged (already opened today)
  *   last_activity == yesterday → streak + 1 (extending run)
  *   anything older             → streak resets to 1 (gap broke it)
+ * Idempotent within a day, so repeated opens are safe.
  *
  * Dates are the device's local calendar day, matching how "today" is defined
  * elsewhere in the app (daily.tsx, home.tsx) — not UTC.
  */
-async function updateStreakAndActivity(userId: string): Promise<number> {
+export async function checkStreakOnAppOpen(userId: string): Promise<void> {
   try {
     const { todayLocal, yesterdayLocal } = getLocalDateKeys();
 
@@ -441,69 +461,24 @@ async function updateStreakAndActivity(userId: string): Promise<number> {
       .eq("id", userId)
       .single();
 
-    if (error) { console.warn("[postureSync] updateStreakAndActivity fetch failed", error); return 1; }
+    if (error) { console.warn("[postureSync] checkStreakOnAppOpen fetch failed", error); return; }
 
     const prev       = profile?.last_activity_date as string | null;
     const prevStreak = Number(profile?.current_streak ?? 0);
 
-    let streak: number;
-    if (prev === todayLocal) {
-      streak = prevStreak;      // second session today — no change
-    } else if (prev === yesterdayLocal) {
-      streak = prevStreak + 1;  // consecutive day — extend
-    } else {
-      streak = 1;               // gap or first ever session
-    }
+    if (prev === todayLocal) return; // already opened today — no change
+
+    const streak = prev === yesterdayLocal ? prevStreak + 1 : 1;
 
     const { error: profileError } = await supabase
       .from("profiles")
       .update({ current_streak: streak, last_activity_date: todayLocal })
       .eq("id", userId);
 
-    if (profileError) console.warn("[postureSync] updateStreakAndActivity update failed", profileError);
+    if (profileError) console.warn("[postureSync] checkStreakOnAppOpen update failed", profileError);
     else console.log(`[postureSync] streak=${streak} last_activity=${todayLocal}`);
-
-    return streak;
   } catch (e) {
-    console.warn("[postureSync] updateStreakAndActivity threw", e);
-    return 1;
-  }
-}
-
-/**
- * Call once when a user logs in / the app opens with a session already active.
- * Does NOT increment the streak — logging in isn't "using the S'pots". It only
- * catches a broken streak early: if the user's last real session (last_activity_date)
- * isn't today or yesterday, the gap already broke the streak, so we zero it out
- * immediately instead of leaving the old count displayed until their next session.
- */
-export async function checkStreakOnLogin(userId: string): Promise<void> {
-  try {
-    const { todayLocal, yesterdayLocal } = getLocalDateKeys();
-
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("current_streak, last_activity_date")
-      .eq("id", userId)
-      .single();
-
-    if (error) { console.warn("[postureSync] checkStreakOnLogin fetch failed", error); return; }
-
-    const lastActivity = profile?.last_activity_date as string | null;
-    const prevStreak    = Number(profile?.current_streak ?? 0);
-
-    const streakIsIntact = lastActivity === todayLocal || lastActivity === yesterdayLocal;
-    if (streakIsIntact || prevStreak === 0) return;
-
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ current_streak: 0 })
-      .eq("id", userId);
-
-    if (profileError) console.warn("[postureSync] checkStreakOnLogin reset failed", profileError);
-    else console.log(`[postureSync] streak reset to 0 on login (last_activity=${lastActivity ?? "never"})`);
-  } catch (e) {
-    console.warn("[postureSync] checkStreakOnLogin threw", e);
+    console.warn("[postureSync] checkStreakOnAppOpen threw", e);
   }
 }
 

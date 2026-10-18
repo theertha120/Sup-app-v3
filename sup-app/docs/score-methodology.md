@@ -69,8 +69,8 @@ streak_pts = min(20, streak_days * 3)
 
 So the streak component maxes out at a 7-day streak (7 × 3 = 21, capped to 20) and grows by 3
 points per consecutive day before that. A streak day is defined by the device's local calendar
-day (not UTC): using the app again on the very next calendar day extends the streak by one;
-skipping a day resets it to 1 on the next session.
+day (not UTC): opening the app (cold start, foregrounding, or logging in) on the very next
+calendar day extends the streak by one; skipping a day resets it to 1 on the next open.
 
 ---
 

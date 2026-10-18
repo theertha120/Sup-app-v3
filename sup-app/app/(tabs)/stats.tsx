@@ -384,12 +384,14 @@ const popupStyles = StyleSheet.create({
 function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range) => void }) {
   const RANGES: Range[] = ["week", "month", "year"];
   const TAB_W   = (SCREEN_W - 40 - 8) / 3;
-  const bubbleX = useRef(new Animated.Value(0)).current;
+  // Centres the 60px-wide bubble under tab r
+  const bubbleOffset = (r: Range) => RANGES.indexOf(r) * TAB_W + (TAB_W / 2 - 30);
+  // Start under the initially selected tab, not at x=0
+  const bubbleX = useRef(new Animated.Value(bubbleOffset(range))).current;
 
   const handlePress = (r: Range) => {
-    const idx = RANGES.indexOf(r);
     Animated.spring(bubbleX, {
-      toValue: idx * TAB_W + (TAB_W / 2 - 30),
+      toValue: bubbleOffset(r),
       damping: 15, stiffness: 140, useNativeDriver: true,
     }).start();
     onChange(r);
