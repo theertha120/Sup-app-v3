@@ -198,8 +198,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingBottom: 200,
-    paddingTop: 0,
+    paddingBottom: 0,
+    paddingTop: -10,
   },
   heading: {
     fontSize: 36,
