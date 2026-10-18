@@ -19,6 +19,9 @@ export type TutorialStep =
   | "community-tip"
   | "community-tip-full"
   | "add-friends-tip"
+  | "header-settings-tip"
+  | "header-sensor-tip"
+  | "header-streak-tip"
   | null;
 
 interface TutorialContextType {
