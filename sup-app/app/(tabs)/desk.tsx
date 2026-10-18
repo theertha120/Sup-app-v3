@@ -26,6 +26,10 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
+import { fetchPreviousSession } from "../../src/services/posture/postureSyncService";
+import {
+  compareSessions, computeSessionHighlights, SessionComparisonMetric, SessionHighlight,
+} from "../../src/lib/sessionHighlights";
 import { toLocalDateKey } from "../../src/lib/dateKey";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
@@ -321,6 +325,8 @@ export default function DeskScreen() {
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
   const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [summaryComparison, setSummaryComparison] = useState<SessionComparisonMetric[] | null>(null);
+  const [summaryHighlights, setSummaryHighlights] = useState<SessionHighlight[]>([]);
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -415,7 +421,7 @@ export default function DeskScreen() {
   const shsLabel     = getScoreLabel(shs);
   const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
-  const { sessionStats, sessionTotalMs } = useSessionStats(isTracking ? currentState : undefined);
+  const { sessionStats, sessionTotalMs, getSessionTimeline } = useSessionStats(isTracking ? currentState : undefined);
 
   const blobColor = updateHistory.length > 0
     ? INSIGHT_BORDER[updateHistory[0].color]
@@ -489,12 +495,30 @@ export default function DeskScreen() {
     setSummaryMessage(null);
     setIsLoadingSummary(true);
     setShowSummaryModal(true);
+
+    // Highlights + previous-session comparison are computed on-device, shown
+    // even if s'kipper can't be reached, and passed to it as context.
+    const highlights = computeSessionHighlights(getSessionTimeline());
+    const previous = sessionStartTimeMs !== null
+      ? await fetchPreviousSession(currentUserId, sessionStartTimeMs)
+      : null;
+    const comparison = previous
+      ? compareSessions(
+          { durationMs: sessionTotalMs, stateTotals: sessionStats },
+          { durationMs: previous.totalDurationMs, stateTotals: previous.stateTotals },
+        )
+      : null;
+    setSummaryHighlights(highlights);
+    setSummaryComparison(comparison);
+
     try {
       const result = await aiProvider.getSessionSummary({
         sessionDurationMs,
         cpl,
         sessionStats,
         previousUpdates: updateHistory.map(h => h.text),
+        comparison,
+        highlights,
       });
       setSummaryMessage(result.message);
       setSummaryColor(result.color);
@@ -504,12 +528,14 @@ export default function DeskScreen() {
     } finally {
       setIsLoadingSummary(false);
     }
-  }, [topSensor.state.connected, bottomSensor.state.connected, sessionDurationMs, cpl, sessionStats, updateHistory]);
+  }, [topSensor.state.connected, bottomSensor.state.connected, sessionDurationMs, cpl, sessionStats, sessionTotalMs, updateHistory, getSessionTimeline, sessionStartTimeMs, currentUserId]);
 
   const handleCloseSummaryModal = useCallback(async () => {
     setShowSummaryModal(false);
     setSummaryMessage(null);
     setSummaryColor("yellow");
+    setSummaryComparison(null);
+    setSummaryHighlights([]);
     // End the session but keep the s'pots connected so it can be restarted from here.
     endSessionKeepConnected();
   }, [endSessionKeepConnected]);
@@ -563,11 +589,43 @@ export default function DeskScreen() {
             <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
             <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
-            <Text style={su.body}>
-              {isLoadingSummary
-                ? "s'kipper is reviewing your session..."
-                : summaryMessage ?? ""}
-            </Text>
+            <ScrollView style={su.summaryScroll} showsVerticalScrollIndicator={false}>
+              <Text style={su.body}>
+                {isLoadingSummary
+                  ? "s'kipper is reviewing your session..."
+                  : summaryMessage ?? ""}
+              </Text>
+
+              {summaryHighlights.length > 0 && (
+                <View style={su.summarySection}>
+                  {summaryHighlights.map((h) => (
+                    <Text key={h.label} style={su.highlightLine}>
+                      <Text style={su.highlightLabel}>{h.label}:</Text> {h.text}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {summaryComparison && (
+                <View style={su.summarySection}>
+                  <Text style={su.highlightLabel}>vs last session</Text>
+                  {summaryComparison.map((m) => (
+                    <View key={m.label} style={su.compareRow}>
+                      <Text style={su.compareLabel}>{m.label}</Text>
+                      <Text style={su.compareValue}>{m.current}</Text>
+                      <Text
+                        style={[
+                          su.compareChange,
+                          { color: m.improved === null ? "#888" : m.improved ? "#2E7D32" : "#C62828" },
+                        ]}
+                      >
+                        {m.change}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1027,6 +1085,16 @@ const su = StyleSheet.create({
   title:      { fontSize: 22, color: "#AB99FA", marginBottom: 12, fontFamily: "Agrandir-GrandHeavy", textAlign: "center" },
   mascot:     { width: 160, height: 160, marginBottom: 8 },
   body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12, fontFamily: "Agrandir-Regular" },
+
+  // end-of-session summary: highlights + previous-session comparison
+  summaryScroll:  { alignSelf: "stretch", maxHeight: SCREEN_H * 0.45 },
+  summarySection: { alignSelf: "stretch", borderTopWidth: 1, borderTopColor: "#EEE", paddingTop: 12, marginBottom: 12, gap: 6 },
+  highlightLine:  { fontSize: 14, color: "#333", lineHeight: 20, fontFamily: "Agrandir-Regular" },
+  highlightLabel: { fontSize: 14, color: "#1D014A", fontFamily: "Agrandir-GrandHeavy" },
+  compareRow:     { flexDirection: "row", alignItems: "center", gap: 8 },
+  compareLabel:   { flex: 1, fontSize: 14, color: "#333", fontFamily: "Agrandir-Regular" },
+  compareValue:   { fontSize: 14, color: "#333", minWidth: 52, textAlign: "right", fontFamily: "Agrandir-Regular" },
+  compareChange:  { fontSize: 14, minWidth: 76, textAlign: "right", fontFamily: "Agrandir-Regular" },
 
   historySection: { alignSelf: "stretch", marginTop: 24, marginBottom: 8 },
   historyHeading: { fontSize: 28, fontFamily: "Agrandir-GrandHeavy", color: "#1D014A", marginBottom: 14 },

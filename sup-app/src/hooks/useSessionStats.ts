@@ -9,9 +9,10 @@
  * Persists daily totals to AsyncStorage so data survives app restarts.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
+import { PostureSegment } from "../lib/sessionHighlights";
 import { useAuth } from "../contexts/AuthContext";
 import { useIMUContext } from "../contexts/IMUContext";
 import { toLocalDateKey } from "../lib/dateKey";
@@ -100,7 +101,9 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   const lastTickRef        = useRef<number>(Date.now());
   const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
   const sessionRef         = useRef<StateTimeMap>({});
-  const userIdRef          = useRef<string | null>(userId);
+  // Run-length posture timeline for the current session (end-of-session highlights)
+  const sessionTimelineRef = useRef<PostureSegment[]>([]);
+  const userIdRef         = useRef<string | null>(userId);
   const prevSessionStartRef = useRef<number | null>(sessionStartTimeMs);
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
@@ -163,6 +166,11 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       }
       setSessionStats({ ...sessionRef.current });
 
+      const timeline = sessionTimelineRef.current;
+      const lastSeg = timeline[timeline.length - 1];
+      if (lastSeg && lastSeg.state === state) lastSeg.endMs = now;
+      else timeline.push({ state, startMs: now - elapsed, endMs: now });
+
       // Today live = persisted base + session
       const todayLive = mergeMaps(persistedTodayRef.current, sessionRef.current);
       setTodayStats(todayLive);
@@ -208,14 +216,21 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
       AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
+      sessionTimelineRef.current = [];
       setSessionStats({});
     }
 
     prevSessionStartRef.current = sessionStartTimeMs;
   }, [sessionStartTimeMs]);
 
+  const getSessionTimeline = useCallback(
+    () => sessionTimelineRef.current.map((s) => ({ ...s })),
+    []
+  );
+
   return {
     sessionStats,
+    getSessionTimeline,
     todayStats,
     weekDays,
     weekStats,

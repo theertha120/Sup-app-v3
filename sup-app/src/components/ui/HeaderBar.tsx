@@ -39,7 +39,7 @@ interface HeaderBarProps {
 
 export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const router = useRouter();
-  const { isAuthenticated, userId } = useAuth();
+  const { isAuthenticated, userId, streakVersion } = useAuth();
   const { showToast } = useToast();
   const { logout } = useAuth();
   const { tutorialStep, dismissTutorial } = useTutorial();
@@ -85,7 +85,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
       return;
     }
     loadProfile();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, streakVersion]);
  
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {

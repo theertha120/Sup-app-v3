@@ -26,4 +26,39 @@ export function sentryBreadcrumb(message: string, data?: Record<string, unknown>
   Sentry.addBreadcrumb({ category: "app", message, data, level: "info" });
 }
 
+/** Report a handled (caught) error — Sentry only sees uncaught ones on its own. */
+export function captureError(error: unknown, context: string) {
+  Sentry.captureException(error, { tags: { context } });
+}
+
+/**
+ * Report a failed Edge Function call. Never throws. Pass `http` when the
+ * caller used fetch() directly; for supabase.functions.invoke() errors the
+ * status/body are read off error.context (the Response), since the error's
+ * own message is always the generic "non-2xx status code".
+ */
+export async function captureFunctionError(
+  fn: string,
+  error: unknown,
+  http?: { status: number; body: string }
+) {
+  let status = http?.status;
+  let body = http?.body;
+  try {
+    const res = (error as { context?: Response } | null)?.context;
+    if (!http && res && typeof res.text === "function") {
+      status = res.status;
+      body = await res.clone().text();
+    }
+  } catch {
+    // body unreadable — still report the error itself
+  }
+  Sentry.captureException(error, {
+    tags: { edge_function: fn },
+    extra: { status, body: body?.slice(0, 500) },
+    // Otherwise every function's failures group into one issue (same message).
+    fingerprint: ["edge-function", fn, String(status ?? "no-response")],
+  });
+}
+
 export const wrapWithSentry = Sentry.wrap;

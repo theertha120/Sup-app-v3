@@ -48,6 +48,7 @@ import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { useAuth } from "./AuthContext";
 import * as postureSync from "../services/posture/postureSyncService";
 import { sentryBreadcrumb } from "../lib/sentry";
+import { sendBackgroundAlert, dismissBackgroundAlerts } from "../services/reminder/pushNotificationService";
 import {
   parseIMUPacket,
   classifySpinePosture,
@@ -59,6 +60,7 @@ import {
   POSTURE_LABELS,
   POSTURE_CUES,
   INTERVENTION_MESSAGES,
+  MOVEMENT_NUDGE,
   SHS_RATES,
   SHS_GRACE_PERIODS_MS,
   DEFAULT_SAGITTAL_SIGN,
@@ -77,6 +79,7 @@ const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
 const STATIC_NUDGE_THRESHOLD_MS = 15 * 60 * 1000; // 15 min — fires regardless of posture quality, just staying static too long
 const SHS_TICK_MS               = 1_000;
 const DISPLAY_TICK_MS           = 10_000;
+const TICK_CHECK_MS             = 250; // how often the foreground interval checks for due ticks
 const SNAPSHOT_TICK_MS          = 20_000;
 const EMA_ALPHA                 = 0.15;
 const UI_THROTTLE_MS            = 500;
@@ -86,6 +89,15 @@ const UI_THROTTLE_MS            = 500;
 // data. Prevents starting a calibration step's 3s sampling window before any
 // packet has arrived, which would silently capture zero samples.
 const READY_PACKET_THRESHOLD = 5;
+
+// Kinds of pop-ups mirrored as notifications while backgrounded.
+const NOTIF_INTERVENTION = "posture-intervention";
+const NOTIF_MOVEMENT     = "movement-nudge";
+const NOTIF_DISCONNECT   = "spot-disconnected"; // suffixed with the slot
+
+// How long posture must stay out of the alerted state before the s'train
+// notification is cleared — ignores ~10Hz classification flicker at a boundary.
+const STRAIN_MOVED_HOLD_MS = 5_000;
 
 // Minimum raw angle delta (deg) during calibration steps 2 (lean forward) and
 // 4 (lean right) before we trust its SIGN as evidence of the kit's mounting
@@ -326,7 +338,13 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const sessionMaxCplRef        = useRef<number>(0);
   const sessionStateTotalsRef   = useRef<postureSync.StateTotals>({});
   const shsIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
-  const displayIntervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastShsTickAtRef        = useRef<number>(Date.now());
+  const lastDisplayTickAtRef    = useRef<number>(Date.now());
+  // Background notifications that may still be in the tray, so they can be
+  // cleared once no longer relevant without querying the tray every packet.
+  const strainNotifStateRef     = useRef<PostureState | null>(null); // posture the s'train alert fired for
+  const strainMovedSinceRef     = useRef<number | null>(null);
+  const nudgeNotifPendingRef    = useRef(false);
   // Upper-back accumulators for time-weighted averaging
   const upperSumScoreMsRef      = useRef<number>(0);
   const upperSumMsRef           = useRef<number>(0);
@@ -385,76 +403,128 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // This means brief neutral breaks barely reduce CPL, correctly modelling
   // how spinal creep accumulates across multiple loading bouts.
 
-  useEffect(() => {
-    shsIntervalRef.current = setInterval(() => {
-      const state = lastPostureStateRef.current;
-      if (!state) return;
+  const shsTick = useCallback(() => {
+    const state = lastPostureStateRef.current;
+    if (!state) return;
 
-      // ── SHS ──
-      const rate        = SHS_RATES[state] ?? 0;
-      const gracePeriod = SHS_GRACE_PERIODS_MS[state] ?? 0;
-      const stateElapsed = Date.now() - stateStartTimeRef.current;
-      if (rate > 0 || stateElapsed >= gracePeriod) {
-        const newShs = Math.max(0, Math.min(100, shsRef.current + rate));
-        shsRef.current = newShs;
-        setShs(Math.round(newShs));
-      }
+    // ── SHS ──
+    const rate        = SHS_RATES[state] ?? 0;
+    const gracePeriod = SHS_GRACE_PERIODS_MS[state] ?? 0;
+    const stateElapsed = Date.now() - stateStartTimeRef.current;
+    if (rate > 0 || stateElapsed >= gracePeriod) {
+      const newShs = Math.max(0, Math.min(100, shsRef.current + rate));
+      shsRef.current = newShs;
+      setShs(Math.round(newShs));
+    }
 
-      // ── CPL ──
-      let newCpl: number;
-      if (state === "upright") {
-        newCpl = Math.max(0, cplRef.current - CPL_RECOVERY_RATE);
-      } else {
-        newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0);
-      }
-      cplRef.current = newCpl;
-      setCpl(Math.round(newCpl));
-      sessionShsSumRef.current += shsRef.current;
-      sessionShsTickCountRef.current += 1;
-      sessionMinShsRef.current = Math.min(sessionMinShsRef.current, shsRef.current);
-      sessionMaxCplRef.current = Math.max(sessionMaxCplRef.current, newCpl);
+    // ── CPL ──
+    let newCpl: number;
+    if (state === "upright") {
+      newCpl = Math.max(0, cplRef.current - CPL_RECOVERY_RATE);
+    } else {
+      newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0);
+    }
+    cplRef.current = newCpl;
+    setCpl(Math.round(newCpl));
+    sessionShsSumRef.current += shsRef.current;
+    sessionShsTickCountRef.current += 1;
+    sessionMinShsRef.current = Math.min(sessionMinShsRef.current, shsRef.current);
+    sessionMaxCplRef.current = Math.max(sessionMaxCplRef.current, newCpl);
 
-      // Check CPL intervention threshold for current state
-      const cplThreshold = CPL_THRESHOLDS[state];
-      if (cplThreshold !== undefined && newCpl >= cplThreshold && !interventionFiredRef.current) {
-        interventionFiredRef.current = true;
-        const msg = INTERVENTION_MESSAGES[state];
-        if (msg) {
-          setActiveIntervention({ state, ...msg, cplAtAlert: Math.round(newCpl) });
-          // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
-          // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
-          console.log("[IMUContext] CPL intervention fired for", state, "CPL:", Math.round(newCpl));
-        }
+    // Check CPL intervention threshold for current state
+    const cplThreshold = CPL_THRESHOLDS[state];
+    if (cplThreshold !== undefined && newCpl >= cplThreshold && !interventionFiredRef.current) {
+      interventionFiredRef.current = true;
+      const msg = INTERVENTION_MESSAGES[state];
+      if (msg) {
+        setActiveIntervention({ state, ...msg, cplAtAlert: Math.round(newCpl) });
+        sendBackgroundAlert(NOTIF_INTERVENTION, msg.title, `${msg.body}\n\n${msg.cue}`);
+        strainNotifStateRef.current = state;
+        strainMovedSinceRef.current = null;
+        // PHONE: Vibration.vibrate([0, 400, 100, 400, 100, 400]);
+        // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
+        console.log("[IMUContext] CPL intervention fired for", state, "CPL:", Math.round(newCpl));
       }
-    }, SHS_TICK_MS);
-    return () => { if (shsIntervalRef.current) clearInterval(shsIntervalRef.current); };
+    }
   }, []);
 
   // ── Display timer — ticks every 10 seconds ────────────────────────────────
 
-  useEffect(() => {
-    displayIntervalRef.current = setInterval(() => {
-      // Current state duration
-      const elapsed = Date.now() - stateStartTimeRef.current;
-      setTimeInCurrentStateMs(elapsed);
+  const displayTick = useCallback(() => {
+    // Current state duration
+    const elapsed = Date.now() - stateStartTimeRef.current;
+    setTimeInCurrentStateMs(elapsed);
 
-      // Session duration
-      if (sessionStartTimeRef.current !== null) {
-        setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
-      }
+    // Session duration
+    if (sessionStartTimeRef.current !== null) {
+      setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
+    }
 
-      // Static movement nudge (any posture held too long)
-      const staticElapsed = Date.now() - staticStartTimeRef.current;
-      if (staticElapsed >= STATIC_NUDGE_THRESHOLD_MS && !staticNudgeFiredRef.current) {
-        staticNudgeFiredRef.current = true;
-        setShouldNudge(true);
-        // PHONE: Vibration.vibrate([0, 300, 100, 300]);
-        // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
-        console.log("[IMUContext] static nudge fired");
-      }
-    }, DISPLAY_TICK_MS);
-    return () => { if (displayIntervalRef.current) clearInterval(displayIntervalRef.current); };
+    // Static movement nudge (any posture held too long)
+    // Only while posture is live — null when a s'pot is disconnected or no
+    // session is running. The timer restarts when posture resumes, since
+    // null → state counts as a state change in the packet handler.
+    const staticElapsed = Date.now() - staticStartTimeRef.current;
+    if (lastPostureStateRef.current !== null && staticElapsed >= STATIC_NUDGE_THRESHOLD_MS && !staticNudgeFiredRef.current) {
+      staticNudgeFiredRef.current = true;
+      setShouldNudge(true);
+      sendBackgroundAlert(NOTIF_MOVEMENT, MOVEMENT_NUDGE.title, `${MOVEMENT_NUDGE.body}\n\n${MOVEMENT_NUDGE.cue}`);
+      nudgeNotifPendingRef.current = true;
+      // PHONE: Vibration.vibrate([0, 300, 100, 300]);
+      // FUTURE S'POT HAPTIC: bleService.sendHapticPulse("top")
+      console.log("[IMUContext] static nudge fired");
+    }
   }, []);
+
+  const clearStrainNotifs = useCallback(() => {
+    strainNotifStateRef.current = null;
+    strainMovedSinceRef.current = null;
+    dismissBackgroundAlerts(NOTIF_INTERVENTION);
+  }, []);
+
+  const clearNudgeNotifs = useCallback(() => {
+    if (!nudgeNotifPendingRef.current) return;
+    nudgeNotifPendingRef.current = false;
+    dismissBackgroundAlerts(NOTIF_MOVEMENT);
+  }, []);
+
+  // RN pauses JS timers while the app is backgrounded (Android and iOS), but
+  // BLE packets keep arriving — so the ticks above are also driven from the
+  // packet handler. Each tick is time-gated here so the interval and packets
+  // never double-count.
+  const runDueTicks = useCallback(() => {
+    const now = Date.now();
+    const sinceShs = now - lastShsTickAtRef.current;
+    if (sinceShs >= SHS_TICK_MS) {
+      // Step exactly one tick to hold 1/s; after a long gap, resync rather
+      // than back-fill time whose posture is unknown.
+      lastShsTickAtRef.current = sinceShs >= 2 * SHS_TICK_MS ? now : lastShsTickAtRef.current + SHS_TICK_MS;
+      shsTick();
+    }
+    if (now - lastDisplayTickAtRef.current >= DISPLAY_TICK_MS) {
+      lastDisplayTickAtRef.current = now;
+      displayTick();
+    }
+
+    // Clear s'train notifications once posture has held away from the
+    // alerted state (a disconnect, i.e. null posture, doesn't count as moving).
+    const alerted = strainNotifStateRef.current;
+    if (alerted !== null) {
+      const state = lastPostureStateRef.current;
+      if (state === null || state === alerted) {
+        strainMovedSinceRef.current = null;
+      } else if (strainMovedSinceRef.current === null) {
+        strainMovedSinceRef.current = now;
+      } else if (now - strainMovedSinceRef.current >= STRAIN_MOVED_HOLD_MS) {
+        clearStrainNotifs();
+      }
+    }
+  }, [shsTick, displayTick, clearStrainNotifs]);
+
+  useEffect(() => {
+    shsIntervalRef.current = setInterval(runDueTicks, TICK_CHECK_MS);
+    return () => { if (shsIntervalRef.current) clearInterval(shsIntervalRef.current); };
+  }, [runDueTicks]);
 
   // App backgrounding no longer ends the session — s'pots keep streaming and
   // accumulating SHS/CPL while backgrounded (react-native-ble-plx is
@@ -674,6 +744,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           staticNudgeFiredRef.current  = false;
           setTimeInCurrentStateMs(0);
           setShouldNudge(false);
+          // Posture moved, so the nudge no longer applies — same as the pop-up
+          clearNudgeNotifs();
           // Deliberately NOT clearing activeIntervention here (no
           // setActiveIntervention(null)) — this block runs on every raw
           // per-packet classification change, ~10Hz, with no hysteresis.
@@ -700,6 +772,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           // Force UI update on state change (bypass throttle)
           lastUIUpdateRef.current = 0;
         }
+
+        // Keeps SHS/CPL, alerts and the nudge running while backgrounded
+        runDueTicks();
 
         // UI throttle
         const now = Date.now();
@@ -728,6 +803,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // post-end packet suppression so the next packet can start a session.
         if (state.connected) {
           sessionEndedRef.current = false;
+          // This s'pot is back, so its "disconnected" notifications no longer apply
+          dismissBackgroundAlerts(`${NOTIF_DISCONNECT}-${slot}`);
         } else if (sessionStartTimeRef.current !== null && disconnectedAtRef.current === null) {
           // A slot dropped mid-session — start timing the dead gap. It's
           // banked in the packet handler once BOTH slots stream again (the
@@ -778,9 +855,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (sessionStartTimeRef.current === null) return;
 
         const label = slot === "top" ? "top" : "bottom";
+        const title = `${label} s'pot disconnected`;
+        const message = "reconnect the s'pot to carry on, or end your session now; it'll be saved either way.";
+        sendBackgroundAlert(`${NOTIF_DISCONNECT}-${slot}`, title, message);
         setBrandAlert({
-          title: `${label} s'pot disconnected`,
-          message: "reconnect the s'pot to carry on, or end your session now; it'll be saved either way.",
+          title,
+          message,
           dismissable: false,
           buttons: [
             {
@@ -938,7 +1018,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setShouldNudge(false);
     staticNudgeFiredRef.current = false;
     staticStartTimeRef.current  = Date.now();
-  }, []);
+    clearNudgeNotifs();
+  }, [clearNudgeNotifs]);
 
   const dismissIntervention = useCallback((moved: boolean) => {
     if (!moved) {
@@ -950,11 +1031,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       // Partial CPL reset on acknowledged movement
       cplRef.current = Math.max(0, cplRef.current * 0.5);
       setCpl(Math.round(cplRef.current));
+      clearStrainNotifs();
     }
     // Allow intervention to re-fire if CPL stays high
     interventionFiredRef.current = false;
     setActiveIntervention(null);
-  }, []);
+  }, [clearStrainNotifs]);
 
   // ── BLE actions ───────────────────────────────────────────────────────────
 
