@@ -205,7 +205,7 @@ export default function HeaderBar({ suffix = "up", logoSize = 50 }: HeaderBarPro
           <View style={styles.tutorialTipCaret} />
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../../../assets/images/mascot.png")}
+              source={require("../../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />

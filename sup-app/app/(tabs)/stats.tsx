@@ -893,7 +893,7 @@ export default function StatsScreen() {
             onLayout={() => scrollToTutorialCard("stats-tip", 0)}
           >
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
@@ -917,7 +917,7 @@ export default function StatsScreen() {
           {tutorialStep === "stats-tip-trend" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -962,7 +962,7 @@ export default function StatsScreen() {
           {tutorialStep === "stats-tip-session" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -1026,7 +1026,7 @@ export default function StatsScreen() {
           {tutorialStep === "stats-tip-breakdown" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />

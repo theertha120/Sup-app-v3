@@ -94,7 +94,7 @@ export default function SettingsScreen() {
         {tutorialStep === "settings-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../assets/images/mascot.png")}
+              source={require("../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />

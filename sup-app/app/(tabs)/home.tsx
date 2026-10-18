@@ -1,8 +1,10 @@
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Dimensions, Image } from "react-native";
 import { router } from "expo-router";
 import { useFonts } from "expo-font";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { displayName } from "@/src/utils/displayName";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -65,6 +67,29 @@ export default function HomeScreen() {
   const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
+  const scrollRef = useRef<ScrollView>(null);
+  const tutorialScrollFrame = useRef<number | null>(null);
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  // Match the floating navigation bar: 72 high, 25 above the safe area.
+  const tutorialBottomClearance = 72 + 25 + bottomInset + 16;
+
+  useEffect(() => () => {
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+      tutorialScrollFrame.current = null;
+    }
+  }, [tutorialStep]);
+
+  const revealDataTip = () => {
+    if (tutorialStep !== "data-tip") return;
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+    }
+    tutorialScrollFrame.current = requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+      tutorialScrollFrame.current = null;
+    });
+  };
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -282,11 +307,23 @@ export default function HomeScreen() {
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.container}
+        contentContainerStyle={[
+          styles.scrollContent,
+          tutorialStep === "data-tip" && { paddingBottom: tutorialBottomClearance },
+        ]}
+        onContentSizeChange={revealDataTip}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Wordmark + icons */}
         <HeaderBar />
 
-        <View style={styles.bubblesContainer}>
+        <View style={[
+          styles.bubblesContainer,
+          tutorialStep === "data-tip" && styles.bubblesWithTutorial,
+        ]}>
           {/* Greeting bubble */}
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, bubbleAnimStyle(greetingBubbleAnim)]}>
             <Text style={styles.bubbleText}>
@@ -364,7 +401,7 @@ export default function HomeScreen() {
             {tutorialStep === "goals-tip" && (
               <View style={styles.tutorialTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={styles.tutorialTipMascot}
                   resizeMode="contain"
                 />
@@ -380,9 +417,9 @@ export default function HomeScreen() {
             )}
 
             {tutorialStep === "data-tip" && (
-              <View style={[styles.tutorialTip, styles.tutorialTipBelow]}>
+              <View style={[styles.tutorialTip, styles.tutorialTipBelow]} onLayout={revealDataTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={styles.tutorialTipMascot}
                   resizeMode="contain"
                 />
@@ -412,6 +449,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingBottom: 40,
+  },
+  bubblesWithTutorial: {
+    flexBasis: "auto",
+    flexShrink: 0,
   },
   topBar: {
     flexDirection: "row",
@@ -541,8 +582,12 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   tutorialTipBelow: {
-    top: "100%",
-    marginTop: -12,
+    // Reserve real space for the message and its controls in the ScrollView.
+    position: "relative",
+    top: 0,
+    right: 0,
+    marginRight: 16,
+    marginTop: 0,
   },
   tutorialTipMascot: {
     width: 30,

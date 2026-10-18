@@ -617,7 +617,7 @@ export default function DeskScreen() {
         {tutorialStep === "figure-tip" && (
           <View style={s.tutorialTip}>
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={s.tutorialTipMascot}
               resizeMode="contain"
             />
@@ -677,7 +677,7 @@ export default function DeskScreen() {
             {tutorialStep === "supdate-tip" && (
               <View style={s.tutorialTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={s.tutorialTipMascot}
                   resizeMode="contain"
                 />
@@ -697,7 +697,7 @@ export default function DeskScreen() {
             {tutorialStep === "end-session-tip" && (
               <View style={s.tutorialTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={s.tutorialTipMascot}
                   resizeMode="contain"
                 />

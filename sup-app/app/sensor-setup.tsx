@@ -594,7 +594,7 @@ export default function SensorSetupScreen() {
           {tutorialStep === "connect-tip" && (
             <View style={[styles.tutorialTip, { marginTop: 12, marginBottom: 0 }]}>
               <Image
-                source={require("../assets/images/mascot.png")}
+                source={require("../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -667,7 +667,7 @@ export default function SensorSetupScreen() {
         {tutorialStep === "calibrate-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../assets/images/mascot.png")}
+              source={require("../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />

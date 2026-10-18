@@ -215,7 +215,7 @@ export default function CoachingSetupModal({
           {tutorialStep === "coaching-tip" && (
             <View style={styles.tutorialTip}>
               <Image
-                source={require("../../../assets/images/mascot.png")}
+                source={require("../../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />

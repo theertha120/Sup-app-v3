@@ -150,7 +150,7 @@ export default function LeaderboardScreen() {
         {tutorialStep === "community-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
@@ -295,7 +295,7 @@ function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
   return (
     <View style={[styles.tutorialTip, { marginTop: 8 }]}>
       <Image
-        source={require("../../assets/images/mascot.png")}
+        source={require("../../assets/images/mascot_tutorial.png")}
         style={styles.tutorialTipMascot}
         resizeMode="contain"
       />
