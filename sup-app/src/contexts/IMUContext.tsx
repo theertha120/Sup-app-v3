@@ -755,6 +755,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           staticNudgeFiredRef.current  = false;
           setTimeInCurrentStateMs(0);
           setShouldNudge(false);
+          // Clear the movement nudge notification after a confirmed posture change.
+          clearNudgeNotifs();
+
           // An active intervention still requires the user's explicit answer;
           // even a confirmed posture change must not dismiss it automatically.
 
