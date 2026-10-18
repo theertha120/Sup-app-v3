@@ -225,7 +225,13 @@ export default function CoachingSetupModal({
                     ? "you can personalise your s'up experience here!"
                     : "you can set this time as the time you will start your first session."}
                 </Text>
-                <TutorialActions />
+                <TutorialActions
+                  skipDisabled={saving}
+                  onBeforeSkip={() => {
+                    resetToInitial();
+                    onCancel();
+                  }}
+                />
               </View>
             </View>
           )}

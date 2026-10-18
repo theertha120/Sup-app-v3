@@ -66,6 +66,12 @@ export default function LeaderboardScreen() {
     }
   }, [tutorialStep]);
 
+  useEffect(() => {
+    if (tutorialStep === "add-friends-tip") {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [tutorialStep]);
+
   const scrollToFullLeaderboardTip = (y: number) => {
     if (tutorialStep !== "community-tip-full") return;
     if (tutorialScrollFrame.current !== null) {
@@ -80,7 +86,6 @@ export default function LeaderboardScreen() {
 
   const showAddFriendsTip = () => {
     setTutorialStep("add-friends-tip");
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { bottom: bottomInset } = useSafeAreaInsets();
