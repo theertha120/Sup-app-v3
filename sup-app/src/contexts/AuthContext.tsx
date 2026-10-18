@@ -1,15 +1,18 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
 import { checkEmailRegistered as checkEmail, type EmailCheckResult } from "@/src/lib/checkEmail";
+import { captureError, captureFunctionError } from "@/src/lib/sentry";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
-import { checkStreakOnLogin } from "@/src/services/posture/postureSyncService";
+import { checkStreakOnAppOpen } from "@/src/services/posture/postureSyncService";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   userId: string | null;
+  streakVersion: number;
   registrationMode: boolean;
   startRegistration: () => void;
   stopRegistration: () => void;
@@ -41,6 +44,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [registrationMode, setRegistrationMode] = useState(false);
+  // Bumped after each streak check so streak displays (HeaderBar) can refetch.
+  const [streakVersion, setStreakVersion] = useState(0);
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = userId;
+
+  async function runStreakCheck(uid: string) {
+    await checkStreakOnAppOpen(uid);
+    setStreakVersion((v) => v + 1);
+  }
+
+  // Re-check the streak each time the app returns from the background.
+  useEffect(() => {
+    let wasBackgrounded = false;
+    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState === "background") {
+        wasBackgrounded = true;
+      } else if (nextState === "active" && wasBackgrounded) {
+        wasBackgrounded = false;
+        if (userIdRef.current) runStreakCheck(userIdRef.current);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // Listen for auth state changes so UI stays in sync
   useEffect(() => {
@@ -53,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
-        if (user) await checkStreakOnLogin(user.id);
+        if (user) await runStreakCheck(user.id);
       } catch {
         if (!mounted) return;
         setIsAuthenticated(false);
@@ -69,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserId(session?.user?.id ?? null);
       if (session?.user) {
         setRegistrationMode(false);
-        if (event === "SIGNED_IN") checkStreakOnLogin(session.user.id);
+        if (event === "SIGNED_IN") runStreakCheck(session.user.id);
       }
     });
 
@@ -78,6 +104,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listener?.subscription.unsubscribe();
     };
   }, []);
+
+  // Keep user_profile.timezone_offset_minutes current — the server-side daily
+  // AI summary job uses it to work out each user's local hour and date. Saved
+  // on launch and whenever the app returns to the foreground (not just at
+  // login), so it follows users who travel or cross a daylight-saving change.
+  useEffect(() => {
+    if (!userId) return;
+    autoDetectAndSaveTimezone(userId);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") autoDetectAndSaveTimezone(userId);
+    });
+    return () => sub.remove();
+  }, [userId]);
 
   function startRegistration() {
     setRegistrationMode(true);
@@ -185,10 +224,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function checkEmailRegistered(
-    email: string
-  ): Promise<EmailCheckResult> {
-    return checkEmail(email, (name, options) => supabase.functions.invoke(name, options));
+  email: string
+): Promise<EmailCheckResult> {
+  const result = await checkEmail(
+    email,
+    (name, options) => supabase.functions.invoke(name, options)
+  );
+
+  if (!result.success) {
+    captureError(new Error(result.error), "check-email");
   }
+
+  return result;
+}
 
   async function requestPasswordReset(
     email: string
@@ -290,6 +338,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         const message = payload?.error || responseText || `Delete failed with status ${response.status}`;
         console.warn("[auth] delete-account function failed", response.status, message);
+        void captureFunctionError("delete-account", new Error(`delete-account failed with status ${response.status}`), {
+          status: response.status,
+          body: responseText,
+        });
         return { success: false, error: message };
       }
 
@@ -311,6 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err) {
       console.error("[auth] deleteAccount error", err);
+      captureError(err, "delete-account");
       return { success: false, error: String(err) };
     }
   }
@@ -327,7 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, userId, streakVersion, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
+import { router } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { getReminderForUser } from "./reminderEngineService";
 
@@ -18,6 +19,10 @@ const CATEGORY_REMINDER = "REMINDER_ACTIONS";
 // Android channel IDs
 const CHANNEL_REMINDERS = "reminders";
 const CHANNEL_REMINDERS_HIGH = "reminders_high";
+const CHANNEL_SESSION_ALERTS = "session_alerts";
+
+// data.type marking a background alert mirrored from an in-app pop-up
+const SESSION_ALERT_TYPE = "session_alert";
 
 // Configure notification behavior when app is in foreground
 Notifications.setNotificationHandler({
@@ -55,6 +60,21 @@ async function setupAndroidChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.HIGH,
     sound: "default",
     vibrationPattern: [0, 500, 200, 500],
+    lightColor: "#FF6B6B",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: false,
+    enableLights: true,
+    enableVibrate: true,
+    showBadge: false,
+  });
+
+  // Posture alerts / session events mirrored from in-app pop-ups while backgrounded
+  await Notifications.setNotificationChannelAsync(CHANNEL_SESSION_ALERTS, {
+    name: "Posture & Session Alerts",
+    description: "Posture alerts and session updates while the app is in the background",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
+    vibrationPattern: [0, 400, 100, 400],
     lightColor: "#FF6B6B",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false,
@@ -214,6 +234,60 @@ export async function sendLocalNotification(
     await updateReminderSentTracking(userId);
   } catch (error) {
     console.error("Error sending local notification:", error);
+  }
+}
+
+/**
+ * SEND BACKGROUND ALERT
+ * Mirrors an in-app pop-up (posture alert, session event) as a local
+ * notification, but only while the app isn't in the foreground — the in-app
+ * pop-up already covers that case. Deliberately no reminder category, no
+ * actionLabel and no reminder tracking, so it never touches behaviour_state
+ * or reminder_log. No fixed identifier, so each alert is a separate,
+ * swipeable notification rather than replacing the previous one. Tapping it
+ * opens Desk Mode (see setupNotificationListeners), where the pop-up shows.
+ */
+export async function sendBackgroundAlert(kind: string, title: string, body: string): Promise<void> {
+  if (AppState.currentState === "active") {
+    console.log(`[notif] ${kind}: app in foreground, in-app pop-up only`);
+    return;
+  }
+  console.log(`[notif] ${kind}: sending background notification`);
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: "default",
+        data: { type: SESSION_ALERT_TYPE, kind },
+        ...(Platform.OS === "android" && {
+          channelId: CHANNEL_SESSION_ALERTS,
+          color: "#FF6B6B",
+          sticky: false,
+          autoDismiss: true,
+        }),
+      },
+      trigger: null, // Deliver immediately
+    });
+  } catch (error) {
+    console.error("Error sending background alert:", error);
+  }
+}
+
+/**
+ * Clears every background alert of one kind still in the tray, once what it
+ * warned about is no longer relevant (posture moved, s'pot reconnected).
+ */
+export async function dismissBackgroundAlerts(kind: string): Promise<void> {
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter((n) => n.request.content.data?.type === SESSION_ALERT_TYPE && n.request.content.data?.kind === kind)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier))
+    );
+  } catch (error) {
+    console.error("Error dismissing background alerts:", error);
   }
 }
 
@@ -388,6 +462,12 @@ export function setupNotificationListeners(): () => void {
       const actionIdentifier = response.actionIdentifier;
       const notificationId = response.notification.request.identifier;
       await Notifications.dismissNotificationAsync(notificationId);
+
+      // Background alerts aren't reminders — just open Desk Mode
+      if (response.notification.request.content.data?.type === SESSION_ALERT_TYPE) {
+        router.navigate("/(tabs)/desk");
+        return;
+      }
 
       const { actionLabel } = response.notification.request.content.data;
 

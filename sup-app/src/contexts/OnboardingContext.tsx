@@ -15,6 +15,11 @@ interface PendingSignup {
   lastName: string;
   email: string;
   username: string;
+  /**
+   * Held in memory only (never persisted) so verify-email can re-apply it
+   * after verification — see verify-email.tsx for why.
+   */
+  password: string;
 }
 
 interface OnboardingContextType {
@@ -38,7 +43,7 @@ const defaultAnswers: OnboardingAnswers = {
 };
 
 const defaultPendingSignup: PendingSignup = {
-  firstName: "", lastName: "", email: "", username: "",
+  firstName: "", lastName: "", email: "", username: "", password: "",
 };
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);

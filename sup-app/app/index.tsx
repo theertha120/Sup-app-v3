@@ -8,11 +8,18 @@ export default function Index() {
   useEffect(() => {
     const check = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        // getUser() checks the saved login with Supabase. getSession() only
+        // reads it from the phone, so a login for an account that was deleted
+        // (or is otherwise no longer valid) would still look signed in.
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
 
         if (!user) {
-          console.log("[index] no user → home");
+          if (userError) {
+            console.log("[index] saved login no longer valid → sign out, home:", userError.message);
+            await supabase.auth.signOut({ scope: "local" });
+          } else {
+            console.log("[index] no user → home");
+          }
           setDestination("/(tabs)/home");
           return;
         }
@@ -21,11 +28,29 @@ export default function Index() {
           .from("profiles")
           .select("onboarding")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
 
-        console.log("[index] onboarding value:", data?.onboarding, "error:", error?.message);
+        if (error) {
+          // Couldn't read the profile (e.g. offline) — don't push a signed-in
+          // user into onboarding over a network blip.
+          console.warn("[index] profile check failed → home:", error.message);
+          setDestination("/(tabs)/home");
+          return;
+        }
 
-        if (!data?.onboarding) {
+        if (!data) {
+          // Signed in, but the signup never got as far as creating a profile.
+          // Onboarding should only start from the "Create account" button, so
+          // sign out and show the normal logged-out home screen instead.
+          console.warn("[index] signed in with no profile row → sign out, home");
+          await supabase.auth.signOut({ scope: "local" });
+          setDestination("/(tabs)/home");
+          return;
+        }
+
+        console.log("[index] onboarding value:", data.onboarding);
+
+        if (!data.onboarding) {
           console.log("[index] → onboarding/intro");
           setDestination("/onboarding/intro");
         } else {

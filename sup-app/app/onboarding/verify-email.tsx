@@ -14,7 +14,7 @@ const CODE_LENGTH = 6;
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const { verifyEmailOtp } = useAuth();
-  const { pendingSignup, answers } = useOnboarding();
+  const { pendingSignup, setPendingSignup, answers } = useOnboarding();
 
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -44,6 +44,16 @@ export default function VerifyEmailScreen() {
       setCode("");
       return;
     }
+
+    // If this email was signed up before but never verified (user backed out
+    // of this screen and came round again), signUp only re-sent the code and
+    // kept the FIRST password. Re-apply the one they just typed so it's the
+    // one that works at login. "same_password" just means it already matched.
+    const { error: pwError } = await supabase.auth.updateUser({ password: pendingSignup.password });
+    if (pwError && pwError.code !== "same_password") {
+      console.warn("[verify-email] failed to apply password", pwError);
+    }
+    setPendingSignup({ ...pendingSignup, password: "" });
 
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {

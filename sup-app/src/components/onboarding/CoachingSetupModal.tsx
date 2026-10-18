@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+// OLD: useEffect was only used by the daily-run summary check (now commented out below)
+// import { useEffect, useMemo, useState } from "react";
+// NEW: daily AI summary runs at a fixed 8am for all users
+import { useMemo, useState } from "react";
 import React from "react";
 import {
   ActivityIndicator,
@@ -12,12 +15,14 @@ import {
 } from "react-native";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { useFonts } from "expo-font";
-import { supabase } from "@/src/lib/supabase";
+// OLD: user-selectable daily-run time (disabled — summary now fixed at 8am for all users)
+// import { supabase } from "@/src/lib/supabase";
 import ActiveHoursStep from "./ActiveHoursStep";
 import GoalSelectionStep from "./GoalSelectionStep";
 import ReminderPreferencesStep from "./ReminderPreferencesStep";
 import WeeklyGoalStep from "./WeeklyGoalStep";
-import DailyRunStep from "./DailyRunStep";
+// OLD: user-selectable daily-run time (disabled — summary now fixed at 8am for all users)
+// import DailyRunStep from "./DailyRunStep";
 import {
   type ActiveTimePreset,
   type BehaviorGoalId,
@@ -30,15 +35,24 @@ import {
   resolveTimeRangeFromPresets,
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
-type StepId = 0 | 1 | 2 | 3 | 4;
+// OLD: step 4 was the daily-run time picker
+// type StepId = 0 | 1 | 2 | 3 | 4;
+// NEW: daily-run step removed; last step is now the weekly goal (step 3)
+type StepId = 0 | 1 | 2 | 3;
+const LAST_STEP: StepId = 3;
 
-/** Today's date in SGT (UTC+8) as YYYY-MM-DD */
-function todayInSGT(): string {
-  const now = new Date();
-  const sgt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return sgt.toISOString().slice(0, 10);
-}
+// NEW: daily AI summary is generated at 8am (SGT) for all users — no longer user-selectable
+const FIXED_DAILY_RUN_HOUR = 8;
+
+// OLD: only used by the daily-run summary check (disabled)
+// /** Today's date in SGT (UTC+8) as YYYY-MM-DD */
+// function todayInSGT(): string {
+//   const now = new Date();
+//   const sgt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+//   return sgt.toISOString().slice(0, 10);
+// }
 
 export default function CoachingSetupModal({
   visible,
@@ -61,7 +75,8 @@ export default function CoachingSetupModal({
   const [step, setStep] = useState<StepId>(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [summaryGeneratedToday, setSummaryGeneratedToday] = useState(false);
+  // OLD: user-selectable daily-run time (disabled)
+  // const [summaryGeneratedToday, setSummaryGeneratedToday] = useState(false);
 
   const initial = initialProfile ?? null;
 
@@ -80,34 +95,38 @@ export default function CoachingSetupModal({
   const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoalId[]>(
     initial ? initial.weeklyGoals : defaults.weeklyGoals
   );
-  const [dailyRunHour, setDailyRunHour] = useState<number>(
-    initial ? initial.dailyRun : defaults.dailyRun
-  );
+  // OLD: user-selectable daily-run time (disabled — fixed at FIXED_DAILY_RUN_HOUR)
+  // const [dailyRunHour, setDailyRunHour] = useState<number>(
+  //   initial ? initial.dailyRun : defaults.dailyRun
+  // );
 
-  useEffect(() => {
-    if (!visible) return;
-
-    async function checkTodaySummary() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data } = await supabase
-        .from("daily_ai_summary")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .eq("date", todayInSGT())
-        .maybeSingle();
-
-      setSummaryGeneratedToday(!!data);
-    }
-
-    checkTodaySummary();
-  }, [visible]);
+  // OLD: user-selectable daily-run time (disabled)
+  // useEffect(() => {
+  //   if (!visible) return;
+  //
+  //   async function checkTodaySummary() {
+  //     const { data: { user } } = await supabase.auth.getUser();
+  //     if (!user) return;
+  //
+  //     const { data } = await supabase
+  //       .from("daily_ai_summary")
+  //       .select("user_id")
+  //       .eq("user_id", user.id)
+  //       .eq("date", todayInSGT())
+  //       .maybeSingle();
+  //
+  //     setSummaryGeneratedToday(!!data);
+  //   }
+  //
+  //   checkTodaySummary();
+  // }, [visible]);
 
   if (!visible || !fontsLoaded) return null;
 
   const canGoBack = step > 0;
-  const isLastStep = step === 4;
+  // OLD: const isLastStep = step === 4;
+  // NEW: daily-run step removed
+  const isLastStep = step === LAST_STEP;
 
   const resetToInitial = () => {
     setPrimaryGoals(initial ? initial.primaryGoals : defaults.primaryGoals);
@@ -115,7 +134,8 @@ export default function CoachingSetupModal({
     setPreferredTones(initial ? initial.preferredTones : defaults.preferredTones);
     setReminderFrequency(initial ? initial.reminderFrequency : defaults.reminderFrequency);
     setWeeklyGoals(initial ? initial.weeklyGoals : defaults.weeklyGoals);
-    setDailyRunHour(initial ? initial.dailyRun : defaults.dailyRun);
+    // OLD: user-selectable daily-run time (disabled)
+    // setDailyRunHour(initial ? initial.dailyRun : defaults.dailyRun);
     setStep(0);
     setError("");
   };
@@ -136,7 +156,9 @@ export default function CoachingSetupModal({
       activeTimeStart: start,
       activeTimeEnd: end,
       weeklyGoals,
-      dailyRun: dailyRunHour,
+      // OLD: dailyRun: dailyRunHour,
+      // NEW: fixed 8am for all users
+      dailyRun: FIXED_DAILY_RUN_HOUR,
     };
   };
 
@@ -160,7 +182,9 @@ export default function CoachingSetupModal({
       return;
     }
 
-    if (step < 4) {
+    // OLD: if (step < 4) {
+    // NEW: daily-run step removed
+    if (step < LAST_STEP) {
       setStep((current) => (current + 1) as StepId);
       return;
     }
@@ -200,7 +224,8 @@ export default function CoachingSetupModal({
 
           {/* Progress */}
           <View style={styles.progressRow}>
-            {[0, 1, 2, 3, 4].map((index) => (
+            {/* OLD: {[0, 1, 2, 3, 4].map((index) => ( — NEW: daily-run step removed */}
+            {[0, 1, 2, 3].map((index) => (
               <View
                 key={index}
                 style={[
@@ -219,10 +244,16 @@ export default function CoachingSetupModal({
                 resizeMode="contain"
               />
               <View style={styles.tutorialTipTextWrap}>
+                {/* OLD: tip for the daily-run step (disabled)
                 <Text style={styles.tutorialTipText}>
                   {step < 4
                     ? "this is a preference for the reminder push notifications which will give you posture tips."
                     : "set the time you want the daily personalised goal on the home page to appear at. you can set this time as the time when you will start your first session."}
+                </Text>
+                */}
+                {/* NEW: daily-run step removed, so only the reminder tip remains */}
+                <Text style={styles.tutorialTipText}>
+                  this is a preference for the reminder push notifications which will give you posture tips.
                 </Text>
               </View>
             </View>
@@ -255,6 +286,7 @@ export default function CoachingSetupModal({
             {step === 3 && (
               <WeeklyGoalStep value={weeklyGoals} onChange={setWeeklyGoals} />
             )}
+            {/* OLD: user-selectable daily-run time (disabled — fixed at 8am for all users)
             {step === 4 && (
               <DailyRunStep
                 value={dailyRunHour}
@@ -262,6 +294,7 @@ export default function CoachingSetupModal({
                 summaryGeneratedToday={summaryGeneratedToday}
               />
             )}
+            */}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>

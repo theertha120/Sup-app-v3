@@ -1,5 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { DeskPostureState } from "../../components/desk/mockDeskPostureData";
+import { toLocalDateKey, addDaysToDateKey, localDayRange } from "@/src/lib/dateKey";
 
 export type StateTotals = Partial<Record<DeskPostureState, number>>;
 
@@ -57,9 +58,6 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-function toSgtDateKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
-}
 
 async function closeStaleSessions(userId: string): Promise<void> {
   try {
@@ -95,7 +93,7 @@ async function closeStaleSessions(userId: string): Promise<void> {
       })
     );
 
-    const affectedDateKeys = new Set(staleSessions.map((row) => toSgtDateKey(row.started_at)));
+    const affectedDateKeys = new Set(staleSessions.map((row) => toLocalDateKey(new Date(row.started_at))));
     await Promise.all(
       [...affectedDateKeys].map((dateKey) => rebuildDailyFromSessions(userId, dateKey))
     );
@@ -183,6 +181,49 @@ export async function snapshotSession(
   }
 }
 
+export interface PreviousSessionSnapshot {
+  startedAt: string;
+  totalDurationMs: number;
+  stateTotals: StateTotals;
+}
+
+/**
+ * The user's most recent completed session that started before `beforeMs`
+ * (the current session's start), for the end-of-session comparison. Sessions
+ * under a minute are skipped as too short to compare against.
+ */
+export async function fetchPreviousSession(
+  userId: string | null,
+  beforeMs: number
+): Promise<PreviousSessionSnapshot | null> {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("posture_sessions")
+      .select("started_at, total_duration_ms, state_totals")
+      .eq("user_id", userId)
+      .eq("is_completed_session", true)
+      .lt("started_at", toIso(beforeMs))
+      .gte("total_duration_ms", 60_000)
+      .not("state_totals", "is", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) { console.warn("[postureSync] fetchPreviousSession failed", error); return null; }
+    if (!data || !isStateTotals(data.state_totals)) return null;
+
+    return {
+      startedAt: data.started_at as string,
+      totalDurationMs: Number(data.total_duration_ms ?? 0),
+      stateTotals: data.state_totals,
+    };
+  } catch (e) {
+    console.warn("[postureSync] fetchPreviousSession threw", e);
+    return null;
+  }
+}
+
 export async function upsertDailyRollup(
   userId: string | null,
   dateKey: string,
@@ -249,15 +290,12 @@ export async function upsertDailyRollup(
  */
 export async function rebuildDailyFromSessions(
   userId: string,
-  dateKey: string  // YYYY-MM-DD (SGT)
+  dateKey: string  // YYYY-MM-DD (phone's local day)
 ): Promise<void> {
   try {
-    // dateKey is an SGT calendar date (SGT = UTC+8, no DST).
-    // The SGT day [00:00, 24:00) maps to this UTC range:
-    const startUtc = new Date(`${dateKey}T00:00:00.000Z`);
-    startUtc.setUTCHours(startUtc.getUTCHours() - 8);
-    const endUtc = new Date(startUtc);
-    endUtc.setUTCDate(endUtc.getUTCDate() + 1);
+    // dateKey is a calendar day in the phone's timezone; select the sessions
+    // that started between that day's local midnight and the next one.
+    const { start: startUtc, end: endUtc } = localDayRange(dateKey);
 
     const { data: sessions, error } = await supabase
       .from("posture_sessions")
@@ -326,14 +364,14 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await updateStreakAndActivity(userId);
+      const newStreak = await getCurrentStreak(userId);
       const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
       await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
         .eq("user_id", userId)
         .eq("date", dateKey);
-      console.log(`[postureSync] sup_score=${supScore} (quality=${Math.round((avgShs ?? 0) / 100 * 50)} showing_up=${computeShowingUpScore(totalDeskMs)} streak=${Math.min(20, newStreak * 3)})`);
+      console.log(`[postureSync] sup_score=${supScore}`);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -342,53 +380,81 @@ export async function rebuildDailyFromSessions(
 
 // ── Sup Score helpers ─────────────────────────────────────────────────────────
 
-function computeShowingUpScore(totalDeskMs: number): number {
-  if (totalDeskMs <= 0) return 0;
-  const base = 15;
-  let duration = 0;
-  if      (totalDeskMs >= 120 * 60_000) duration = 15;
-  else if (totalDeskMs >=  60 * 60_000) duration = 10;
-  else if (totalDeskMs >=  30 * 60_000) duration = 5;
-  return base + duration;
-}
+// Credit (0–100) earned per tracked minute in each posture state.
+const POSTURE_CREDIT: Record<DeskPostureState, number> = {
+  upright:      100,
+  transition:    75,
+  forward_lean:  50,
+  tilted_left:   50,
+  tilted_right:  50,
+  slouched:      25,
+  severe:         0,
+};
 
-function computeSupScore(avgShs: number | null, totalDeskMs: number, streak: number): number {
-  const quality    = avgShs != null ? (avgShs / 100) * 50 : 0;
-  const showingUp  = computeShowingUpScore(totalDeskMs);
-  const streakPts  = Math.min(20, streak * 3);
-  return Math.round(quality + showingUp + streakPts);
-}
+// Every day starts as if it already had SUP_SCORE_PRIOR_MS of average
+// (SUP_SCORE_PRIOR_SCORE) posture tracked. Short sessions therefore stay near
+// 50 instead of swinging to 0 or 100, and the score settles onto the user's
+// real posture as tracked time grows (half-weight at 10 min, ~86% at 1 hour).
+const SUP_SCORE_PRIOR_SCORE = 50;
+const SUP_SCORE_PRIOR_MS    = 10 * 60_000;
 
-function formatLocalDateKey(date: Date): string {
-  const year  = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day   = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+/**
+ * Daily s'up s'core, 0–100: time-weighted posture credit across the day's
+ * tracked time, blended with a 10-minute prior of 50. Null if nothing was
+ * tracked (a day off has no score rather than a free 50).
+ */
+function computeSupScore(stateTotals: StateTotals): number | null {
+  let trackedMs = 0;
+  let creditMs  = 0;
+  for (const state of ALL_STATES) {
+    const ms = stateTotals[state] ?? 0;
+    trackedMs += ms;
+    creditMs  += ms * POSTURE_CREDIT[state];
+  }
+  if (trackedMs <= 0) return null;
+  return Math.round(
+    (creditMs + SUP_SCORE_PRIOR_SCORE * SUP_SCORE_PRIOR_MS) / (trackedMs + SUP_SCORE_PRIOR_MS)
+  );
 }
 
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return {
-    todayLocal:     formatLocalDateKey(now),
-    yesterdayLocal: formatLocalDateKey(yesterday),
-  };
+  const todayLocal = toLocalDateKey();
+  return { todayLocal, yesterdayLocal: addDaysToDateKey(todayLocal, -1) };
 }
 
 /**
- * Updates current_streak and last_activity_date in profiles.
- * Returns the new streak value so the caller can compute sup_score.
- *
- * Uses existing profile values — no need to fetch all posture_daily dates:
- *   last_activity == today     → streak unchanged (multiple sessions same day)
+ * Reads current_streak for sup_score. Read-only — the streak is maintained by
+ * checkStreakOnAppOpen, which has always run before a session can end.
+ */
+async function getCurrentStreak(userId: string): Promise<number> {
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("current_streak")
+      .eq("id", userId)
+      .single();
+
+    if (error) { console.warn("[postureSync] getCurrentStreak fetch failed", error); return 1; }
+    return Math.max(1, Number(profile?.current_streak ?? 1));
+  } catch (e) {
+    console.warn("[postureSync] getCurrentStreak threw", e);
+    return 1;
+  }
+}
+
+/**
+ * Updates current_streak and last_activity_date in profiles. Call when a user logs
+ * in, the app cold-starts with a session, or the app returns to the foreground —
+ * opening the app is what counts as a streak day:
+ *   last_activity == today     → streak unchanged (already opened today)
  *   last_activity == yesterday → streak + 1 (extending run)
  *   anything older             → streak resets to 1 (gap broke it)
+ * Idempotent within a day, so repeated opens are safe.
  *
  * Dates are the device's local calendar day, matching how "today" is defined
  * elsewhere in the app (daily.tsx, home.tsx) — not UTC.
  */
-async function updateStreakAndActivity(userId: string): Promise<number> {
+export async function checkStreakOnAppOpen(userId: string): Promise<void> {
   try {
     const { todayLocal, yesterdayLocal } = getLocalDateKeys();
 
@@ -398,69 +464,24 @@ async function updateStreakAndActivity(userId: string): Promise<number> {
       .eq("id", userId)
       .single();
 
-    if (error) { console.warn("[postureSync] updateStreakAndActivity fetch failed", error); return 1; }
+    if (error) { console.warn("[postureSync] checkStreakOnAppOpen fetch failed", error); return; }
 
     const prev       = profile?.last_activity_date as string | null;
     const prevStreak = Number(profile?.current_streak ?? 0);
 
-    let streak: number;
-    if (prev === todayLocal) {
-      streak = prevStreak;      // second session today — no change
-    } else if (prev === yesterdayLocal) {
-      streak = prevStreak + 1;  // consecutive day — extend
-    } else {
-      streak = 1;               // gap or first ever session
-    }
+    if (prev === todayLocal) return; // already opened today — no change
+
+    const streak = prev === yesterdayLocal ? prevStreak + 1 : 1;
 
     const { error: profileError } = await supabase
       .from("profiles")
       .update({ current_streak: streak, last_activity_date: todayLocal })
       .eq("id", userId);
 
-    if (profileError) console.warn("[postureSync] updateStreakAndActivity update failed", profileError);
+    if (profileError) console.warn("[postureSync] checkStreakOnAppOpen update failed", profileError);
     else console.log(`[postureSync] streak=${streak} last_activity=${todayLocal}`);
-
-    return streak;
   } catch (e) {
-    console.warn("[postureSync] updateStreakAndActivity threw", e);
-    return 1;
-  }
-}
-
-/**
- * Call once when a user logs in / the app opens with a session already active.
- * Does NOT increment the streak — logging in isn't "using the S'pots". It only
- * catches a broken streak early: if the user's last real session (last_activity_date)
- * isn't today or yesterday, the gap already broke the streak, so we zero it out
- * immediately instead of leaving the old count displayed until their next session.
- */
-export async function checkStreakOnLogin(userId: string): Promise<void> {
-  try {
-    const { todayLocal, yesterdayLocal } = getLocalDateKeys();
-
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("current_streak, last_activity_date")
-      .eq("id", userId)
-      .single();
-
-    if (error) { console.warn("[postureSync] checkStreakOnLogin fetch failed", error); return; }
-
-    const lastActivity = profile?.last_activity_date as string | null;
-    const prevStreak    = Number(profile?.current_streak ?? 0);
-
-    const streakIsIntact = lastActivity === todayLocal || lastActivity === yesterdayLocal;
-    if (streakIsIntact || prevStreak === 0) return;
-
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ current_streak: 0 })
-      .eq("id", userId);
-
-    if (profileError) console.warn("[postureSync] checkStreakOnLogin reset failed", profileError);
-    else console.log(`[postureSync] streak reset to 0 on login (last_activity=${lastActivity ?? "never"})`);
-  } catch (e) {
-    console.warn("[postureSync] checkStreakOnLogin threw", e);
+    console.warn("[postureSync] checkStreakOnAppOpen threw", e);
   }
 }
 
@@ -532,9 +553,7 @@ export async function fetchDailyPosturePair(
     console.warn("[postureSync] fetchDailyPosturePair: invalid dateKey", dateKey);
     return empty;
   }
-  const prevDate = new Date(targetDate);
-  prevDate.setUTCDate(prevDate.getUTCDate() - 1);
-  const prevDateKey = prevDate.toISOString().slice(0, 10);
+  const prevDateKey = addDaysToDateKey(dateKey, -1);
 
   try {
     const { data, error } = await supabase
@@ -731,11 +750,7 @@ export async function fetchLast7DaysPosture(
 
   // Build array of last 7 date keys
   const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(`${todayKey}T00:00:00.000Z`);
-    d.setUTCDate(d.getUTCDate() - i);
-    dates.push(d.toISOString().slice(0, 10));
-  }
+  for (let i = 0; i < 7; i++) dates.push(addDaysToDateKey(todayKey, -i));
 
   const { data, error } = await supabase
     .from("posture_daily")

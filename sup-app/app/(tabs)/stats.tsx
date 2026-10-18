@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Animated,
+  Easing,
   Dimensions,
   PanResponder,
   Modal,
@@ -28,6 +29,7 @@ import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -60,11 +62,11 @@ const SEGMENT_LABELS: Record<string, string> = {
 const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   trend: {
     title: "s'core trend",
-    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or week's, or month's) score out of 100; tap a bar to see that period's exact score.",
+    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or the average of the week's, or month's) score out of 100; tap a bar to see that period's exact score.",
   },
   session: {
     title: "s'ession time",
-    body: "how long you tracked posture sessions in each period. more tracked time contributes to your s'up s'core's \"showing up\" component.",
+    body: "how long you tracked posture sessions in each period. the more you track, the more your s'up s'core reflects your real posture.",
   },
   breakdown: {
     title: "posture breakdown",
@@ -149,9 +151,8 @@ function getPageCountFromRows(rows: PosturePageRow[], range: Range): number {
 }
 
 
-function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
-}
+// Phone-local YYYY-MM-DD — must match how posture_daily.date is written.
+const toDateKey = (d: Date): string => toLocalDateKey(d);
 
 type FullStateTotals = Required<Omit<StateTotals, "transition">>;
 
@@ -192,7 +193,6 @@ function sessionMinsOf(row: PosturePageRow | undefined): number {
 // query per page, serially, on every range change.
 function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   const now    = new Date();
-  const MS_DAY = 86_400_000;
   const PAGES  = getPageCountFromRows(history, range);
 
   // Rows arrive sorted by date, so a filtered slice keeps that order — matching
@@ -206,10 +206,13 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   for (let p = 0; p < PAGES; p++) {
     const stateTotals: FullStateTotals = emptyStateTotals();
     if (range === "week") {
-      const end   = new Date(now.getTime() - p * 7 * MS_DAY);
-      const start = new Date(end.getTime() - 6 * MS_DAY);
+      // Calendar-day steps (setDate) rather than fixed 24h ms steps, so a
+      // daylight-saving change can't shift a bar onto the wrong day.
+      const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - p * 7);
+      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
 
-      const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * MS_DAY));
+      const days = Array.from({ length: 7 }, (_, i) =>
+        new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
       const dayKeys = days.map(toDateKey);
       const dayRows = dayKeys.map((k) => rowByDate.get(k));
 
@@ -383,12 +386,14 @@ const popupStyles = StyleSheet.create({
 function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range) => void }) {
   const RANGES: Range[] = ["week", "month", "year"];
   const TAB_W   = (SCREEN_W - 40 - 8) / 3;
-  const bubbleX = useRef(new Animated.Value(0)).current;
+  // Centres the 60px-wide bubble under tab r
+  const bubbleOffset = (r: Range) => RANGES.indexOf(r) * TAB_W + (TAB_W / 2 - 30);
+  // Start under the initially selected tab, not at x=0
+  const bubbleX = useRef(new Animated.Value(bubbleOffset(range))).current;
 
   const handlePress = (r: Range) => {
-    const idx = RANGES.indexOf(r);
     Animated.spring(bubbleX, {
-      toValue: idx * TAB_W + (TAB_W / 2 - 30),
+      toValue: bubbleOffset(r),
       damping: 15, stiffness: 140, useNativeDriver: true,
     }).start();
     onChange(r);
@@ -444,6 +449,14 @@ const rangeStyles = StyleSheet.create({
 
 // Swipeable card
 
+const SWIPE_DISTANCE   = 40;   // px past which a release changes page
+const SWIPE_VELOCITY   = 0.3;  // or a quick flick, in px/ms
+const EDGE_RESISTANCE  = 0.25; // rubber-band drag when there's no page that way
+const CARD_PADDING_X   = 18;   // matches styles.card padding
+const PAGE_W           = CARD_W - CARD_PADDING_X * 2;
+// Pages sit a full card-padding apart so a neighbour starts just past the card edge
+const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
+
 function SwipeCard({
   pages,
   renderPage,
@@ -464,18 +477,61 @@ function SwipeCard({
 
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
+  const pageIdxRef = useRef(pageIdx);
+  pageIdxRef.current = pageIdx;
+
+  // Carousel: every page has a fixed slot in one row (only the current page and
+  // its neighbours are rendered), and the row slides to the target slot. The
+  // next page is already mounted when a swipe lands, so there's no blank frame.
+  const offset       = useRef(new Animated.Value(0)).current;
+  const animatingRef = useRef(false);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder:  (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponder:  (_, g) =>
+        !animatingRef.current && Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => offset.stopAnimation(),
+      onPanResponderMove: (_, g) => {
+        const maxIdx = pagesRef.current.length - 1;
+        const atEdge = (g.dx > 0 && pageIdxRef.current <= 0) || (g.dx < 0 && pageIdxRef.current >= maxIdx);
+        offset.setValue(-pageIdxRef.current * PAGE_STRIDE + (atEdge ? g.dx * EDGE_RESISTANCE : g.dx));
+      },
       onPanResponderRelease: (_, g) => {
         const maxIdx = pagesRef.current.length - 1;
-        if (g.dx < -40) setPageIdx((p) => Math.min(p + 1, maxIdx));
-        else if (g.dx > 40) setPageIdx((p) => Math.max(p - 1, 0));
+        const dir: 1 | -1 | 0 =
+          g.dx < -SWIPE_DISTANCE || g.vx < -SWIPE_VELOCITY ? 1 :
+          g.dx >  SWIPE_DISTANCE || g.vx >  SWIPE_VELOCITY ? -1 : 0;
+        const next = pageIdxRef.current + dir;
+        if (dir === 0 || next < 0 || next > maxIdx) {
+          settleOn(pageIdxRef.current);
+          return;
+        }
+        settleOn(next);
       },
+      onPanResponderTerminate: () => settleOn(pageIdxRef.current),
     })
   ).current;
+
+  function settleOn(idx: number) {
+    animatingRef.current = true;
+    Animated.timing(offset, {
+      toValue: -idx * PAGE_STRIDE,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      animatingRef.current = false;
+      if (idx !== pageIdxRef.current) setPageIdx(idx);
+    });
+  }
+
+  // Keep the row on the current slot when the page changes without a swipe
+  // (e.g. the range reset back to page 0).
+  useEffect(() => {
+    if (!animatingRef.current) offset.setValue(-pageIdx * PAGE_STRIDE);
+  }, [pageIdx, offset]);
 
   useEffect(() => {
     onPageChange?.();
@@ -483,7 +539,6 @@ function SwipeCard({
   }, [pageIdx]);
 
   const currentPage = pages[pageIdx] ?? pages[0];
-  const prevPage    = pages[pageIdx + 1] ?? null;
   // Extra guard against the one-render gap between a resetKey change and the
   // deferred setPageIdx(0) above actually landing (e.g. switching from a
   // long range straight to a short one) — keeps the counter's numerator from
@@ -495,9 +550,15 @@ function SwipeCard({
       <Text style={swipeStyles.dateRange}>
         {currentPage.startDate} – {currentPage.endDate}
       </Text>
-      <Animated.View {...panResponder.panHandlers}>
-        {renderPage(currentPage, prevPage)}
-      </Animated.View>
+      <View style={swipeStyles.clip} {...panResponder.panHandlers}>
+        <Animated.View style={[swipeStyles.row, { transform: [{ translateX: offset }] }]}>
+          {pages.map((p, i) => (
+            <View key={i} style={swipeStyles.page}>
+              {Math.abs(i - displayIdx) <= 1 ? renderPage(p, pages[i + 1] ?? null) : null}
+            </View>
+          ))}
+        </Animated.View>
+      </View>
 
       {pages.length > 1 && (
         <>
@@ -512,6 +573,11 @@ function SwipeCard({
 }
 
 const swipeStyles = StyleSheet.create({
+  // Bleeds to the card's edges so a swiped page clips at the card, not its padding.
+  // Always clipped: neighbouring pages sit just outside it (popups use a Modal).
+  clip: { marginHorizontal: -CARD_PADDING_X, paddingHorizontal: CARD_PADDING_X, overflow: "hidden" },
+  row:  { flexDirection: "row", alignItems: "flex-start", gap: CARD_PADDING_X * 2 },
+  page: { width: PAGE_W },
   dateRange: {
     fontFamily: "Agrandir-Regular", fontSize: 10,
     color: "rgba(29,1,74,0.38)", marginBottom: 4,
@@ -894,7 +960,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  this is your s'up s'core trend. each bar is one day's (or week's, or month's) score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
+                  this is your s'up s'core trend. each bar is one day's (or the average of the week's, or month's) score out of 100. tap a bar to see the exact number.
                 </Text>
                 <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -934,7 +1000,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  s'ession time is how long you tracked posture in each period. more tracked time boosts the "showing up" part of your s'up s'core.
+                  s'ession time is how long you tracked posture in each period. the more you track, the more your s'up s'core reflects your real posture.
                 </Text>
                 <Pressable onPress={() => setTutorialStep("stats-tip-breakdown")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -993,7 +1059,7 @@ export default function StatsScreen() {
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more. tap any "?" anytime for the full details.
+                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more.
                 </Text>
                 <Pressable
                   onPress={() => {
