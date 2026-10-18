@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform, Image } from "react-native";
+import { StyleSheet, View, Text, TextInput, KeyboardAvoidingView, ScrollView, Platform, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -97,14 +98,14 @@ export default function DetailsScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
         <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
-      </TouchableOpacity>
+      </PressFeedback>
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -168,12 +169,12 @@ export default function DetailsScreen() {
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <TouchableOpacity
+          <PressFeedback
             style={[styles.nextBtn, !isValid && styles.nextBtnDisabled]}
             onPress={handleNext}
           >
             <Text style={styles.nextBtnText}>next</Text>
-          </TouchableOpacity>
+          </PressFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -202,15 +203,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingBottom: 200,
-    paddingTop: 0,
+    paddingBottom: 0,
+    paddingTop: -10,
   },
   heading: {
     fontSize: 36,
     fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     marginBottom: 0,
-    marginTop: -10,
+    marginTop: 0,
     textAlign: "center",
   },
   subheading: {

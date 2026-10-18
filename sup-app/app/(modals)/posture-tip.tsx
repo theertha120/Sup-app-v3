@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import { View, Text, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { colours } from "@/theme/colours";
 
@@ -12,9 +13,9 @@ export default function PostureTipScreen() {
         holding this posture for 30 seconds while breathing calmly.
       </Text>
 
-      <Pressable style={styles.button} onPress={() => router.back()}>
+      <PressFeedback style={styles.button} onPress={() => router.back()}>
         <Text style={styles.buttonText}>Done</Text>
-      </Pressable>
+      </PressFeedback>
     </View>
   );
 }

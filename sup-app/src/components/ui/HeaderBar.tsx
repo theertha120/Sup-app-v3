@@ -1,8 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
-  Pressable,
   StyleSheet,
   Modal,
   TouchableWithoutFeedback,
@@ -213,19 +214,16 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         {/* Icon row */}
         <View style={styles.headerButtons}>
  
-          <Pressable
-            style={[styles.iconButton, tutorialStep === "header-settings-tip" && styles.iconButtonHighlighted]}
-            onPress={handleSettingsPress}
-          >
+          <PressFeedback style={styles.iconButton} onPress={handleSettingsPress}>
             <Ionicons name="settings-outline" size={22} color={PRIMARY_TEXT} />
-          </Pressable>
+          </PressFeedback>
  
-          <Pressable
-            style={[styles.iconButton, tutorialStep === "header-sensor-tip" && styles.iconButtonHighlighted]}
+          <PressFeedback
+            style={styles.iconButton}
             onPress={() => router.push("/sensor-setup")}
           >
             <Ionicons name="hardware-chip-outline" size={22} color={PRIMARY_TEXT} />
-          </Pressable>
+          </PressFeedback>
  
           {/* Streak badge — not pressable */}
           <View style={[
@@ -241,7 +239,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
  
           {/* Profile icon — measure position for dropdown */}
           <View ref={profileButtonRef} collapsable={false}>
-            <Pressable
+            <PressFeedback
               style={[
                 styles.iconButton,
                 tutorialStep === "add-friends-tip" && styles.iconButtonHighlighted,
@@ -249,7 +247,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
               onPress={openDropdown}
             >
               <Ionicons name="person-circle-outline" size={22} color={PRIMARY_TEXT} />
-            </Pressable>
+            </PressFeedback>
           </View>
         </View>
       </View>
@@ -259,19 +257,19 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
           <View style={[styles.tutorialTipCaret, { marginRight: caretRightFor(headerTip.slot) }]} />
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../../../assets/images/mascot.png")}
+              source={require("../../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>{headerTip.text}</Text>
-              <Pressable
-                onPress={() => (headerTip.next ? setTutorialStep(headerTip.next) : dismissTutorial())}
-              >
-                <Text style={styles.tutorialTipNext}>
-                  {headerTip.next ? "next" : "start exploring the app!"}
-                </Text>
-              </Pressable>
+              <Text style={styles.tutorialTipText}>
+                add friends by username by choosing the profile icon here. then you're all set!
+              </Text>
+              <TutorialActions>
+                <PressFeedback feedback="link" onPress={dismissTutorial}>
+                  <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
+                </PressFeedback>
+              </TutorialActions>
             </View>
           </View>
         </View>
@@ -294,10 +292,10 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
                 ]}
               >
                 {/* Username row */}
-                <Pressable style={styles.dropdownRow} onPress={handleEditUsername}>
+                <PressFeedback style={styles.dropdownRow} onPress={handleEditUsername}>
                   <Text style={styles.dropdownUsername}>{username}</Text>
                   <Ionicons name="pencil-outline" size={15} color={PRIMARY_TEXT} />
-                </Pressable>
+                </PressFeedback>
  
                 <View style={styles.divider} />
  
@@ -310,17 +308,17 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
                 <View style={styles.divider} />
  
                 {/* Friends */}
-                <Pressable style={styles.dropdownRow} onPress={handleOpenFriends}>
+                <PressFeedback style={styles.dropdownRow} onPress={handleOpenFriends}>
                   <Text style={styles.dropdownLabel}>friends</Text>
                   <Ionicons name="people-outline" size={18} color={PRIMARY_TEXT} />
-                </Pressable>
+                </PressFeedback>
  
                 <View style={styles.divider} />
  
                 {/* Log out */}
-                <Pressable style={styles.dropdownRow} onPress={handleLogOut}>
+                <PressFeedback style={styles.dropdownRow} onPress={handleLogOut}>
                   <Text style={styles.dropdownLogout}>log out</Text>
-                </Pressable>
+                </PressFeedback>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -357,15 +355,15 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
                   maxLength={30}
                 />
                 <View style={styles.editActions}>
-                  <Pressable
+                  <PressFeedback
                     style={styles.editCancel}
                     onPress={() => setEditingUsername(false)}
                   >
                     <Text style={styles.editCancelText}>cancel</Text>
-                  </Pressable>
-                  <Pressable style={styles.editSave} onPress={handleSaveUsername}>
+                  </PressFeedback>
+                  <PressFeedback style={styles.editSave} onPress={handleSaveUsername}>
                     <Text style={styles.editSaveText}>save</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </View>
               </View>
             </TouchableWithoutFeedback>

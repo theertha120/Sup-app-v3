@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, Image } from "react-native";
+import { StyleSheet, View, Text, TextInput, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
@@ -35,9 +36,9 @@ export default function Question5Screen() {
       style={styles.container}
     >
       <View style={styles.topNav}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
           <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
-        </TouchableOpacity>
+        </PressFeedback>
         <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
@@ -53,32 +54,32 @@ export default function Question5Screen() {
       </View>
 
       <View style={styles.options}>
-        <TouchableOpacity
+        <PressFeedback
           style={[styles.option, selected === "A" && styles.optionSelected]}
           onPress={() => handleSelect("A")}
         >
           <Text style={[styles.optionText, selected === "A" && styles.optionTextSelected]}>
             A) Asking my friend who drinks enough water to remind me every time they drink water.
           </Text>
-        </TouchableOpacity>
+        </PressFeedback>
 
-        <TouchableOpacity
+        <PressFeedback
           style={[styles.option, selected === "B" && styles.optionSelected]}
           onPress={() => handleSelect("B")}
         >
           <Text style={[styles.optionText, selected === "B" && styles.optionTextSelected]}>
             B) Listening to my body and just checking in with myself, am I actually thirsty or just tired.
           </Text>
-        </TouchableOpacity>
+        </PressFeedback>
 
-        <TouchableOpacity
+        <PressFeedback
           style={[styles.option, selected === "C" && styles.optionSelected]}
           onPress={() => handleSelect("C")}
         >
           <Text style={[styles.optionText, selected === "C" && styles.optionTextSelected]}>
             C) Other
           </Text>
-        </TouchableOpacity>
+        </PressFeedback>
 
         {selected === "C" && (
           <View>
@@ -90,12 +91,12 @@ export default function Question5Screen() {
               onChangeText={setOtherText}
               multiline
             />
-            <TouchableOpacity
+            <PressFeedback
               style={[styles.doneBtn, !otherText.trim() && styles.doneBtnDisabled]}
               onPress={() => { if (otherText.trim()) router.push("/onboarding/question6" as any); }}
             >
               <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
+            </PressFeedback>
           </View>
         )}
       </View>

@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import { StyleSheet, Text, View } from "react-native";
 import { useFonts } from "expo-font";
 import type { BehaviorGoalId } from "@/src/services/user/behaviorProfileService";
 import React from "react";
@@ -58,14 +59,14 @@ function Chip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressFeedback
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
       <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

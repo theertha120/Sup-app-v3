@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * BrandAlert.tsx
  *
@@ -9,7 +10,7 @@
 
 import React from "react";
 import {
-  Modal, View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback,
+  Modal, View, Text, StyleSheet, TouchableWithoutFeedback,
 } from "react-native";
 
 export interface BrandAlertButton {
@@ -55,7 +56,7 @@ export function BrandAlert({
                 {buttons.map((btn, i) => {
                   const solid = btn.style === "default" || btn.style === undefined;
                   return (
-                    <TouchableOpacity
+                    <PressFeedback
                       key={`${btn.text}-${i}`}
                       style={[s.btn, solid ? s.btnPrimary : s.btnGhost]}
                       onPress={() => handlePress(btn)}
@@ -70,7 +71,7 @@ export function BrandAlert({
                       >
                         {btn.text}
                       </Text>
-                    </TouchableOpacity>
+                    </PressFeedback>
                   );
                 })}
               </View>

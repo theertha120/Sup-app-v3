@@ -1,10 +1,10 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
@@ -75,7 +75,7 @@ export default function SupsonaBuilderScreen() {
   useEffect(() => {
     fetchCurrentUserProfileWithStats()
       .then((profile) => {
-        const parsed = parseSupsona(profile.avatar);
+        const parsed = parseSupsona(profile?.avatar);
         if (parsed) setSupsona(parsed);
       })
       .catch(() => setError("Could not load your profile"))
@@ -109,9 +109,9 @@ export default function SupsonaBuilderScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+        <PressFeedback onPress={() => router.back()} style={styles.closeBtn}>
           <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+        </PressFeedback>
         <Text style={styles.title}>Create your Supsona</Text>
         <Text style={styles.subtitle}>Customise your avatar</Text>
       </View>
@@ -195,7 +195,7 @@ export default function SupsonaBuilderScreen() {
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Pressable
+      <PressFeedback
         style={[styles.saveButton, saving && styles.saveButtonDisabled]}
         onPress={handleSave}
         disabled={saving}
@@ -205,7 +205,7 @@ export default function SupsonaBuilderScreen() {
         ) : (
           <Text style={styles.saveButtonText}>Save Supsona</Text>
         )}
-      </Pressable>
+      </PressFeedback>
 
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -237,7 +237,7 @@ function OptionChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressFeedback
       style={[sectionStyles.chip, selected && sectionStyles.chipSelected]}
       onPress={onPress}
     >
@@ -246,7 +246,7 @@ function OptionChip({
       >
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

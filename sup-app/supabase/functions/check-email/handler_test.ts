@@ -6,7 +6,11 @@ const request = (body: unknown) =>
     method: "POST",
     body: JSON.stringify(body),
   });
-const user = (email: string) => ({ id: email, email });
+const user = (email: string) => ({
+  id: email,
+  email,
+  email_confirmed_at: "2026-10-18T00:00:00Z",
+});
 
 Deno.test("finds normalized existing email beyond page ten, including short pages", async () => {
   const pages: number[] = [];
@@ -24,6 +28,27 @@ Deno.test("finds normalized existing email beyond page ten, including short page
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), { exists: true });
   assert.equal(pages.length, 12);
+});
+
+Deno.test("matching unverified accounts can retry signup", async () => {
+  for (const confirmedAt of [null, undefined]) {
+    const pages: number[] = [];
+    const handler = createHandler(() => async ({ page }) => {
+      pages.push(page);
+      return {
+        data: {
+          users: page === 1
+            ? [user("other@example.com")]
+            : [{ ...user("Test@Example.com"), email_confirmed_at: confirmedAt }],
+        },
+        error: null,
+      };
+    });
+    const res = await handler(request({ email: " TEST@example.com " }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { exists: false });
+    assert.deepEqual(pages, [1, 2]);
+  }
 });
 
 Deno.test("only confirms unused email after reaching an empty page", async () => {

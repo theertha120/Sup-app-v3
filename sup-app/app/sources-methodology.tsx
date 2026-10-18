@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * sources-methodology.tsx
  *
@@ -9,7 +10,7 @@
  */
 
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Linking } from "react-native";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { colours } from "../theme/colours";
@@ -76,11 +77,11 @@ async function openCitation(url: string) {
 
 function CitationRow({ citation }: { citation: Citation }) {
   return (
-    <Pressable style={styles.citationRow} onPress={() => openCitation(citation.url)}>
+    <PressFeedback style={styles.citationRow} onPress={() => openCitation(citation.url)}>
       <Text style={styles.citationTitle}>{citation.title}</Text>
       <Text style={styles.citationMeta}>{citation.authors} — {citation.venue}</Text>
       <Text style={styles.citationLink} numberOfLines={1}>{citation.url}</Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 
@@ -97,9 +98,9 @@ export default function SourcesMethodologyScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backIcon}>←</Text>
-        </Pressable>
+        </PressFeedback>
         <Text style={styles.headerTitle}>sources & methodology</Text>
         <View style={styles.placeholder} />
       </View>

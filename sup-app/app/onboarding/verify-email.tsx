@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, Pressable, Image } from "react-native";
+import { StyleSheet, View, Text, TextInput, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -128,13 +129,13 @@ export default function VerifyEmailScreen() {
           style={styles.codeInput}
         />
 
-        <Pressable
+        <PressFeedback
           style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
           onPress={() => handleVerify(code)}
           disabled={code.length !== CODE_LENGTH || verifying}
         >
           <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
-        </Pressable>
+        </PressFeedback>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>

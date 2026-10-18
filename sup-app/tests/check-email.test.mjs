@@ -80,11 +80,15 @@ test('signup screen blocks existing/failed checks and routes a new email to veri
   }
 });
 
-test('signed-out Supabase SDK reaches the handler and returns both existence outcomes', async () => {
+test('signed-out signup blocks verified accounts but allows unverified and unused emails', async () => {
   const { createClient } = await import('@supabase/supabase-js');
   const { createHandler } = await import('../supabase/functions/check-email/handler.ts');
   const handler = createHandler(() => async ({page}) => ({
-    data: {users: page === 1 ? [{id: 'fixture', email: 'existing@example.com'}] : []}, error: null,
+    data: {users: page === 1 ? [
+      {id: 'verified', email: 'existing@example.com', email_confirmed_at: '2026-10-18T00:00:00Z'},
+      {id: 'unverified', email: 'unverified@example.com', email_confirmed_at: null},
+      {id: 'unconfirmed', email: 'unconfirmed@example.com'},
+    ] : []}, error: null,
   }));
   const client = createClient(normalizeSupabaseUrl('https://project.supabase.co/rest/v1/'), 'fixture-anon-key', {
     auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false},
@@ -97,7 +101,12 @@ test('signed-out Supabase SDK reaches the handler and returns both existence out
     }},
   });
   assert.equal((await client.auth.getSession()).data.session, null);
-  for (const [email, exists] of [['existing@example.com', true], ['unused@example.com', false]]) {
+  for (const [email, exists] of [
+    ['existing@example.com', true],
+    [' UNVERIFIED@example.com ', false],
+    ['unconfirmed@example.com', false],
+    ['unused@example.com', false],
+  ]) {
     assert.deepEqual(await checkEmailRegistered(email, (name, options) => client.functions.invoke(name, options)),
       {success: true, exists});
   }

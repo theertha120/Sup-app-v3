@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
@@ -252,9 +253,9 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>Friends</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <PressFeedback onPress={onClose} hitSlop={8}>
               <Ionicons name="close" size={22} color={PRIMARY_TEXT} />
-            </Pressable>
+            </PressFeedback>
           </View>
 
           <ScrollView
@@ -294,14 +295,14 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                             </View>
 
                             {status === "none" ? (
-                              <Pressable
+                              <PressFeedback
                                 style={[styles.actionBtn, styles.acceptBtn]}
                                 onPress={() => handleSendRequest(user)}
                               >
                                 <Text style={styles.actionTextLight}>Send</Text>
-                              </Pressable>
+                              </PressFeedback>
                             ) : status === "incoming" ? (
-                              <Pressable
+                              <PressFeedback
                                 style={[styles.actionBtn, styles.acceptBtn]}
                                 onPress={() => {
                                   const pending = incomingRequests.find(
@@ -311,9 +312,9 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                                 }}
                               >
                                 <Text style={styles.actionTextLight}>Accept</Text>
-                              </Pressable>
+                              </PressFeedback>
                             ) : status === "outgoing" ? (
-                              <Pressable
+                              <PressFeedback
                                 style={[styles.actionBtn, styles.rejectBtn]}
                                 onPress={() => {
                                   const pending = outgoingRequests.find(
@@ -323,7 +324,7 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                                 }}
                               >
                                 <Text style={styles.actionText}>Cancel</Text>
-                              </Pressable>
+                              </PressFeedback>
                             ) : null}
                           </View>
                         );
@@ -347,18 +348,18 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                         <Text style={styles.userName}>{getUserDisplayName(request.fromUserId)}</Text>
                         <Text style={styles.userStatus}>Incoming friend request</Text>
                       </View>
-                      <Pressable
+                      <PressFeedback
                         style={[styles.actionBtn, styles.acceptBtn]}
                         onPress={() => handleAcceptRequest(request.id)}
                       >
                         <Text style={styles.actionTextLight}>Accept</Text>
-                      </Pressable>
-                      <Pressable
+                      </PressFeedback>
+                      <PressFeedback
                         style={[styles.actionBtn, styles.rejectBtn]}
                         onPress={() => handleRejectRequest(request.id)}
                       >
                         <Text style={styles.actionText}>Reject</Text>
-                      </Pressable>
+                      </PressFeedback>
                     </View>
                   ))
                 )}
@@ -378,12 +379,12 @@ export default function FriendsModal({ visible, onClose, currentUserId }: Friend
                         <Text style={styles.userName}>{getUserDisplayName(request.toUserId)}</Text>
                         <Text style={styles.userStatus}>Request sent</Text>
                       </View>
-                      <Pressable
+                      <PressFeedback
                         style={[styles.actionBtn, styles.rejectBtn]}
                         onPress={() => handleCancelRequest(request.id)}
                       >
                         <Text style={styles.actionText}>Cancel</Text>
-                      </Pressable>
+                      </PressFeedback>
                     </View>
                   ))
                 )}

@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import { useState, useEffect } from "react";
 import {
   View,
@@ -171,9 +172,9 @@ export default function ProfileModal({
               <Text style={styles.title}>
                 {isEditing ? "Edit Profile" : "User Profile"}
               </Text>
-              <Pressable onPress={handleClose} style={styles.closeButton}>
+              <PressFeedback onPress={handleClose} style={styles.closeButton}>
                 <Text style={styles.closeText}>✕</Text>
-              </Pressable>
+              </PressFeedback>
             </View>
 
             {/* Avatar (Supsona or default initials) */}
@@ -222,7 +223,7 @@ export default function ProfileModal({
                     <>
                       <Text style={styles.name}>{displayName(profileData) || "Loading..."}</Text>
                       {isCurrentUser && (
-                        <Pressable
+                        <PressFeedback
                           style={styles.supsonaButton}
                           onPress={() => {
                             onClose();
@@ -230,7 +231,7 @@ export default function ProfileModal({
                           }}
                         >
                           <Text style={styles.supsonaButtonText}>Customise Supsona</Text>
-                        </Pressable>
+                        </PressFeedback>
                       )}
                     </>
                   )}
@@ -259,15 +260,15 @@ export default function ProfileModal({
             <View style={styles.actions}>
               {isEditing ? (
                 <>
-                  <Pressable
+                  <PressFeedback
                     style={[styles.button, styles.buttonSecondary]}
                     onPress={handleCancel}
                     disabled={isSaving}
                   >
                     <Text style={styles.buttonTextSecondary}>Cancel</Text>
-                  </Pressable>
+                  </PressFeedback>
 
-                  <Pressable
+                  <PressFeedback
                     style={[
                       styles.button,
                       styles.buttonPrimary,
@@ -281,17 +282,17 @@ export default function ProfileModal({
                     ) : (
                       <Text style={styles.buttonTextPrimary}>Save</Text>
                     )}
-                  </Pressable>
+                  </PressFeedback>
                 </>
               ) : (
                 <>
                   {isCurrentUser && (
-                    <Pressable
+                    <PressFeedback
                       style={[styles.button, styles.buttonPrimary]}
                       onPress={handleEdit}
                     >
                       <Text style={styles.buttonTextPrimary}>Edit Profile</Text>
-                    </Pressable>
+                    </PressFeedback>
                   )}
                 </>
               )}

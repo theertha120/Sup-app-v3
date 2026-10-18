@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * QRPairModal.tsx
  *
@@ -26,7 +27,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Modal, View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { Modal, View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { Device } from "react-native-ble-plx";
@@ -164,9 +165,9 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
         <View style={s.sheet}>
           <View style={s.headerRow}>
             <Text style={s.brand}>s'can to pair</Text>
-            <Pressable onPress={handleClose} style={s.closeBtn}>
+            <PressFeedback onPress={handleClose} style={s.closeBtn}>
               <Ionicons name="close" size={20} color="#999" />
-            </Pressable>
+            </PressFeedback>
           </View>
 
           {/* ── Camera permission ── */}
@@ -177,11 +178,11 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
               <Text style={s.permBody}>
                 to scan your pairing QR code, s'up needs permission to use your camera.
               </Text>
-              <Pressable style={s.primaryBtn} onPress={requestPermission}>
+              <PressFeedback style={s.primaryBtn} onPress={requestPermission}>
                 <Text style={s.primaryBtnText}>
                   {permission?.canAskAgain === false ? "open settings to enable" : "grant camera access"}
                 </Text>
-              </Pressable>
+              </PressFeedback>
               {permission?.canAskAgain === false && (
                 <Text style={s.permHint}>
                   camera access was previously denied — enable it in your device Settings app under s'up.
@@ -276,21 +277,21 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
                   </View>
                 )}
 
-                <Pressable
+                <PressFeedback
                   style={[s.primaryBtn, !bothResolved && s.primaryBtnDisabled]}
                   onPress={handleConfirmPair}
                   disabled={!bothResolved}
                 >
                   <Text style={s.primaryBtnText}>connect</Text>
-                </Pressable>
+                </PressFeedback>
 
                 {allClean && (
-                  <Pressable
+                  <PressFeedback feedback="link"
                     onPress={() => { setTop(emptySlot); setBottom(emptySlot); runBleSearch(pairing); }}
                     style={s.rescanLink}
                   >
                     <Text style={s.rescanLinkText}>not right? scan again</Text>
-                  </Pressable>
+                  </PressFeedback>
                 )}
               </View>
             );
@@ -309,9 +310,9 @@ export default function QRPairModal({ visible, onClose, onPaired }: Props) {
             <View style={s.centerBlock}>
               <Ionicons name="checkmark-circle" size={56} color="#4CAF50" />
               <Text style={s.permTitle}>your s'pots are paired</Text>
-              <Pressable style={s.primaryBtn} onPress={handleClose}>
+              <PressFeedback style={s.primaryBtn} onPress={handleClose}>
                 <Text style={s.primaryBtnText}>done</Text>
-              </Pressable>
+              </PressFeedback>
             </View>
           )}
         </View>
@@ -359,9 +360,9 @@ function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
         <View style={s.slotRow}>
           <Ionicons name="alert-circle-outline" size={18} color="#E65100" />
           <Text style={s.slotNotFound}>not found — make sure it's powered on nearby</Text>
-          <Pressable onPress={onRetry} style={s.retryBtn}>
+          <PressFeedback onPress={onRetry} style={s.retryBtn}>
             <Text style={s.retryBtnText}>retry</Text>
-          </Pressable>
+          </PressFeedback>
         </View>
       )}
 
@@ -380,7 +381,7 @@ function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
           </View>
           {candidates.map((d) => (
             <View key={d.id}>
-              <Pressable
+              <PressFeedback
                 style={[s.candidateRow, selected?.id === d.id && s.candidateRowSelected]}
                 onPress={() => onSelect(d)}
               >
@@ -390,7 +391,7 @@ function SlotReview({ slot, label, expectedName, outcome, onSelect, onRetry }: {
                   color={selected?.id === d.id ? "#4CAF50" : colours.primary}
                 />
                 <Text style={s.candidateText}>{d.name} · signal {d.rssi ?? "?"}</Text>
-              </Pressable>
+              </PressFeedback>
               {roleMismatchWarning(d, slot) && (
                 <Text style={s.roleWarning}>⚠️ {roleMismatchWarning(d, slot)}</Text>
               )}

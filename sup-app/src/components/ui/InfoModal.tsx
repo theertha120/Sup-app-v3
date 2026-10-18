@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * InfoModal.tsx
  *
@@ -12,7 +13,7 @@
 
 import React from "react";
 import {
-  Modal, View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback,
+  Modal, View, Text, StyleSheet, TouchableWithoutFeedback,
 } from "react-native";
 import { router } from "expo-router";
 import { colours } from "../../../theme/colours";
@@ -34,13 +35,13 @@ export function InfoButton({
   style?: object;
 }) {
   return (
-    <TouchableOpacity
+    <PressFeedback
       style={[s.button, { backgroundColor: `${color}26` }, style]}
       onPress={onPress}
       hitSlop={8}
     >
       <Text style={[s.buttonLabel, { color }]}>?</Text>
-    </TouchableOpacity>
+    </PressFeedback>
   );
 }
 
@@ -86,18 +87,18 @@ export function InfoModal({
                 </View>
               )}
 
-              <TouchableOpacity onPress={openSources} style={s.sourcesLink}>
+              <PressFeedback feedback="link" onPress={openSources} style={s.sourcesLink}>
                 <Text style={[s.sourcesLinkText, { color: accentColor }]}>
                   view sources & methodology
                 </Text>
-              </TouchableOpacity>
+              </PressFeedback>
 
-              <TouchableOpacity
+              <PressFeedback
                 style={[s.closeBtn, { backgroundColor: accentColor }]}
                 onPress={onClose}
               >
                 <Text style={s.closeBtnText}>got it</Text>
-              </TouchableOpacity>
+              </PressFeedback>
             </View>
           </TouchableWithoutFeedback>
         </View>

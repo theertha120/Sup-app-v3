@@ -1,3 +1,5 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
@@ -26,7 +28,7 @@ import type {
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
-import { useTutorial } from "@/src/contexts/TutorialContext";
+import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
@@ -406,9 +408,9 @@ function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range)
         <View style={rangeStyles.shineBottom} />
         <Animated.View style={[rangeStyles.activeBubble, { transform: [{ translateX: bubbleX }] }]} />
         {RANGES.map((r) => (
-          <Pressable key={r} style={rangeStyles.tab} onPress={() => handlePress(r)}>
+          <PressFeedback feedback="scale" key={r} style={rangeStyles.tab} onPress={() => handlePress(r)}>
             <Text style={[rangeStyles.label, r === range && rangeStyles.labelActive]}>{r}</Text>
-          </Pressable>
+          </PressFeedback>
         ))}
       </BlurView>
     </View>
@@ -859,6 +861,28 @@ const bdStyles = StyleSheet.create({
 export default function StatsScreen() {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
+  const scrollRef = useRef<ScrollView>(null);
+  const tutorialScrollFrame = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+      tutorialScrollFrame.current = null;
+    }
+  }, [tutorialStep]);
+
+  // Measure after the tip is inserted: removing the previous tip also moves
+  // the following cards, so positions saved before Next would be stale.
+  const scrollToTutorialCard = (step: TutorialStep, y: number) => {
+    if (tutorialStep !== step) return;
+    if (tutorialScrollFrame.current !== null) {
+      cancelAnimationFrame(tutorialScrollFrame.current);
+    }
+    tutorialScrollFrame.current = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 48), animated: true });
+      tutorialScrollFrame.current = null;
+    });
+  };
 
   const [range, setRange]             = useState<Range>("week");
   const [resetKey, setResetKey]       = useState("week");
@@ -913,6 +937,7 @@ export default function StatsScreen() {
     <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={closePopup}
@@ -930,9 +955,12 @@ export default function StatsScreen() {
         />
 
         {tutorialStep === "stats-tip" && (
-          <View style={styles.tutorialTip}>
+          <View
+            style={styles.tutorialTip}
+            onLayout={() => scrollToTutorialCard("stats-tip", 0)}
+          >
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
@@ -940,9 +968,11 @@ export default function StatsScreen() {
               <Text style={styles.tutorialTipText}>
                 switch between weekly, monthly, and yearly data here. let me walk you through what each card below means!
               </Text>
-              <Pressable onPress={() => setTutorialStep("stats-tip-trend")}>
-                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-trend")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </PressFeedback>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -954,17 +984,19 @@ export default function StatsScreen() {
           {tutorialStep === "stats-tip-trend" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  this is your s'up s'core trend. each bar is one day's (or the average of the week's, or month's) score out of 100. tap a bar to see the exact number.
+                  this is your s'up s'core trend. each bar is a score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
                 </Text>
-                <Pressable onPress={() => setTutorialStep("stats-tip-session")}>
-                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </Pressable>
+                <TutorialActions>
+                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-session")}>
+                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                  </PressFeedback>
+                </TutorialActions>
               </View>
             </View>
           )}
@@ -988,13 +1020,16 @@ export default function StatsScreen() {
         </View>
 
         {/* S'ESSION TIME */}
-        <View style={[styles.card, styles.shadow]}>
+        <View
+          style={[styles.card, styles.shadow]}
+          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-session", nativeEvent.layout.y)}
+        >
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
 
           {tutorialStep === "stats-tip-session" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -1002,9 +1037,11 @@ export default function StatsScreen() {
                 <Text style={styles.tutorialTipText}>
                   s'ession time is how long you tracked posture in each period. the more you track, the more your s'up s'core reflects your real posture.
                 </Text>
-                <Pressable onPress={() => setTutorialStep("stats-tip-breakdown")}>
-                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </Pressable>
+                <TutorialActions>
+                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-breakdown")}>
+                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                  </PressFeedback>
+                </TutorialActions>
               </View>
             </View>
           )}
@@ -1047,28 +1084,33 @@ export default function StatsScreen() {
         </View> */}
 
         {/* POSTURE BREAKDOWN */}
-        <View style={[styles.card, styles.shadow]}>
+        <View
+          style={[styles.card, styles.shadow]}
+          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-breakdown", nativeEvent.layout.y)}
+        >
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
 
           {tutorialStep === "stats-tip-breakdown" && (
             <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
               <Image
-                source={require("../../assets/images/mascot.png")}
+                source={require("../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
               <View style={styles.tutorialTipTextWrap}>
                 <Text style={styles.tutorialTipText}>
-                  posture breakdown shows the share of your tracked time in each posture state such as upright, forward lean, slouched, and more.
+                  posture breakdown shows the share of your tracked time in each posture state. tap "?" for the full details.
                 </Text>
-                <Pressable
-                  onPress={() => {
-                    setTutorialStep("community-tip");
-                    router.replace("/leaderboard" as any);
-                  }}
-                >
-                  <Text style={styles.tutorialTipNext}>got it! {'>>'}</Text>
-                </Pressable>
+                <TutorialActions>
+                  <PressFeedback feedback="link"
+                    onPress={() => {
+                      setTutorialStep("community-tip");
+                      router.replace("/leaderboard" as any);
+                    }}
+                  >
+                    <Text style={styles.tutorialTipNext}>got it! {'>>'}</Text>
+                  </PressFeedback>
+                </TutorialActions>
               </View>
             </View>
           )}

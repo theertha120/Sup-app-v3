@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { StyleSheet, View, Image, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Image, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useFonts } from "expo-font";
@@ -30,9 +31,9 @@ export default function ClusterScreen() {
         <Text style={styles.speechText}>s'time to find your</Text>
       </View>
       <Text style={styles.clusterTitle}>s'uper{"\n"}cluster</Text>
-      <TouchableOpacity style={styles.button} onPress={() => router.push("/onboarding/heard" as any)}>
+      <PressFeedback style={styles.button} onPress={() => router.push("/onboarding/heard" as any)}>
         <Text style={styles.buttonText}>s'tart now</Text>
-      </TouchableOpacity>
+      </PressFeedback>
       <Text style={styles.quizNote}>the quiz will take approximately 5 mins :)</Text>
     </LinearGradient>
   );

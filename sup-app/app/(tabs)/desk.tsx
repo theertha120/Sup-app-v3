@@ -1,7 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, Platform, Modal, Dimensions, Image,
+  Platform, Modal, Dimensions, Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colours } from "../../theme/colours";
@@ -17,7 +19,7 @@ import { useIMUContext } from "../../src/contexts/IMUContext";
 import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
@@ -253,12 +255,12 @@ function InterventionModal() {
           </View>
           <Text style={iv.question}>did you adjust your position?</Text>
           <View style={iv.buttonRow}>
-            <Pressable style={iv.notYetBtn} onPress={() => dismissIntervention(false)}>
+            <PressFeedback style={iv.notYetBtn} onPress={() => dismissIntervention(false)}>
               <Text style={iv.notYetText}>not yet</Text>
-            </Pressable>
-            <Pressable style={iv.movedBtn} onPress={() => dismissIntervention(true)}>
+            </PressFeedback>
+            <PressFeedback style={iv.movedBtn} onPress={() => dismissIntervention(true)}>
               <Text style={iv.movedText}>yes, i moved ✓</Text>
-            </Pressable>
+            </PressFeedback>
           </View>
         </View>
       </View>
@@ -283,9 +285,9 @@ function MovementNudgeModal() {
           <Text style={mv.title}>{MOVEMENT_NUDGE.title}</Text>
           <Text style={mv.body}>{MOVEMENT_NUDGE.body}</Text>
           <Text style={mv.cue}>{MOVEMENT_NUDGE.cue}</Text>
-          <Pressable style={mv.btn} onPress={confirmMovement}>
+          <PressFeedback style={mv.btn} onPress={confirmMovement}>
             <Text style={mv.btnText}>yes, i moved ✓</Text>
-          </Pressable>
+          </PressFeedback>
         </View>
       </View>
     </Modal>
@@ -564,9 +566,9 @@ export default function DeskScreen() {
       <Modal visible={showUpdateModal} transparent animationType="fade" onRequestClose={handleCloseUpdateModal}>
         <View style={su.overlay}>
           <View style={[su.card, { borderColor: INSIGHT_BORDER[updateColor] }]}>
-            <Pressable style={su.closeBtn} onPress={handleCloseUpdateModal}>
+            <PressFeedback style={su.closeBtn} onPress={handleCloseUpdateModal}>
               <Text style={su.closeText}>×</Text>
-            </Pressable>
+            </PressFeedback>
             <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={su.title}>s'update!</Text>
             <Image source={INSIGHT_MASCOT[updateColor]} style={su.mascot} resizeMode="contain" />
@@ -583,9 +585,9 @@ export default function DeskScreen() {
       <Modal visible={showSummaryModal} transparent animationType="fade" onRequestClose={handleCloseSummaryModal}>
         <View style={su.overlay}>
           <View style={[su.card, { borderColor: INSIGHT_BORDER[summaryColor] }]}>
-            <Pressable style={su.closeBtn} onPress={handleCloseSummaryModal}>
+            <PressFeedback style={su.closeBtn} onPress={handleCloseSummaryModal}>
               <Text style={su.closeText}>×</Text>
-            </Pressable>
+            </PressFeedback>
             <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
             <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
             <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
@@ -661,20 +663,20 @@ export default function DeskScreen() {
 
         {/* Calibration banner */}
         {bothConnected && !isNeutralCalibrated && (
-          <Pressable style={s.calibrateBanner} onPress={() => setShowCalibModal(true)}>
+          <PressFeedback style={s.calibrateBanner} onPress={() => setShowCalibModal(true)}>
             <Ionicons name="warning-outline" size={18} color="#E65100" />
             <View style={{ flex: 1 }}>
               <Text style={s.calibrateBannerTitle}>calibration needed</Text>
               <Text style={s.calibrateBannerSub}>complete step 1 to start posture tracking</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#E65100" />
-          </Pressable>
+          </PressFeedback>
         )}
 
         {tutorialStep === "figure-tip" && (
           <View style={s.tutorialTip}>
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={s.tutorialTipMascot}
               resizeMode="contain"
             />
@@ -682,9 +684,11 @@ export default function DeskScreen() {
               <Text style={s.tutorialTipText}>
                 see real-time feedback on your posture here: this figure updates live to show how you're sitting right now.
               </Text>
-              <Pressable onPress={() => setTutorialStep("supdate-tip")}>
-                <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("supdate-tip")}>
+                  <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                </PressFeedback>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -732,7 +736,7 @@ export default function DeskScreen() {
             {tutorialStep === "supdate-tip" && (
               <View style={s.tutorialTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={s.tutorialTipMascot}
                   resizeMode="contain"
                 />
@@ -740,9 +744,11 @@ export default function DeskScreen() {
                   <Text style={s.tutorialTipText}>
                     click the 's'update' button to get a mid-session update on how you are doing overall and how close you are to your daily goal. you can use it once every 2 hours.
                   </Text>
-                  <Pressable onPress={() => setTutorialStep("end-session-tip")}>
-                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  <TutorialActions>
+                    <PressFeedback feedback="link" onPress={() => setTutorialStep("end-session-tip")}>
+                      <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                    </PressFeedback>
+                  </TutorialActions>
                 </View>
               </View>
             )}
@@ -750,7 +756,7 @@ export default function DeskScreen() {
             {tutorialStep === "end-session-tip" && (
               <View style={s.tutorialTip}>
                 <Image
-                  source={require("../../assets/images/mascot.png")}
+                  source={require("../../assets/images/mascot_tutorial.png")}
                   style={s.tutorialTipMascot}
                   resizeMode="contain"
                 />
@@ -758,14 +764,16 @@ export default function DeskScreen() {
                   <Text style={s.tutorialTipText}>
                     click 'end session' button to end your session.
                   </Text>
-                  <Pressable
-                    onPress={() => {
-                      setTutorialStep("stats-tip");
-                      router.replace("/(tabs)/stats" as any);
-                    }}
-                  >
-                    <Text style={s.tutorialTipNext}>next {'>>'}</Text>
-                  </Pressable>
+                  <TutorialActions>
+                    <PressFeedback feedback="link"
+                      onPress={() => {
+                        setTutorialStep("stats-tip");
+                        router.replace("/(tabs)/stats" as any);
+                      }}
+                    >
+                      <Text style={s.tutorialTipNext}>next {'>>'}</Text>
+                    </PressFeedback>
+                  </TutorialActions>
                 </View>
               </View>
             )}
@@ -773,23 +781,22 @@ export default function DeskScreen() {
             <View style={s.actionRow}>
               {sessionActive || !bothConnected ? (
                 <>
-                  <Pressable 
+                  <PressFeedback
                     style={[s.updateBtn, tutorialStep === "supdate-tip" && s.tutorialHighlight]}
                     onPress={handleOpenUpdateModal}
                   >
                     <Text style={s.updateBtnText}>s'update</Text>
-                  </Pressable>
-                  <Pressable 
+                  </PressFeedback>
+                  <PressFeedback
                     style={[s.disconnectBtn, tutorialStep === "end-session-tip" && s.tutorialHighlight]} 
-                    onPress={handleEndSession}
-                  >
+                    onPress={handleEndSession}>
                     <Text style={s.disconnectBtnText}>end s'ession</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </>
               ) : (
-                <Pressable style={s.updateBtn} onPress={startNewSession}>
+                <PressFeedback style={s.updateBtn} onPress={startNewSession}>
                   <Text style={s.updateBtnText}>start new s'ession</Text>
-                </Pressable>
+                </PressFeedback>
               )}
             </View>
           </>

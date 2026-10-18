@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * sensor-setup.tsx
  *
@@ -15,7 +16,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
-  Pressable, ActivityIndicator, Image,
+  ActivityIndicator, Image,
 } from "react-native";
 import { useFonts } from "expo-font";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -492,9 +493,9 @@ export default function SensorSetupScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={colours.textPrimary} />
-          </Pressable>
+          </PressFeedback>
           <View>
             <Text style={styles.headerTitle}>s'pot setup</Text>
             <Text style={styles.headerSub}>manage your posture s'pots</Text>
@@ -523,13 +524,13 @@ export default function SensorSetupScreen() {
 
         {/* QR pairing — primary path for new s'pots */}
         {!bothConnected && (
-          <Pressable
+          <PressFeedback
             style={[styles.qrPairBtn, tutorialStep === "connect-tip" && styles.tutorialHighlight]}
             onPress={() => setShowQRPairModal(true)}
           >
             <Ionicons name="qr-code-outline" size={18} color="#fff" />
             <Text style={styles.qrPairBtnText}>s'can to pair</Text>
-          </Pressable>
+          </PressFeedback>
         )}
 
         {/* s'pots — treated as one thing to connect, not two separate rows */}
@@ -550,43 +551,43 @@ export default function SensorSetupScreen() {
             </View>
 
             {anySaved && (
-              <Pressable style={styles.actionBtnDanger} onPress={forgetAll}>
+              <PressFeedback style={styles.actionBtnDanger} onPress={forgetAll}>
                 <Text style={styles.actionBtnDangerText}>forget</Text>
-              </Pressable>
+              </PressFeedback>
             )}
           </View>
 
           {!bothSaved && (
-            <Pressable onPress={() => setShowManualSetup((v) => !v)} style={styles.manualToggle}>
+            <PressFeedback onPress={() => setShowManualSetup((v) => !v)} style={styles.manualToggle}>
               <Text style={styles.manualToggleText}>
                 {showManualSetup ? "hide manual setup" : "having trouble? set up manually"}
               </Text>
-            </Pressable>
+            </PressFeedback>
           )}
 
           {showManualSetup && (
             <View style={styles.manualSetupWrap}>
               {!savedTop && (
-                <Pressable style={styles.actionBtn} onPress={() => handleScan("top")}>
+                <PressFeedback style={styles.actionBtn} onPress={() => handleScan("top")}>
                   <Ionicons name="bluetooth-outline" size={14} color={colours.primary} />
                   <Text style={styles.actionBtnText}>connect top s'pot</Text>
-                </Pressable>
+                </PressFeedback>
               )}
               {!savedBottom && (
-                <Pressable style={styles.actionBtn} onPress={() => handleScan("bottom")}>
+                <PressFeedback style={styles.actionBtn} onPress={() => handleScan("bottom")}>
                   <Ionicons name="bluetooth-outline" size={14} color={colours.primary} />
                   <Text style={styles.actionBtnText}>connect bottom s'pot</Text>
-                </Pressable>
+                </PressFeedback>
               )}
               {savedTop && (
-                <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice("top")}>
+                <PressFeedback style={styles.actionBtnDanger} onPress={() => forgetDevice("top")}>
                   <Text style={styles.actionBtnDangerText}>forget top s'pot only</Text>
-                </Pressable>
+                </PressFeedback>
               )}
               {savedBottom && (
-                <Pressable style={styles.actionBtnDanger} onPress={() => forgetDevice("bottom")}>
+                <PressFeedback style={styles.actionBtnDanger} onPress={() => forgetDevice("bottom")}>
                   <Text style={styles.actionBtnDangerText}>forget bottom s'pot only</Text>
-                </Pressable>
+                </PressFeedback>
               )}
             </View>
           )}
@@ -594,7 +595,7 @@ export default function SensorSetupScreen() {
           {tutorialStep === "connect-tip" && (
             <View style={[styles.tutorialTip, { marginTop: 12, marginBottom: 0 }]}>
               <Image
-                source={require("../assets/images/mascot.png")}
+                source={require("../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -602,14 +603,14 @@ export default function SensorSetupScreen() {
                 <Text style={styles.tutorialTipText}>
                   scan the qr code provided and turn on both your top and bottom s'pots to connect them. once they're both connected, a session starts automatically.
                 </Text>
-                <Pressable
+                <PressFeedback feedback="link"
                   onPress={() => {
                     setTutorialStep("stats-tip");
                     router.replace("/(tabs)/stats" as any);
                   }}
                 >
                   <Text style={styles.tutorialTipNext}>skip for now and go to stats</Text>
-                </Pressable>
+                </PressFeedback>
               </View>
             </View>
           )}
@@ -617,7 +618,7 @@ export default function SensorSetupScreen() {
 
         {/* Auto-connect button */}
         {(savedTop || savedBottom) && !bothConnected && (
-          <Pressable
+          <PressFeedback
             style={[styles.primaryBtn, isAutoConnecting && { opacity: 0.6 }]}
             onPress={autoConnect}
             disabled={isAutoConnecting}
@@ -633,7 +634,7 @@ export default function SensorSetupScreen() {
                 <Text style={styles.primaryBtnText}>auto-connect my s'pots</Text>
               </>
             )}
-          </Pressable>
+          </PressFeedback>
         )}
 
         {/* Device picker */}
@@ -649,38 +650,38 @@ export default function SensorSetupScreen() {
               </Text>
             )}
             {availableDevices.map((device: Device) => (
-              <Pressable key={device.id} style={styles.deviceRow} onPress={() => handleConnect(device)}>
+              <PressFeedback key={device.id} style={styles.deviceRow} onPress={() => handleConnect(device)}>
                 <Ionicons name="hardware-chip-outline" size={18} color={colours.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.deviceName}>{device.name ?? "unknown s'pot"}</Text>
                   <Text style={styles.deviceId}>{device.id}</Text>
                 </View>
                 <Ionicons name="add-circle-outline" size={20} color={colours.primary} />
-              </Pressable>
+              </PressFeedback>
             ))}
-            <Pressable onPress={() => setAssigningSlot(null)} style={styles.cancelRow}>
+            <PressFeedback onPress={() => setAssigningSlot(null)} style={styles.cancelRow}>
               <Text style={styles.cancelText}>cancel</Text>
-            </Pressable>
+            </PressFeedback>
           </View>
         )}
 
         {tutorialStep === "calibrate-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../assets/images/mascot.png")}
+              source={require("../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>{calibrationTipText}</Text>
-              <Pressable
+              <PressFeedback feedback="link"
                 onPress={() => {
                   setTutorialStep("figure-tip");
                   router.push("/desk" as any);
                 }}
               >
                 <Text style={styles.tutorialTipNext}>skip and do calibration later</Text>
-              </Pressable>
+              </PressFeedback>
             </View>
           </View>
         )}
@@ -709,7 +710,7 @@ export default function SensorSetupScreen() {
                 ))}
               </View>
 
-              <Pressable
+              <PressFeedback
                 style={[
                   styles.calibrateBtn,
                   !bothConnected && { opacity: 0.4 },
@@ -729,7 +730,7 @@ export default function SensorSetupScreen() {
                 ]}>
                   {calibration.isComplete ? "re-calibrate" : "calibrate now"}
                 </Text>
-              </Pressable>
+              </PressFeedback>
 
               {calibration.isComplete && clinicalBaseline && (
                 <Text style={styles.calibratedNote}>

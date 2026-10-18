@@ -1,13 +1,11 @@
-// OLD: useEffect was only used by the daily-run summary check (now commented out below)
-// import { useEffect, useMemo, useState } from "react";
-// NEW: daily AI summary runs at a fixed 8am for all users
-import { useMemo, useState } from "react";
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
+import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import {
   ActivityIndicator,
   Image,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -212,14 +210,14 @@ export default function CoachingSetupModal({
               <Text style={styles.kicker}>Coaching setup</Text>
               <Text style={styles.title}>Set up your behaviour engine</Text>
             </View>
-            <Pressable
+            <PressFeedback
               onPress={handleCancel}
               disabled={saving}
               style={styles.cancelButton}
               hitSlop={8}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
-            </Pressable>
+            </PressFeedback>
           </View>
 
           {/* Progress */}
@@ -239,7 +237,7 @@ export default function CoachingSetupModal({
           {tutorialStep === "coaching-tip" && (
             <View style={styles.tutorialTip}>
               <Image
-                source={require("../../../assets/images/mascot.png")}
+                source={require("../../../assets/images/mascot_tutorial.png")}
                 style={styles.tutorialTipMascot}
                 resizeMode="contain"
               />
@@ -247,14 +245,16 @@ export default function CoachingSetupModal({
                 {/* OLD: tip for the daily-run step (disabled)
                 <Text style={styles.tutorialTipText}>
                   {step < 4
-                    ? "this is a preference for the reminder push notifications which will give you posture tips."
-                    : "set the time you want the daily personalised goal on the home page to appear at. you can set this time as the time when you will start your first session."}
+                    ? "you can personalise your s'up experience here!"
+                    : "you can set this time as the time you will start your first session."}
                 </Text>
-                */}
-                {/* NEW: daily-run step removed, so only the reminder tip remains */}
-                <Text style={styles.tutorialTipText}>
-                  this is a preference for the reminder push notifications which will give you posture tips.
-                </Text>
+                <TutorialActions
+                  skipDisabled={saving}
+                  onBeforeSkip={() => {
+                    resetToInitial();
+                    onCancel();
+                  }}
+                />
               </View>
             </View>
           )}
@@ -303,16 +303,16 @@ export default function CoachingSetupModal({
           <View style={styles.footer}>
             <View style={styles.primaryActions}>
               {canGoBack && (
-                <Pressable
+                <PressFeedback feedback="scale"
                   style={styles.backButton}
                   onPress={() => setStep((current) => (current - 1) as StepId)}
                   disabled={saving}
                 >
                   <Text style={styles.backButtonText}>Back</Text>
-                </Pressable>
+                </PressFeedback>
               )}
 
-              <Pressable
+              <PressFeedback
                 style={styles.primaryButton}
                 onPress={handleNext}
                 disabled={saving}
@@ -324,7 +324,7 @@ export default function CoachingSetupModal({
                     {isLastStep ? "Done" : "Next"}
                   </Text>
                 )}
-              </Pressable>
+              </PressFeedback>
             </View>
           </View>
         </View>

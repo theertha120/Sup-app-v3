@@ -1,21 +1,20 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Animated,
   Dimensions,
   Modal,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   Image,
 } from "react-native";
 import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
 import React, { useRef, useCallback, useState, useEffect } from "react";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStepCount } from "../../src/hooks/useStepCount";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
@@ -397,26 +396,28 @@ export default function DailyScreen() {
 
         {/* Section label with back arrow */}
         <View style={styles.sectionRow}>
-          <Pressable onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
+          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
             <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
-          </Pressable>
+          </PressFeedback>
           <Text style={styles.sectionLabel}>today:</Text>
         </View>
 
         {tutorialStep === "snapshot-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                here's your snapshot, the % of time in each posture state you spent today.
+                here's your snapshot, the % of time you spent in each posture state today.
               </Text>
-              <Pressable onPress={() => setTutorialStep("snapshot-tip-stats")}>
-                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-              </Pressable>
+              <TutorialActions>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("snapshot-tip-stats")}>
+                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+                </PressFeedback>
+              </TutorialActions>
             </View>
           </View>
         )}
@@ -439,22 +440,24 @@ export default function DailyScreen() {
         {tutorialStep === "snapshot-tip-stats" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../../assets/images/mascot.png")}
+              source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                you can also see your total session time, and your s'up score, all for today's s'pot sessions.
+                here's your total session time and s'up score for today's s'pot sessions.
               </Text>
-              <Pressable
-                onPress={() => {
-                  setTutorialStep("settings-tip");
-                  router.push("/settings");
-                }}
-              >
-                <Text style={styles.tutorialTipNext}>got it</Text>
-              </Pressable>
+              <TutorialActions>
+                <PressFeedback feedback="link"
+                  onPress={() => {
+                    setTutorialStep("settings-tip");
+                    router.push("/settings");
+                  }}
+                >
+                  <Text style={styles.tutorialTipNext}>got it</Text>
+                </PressFeedback>
+              </TutorialActions>
             </View>
           </View>
         )}

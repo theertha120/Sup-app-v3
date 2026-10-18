@@ -1,3 +1,4 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 /**
  * CalibrationModal.tsx
  *
@@ -18,7 +19,7 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Modal, View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator,
+  Modal, View, Text, StyleSheet, ScrollView, ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIMUContext } from "../../contexts/IMUContext";
@@ -148,7 +149,7 @@ function StepDots({ viewingStep, stepComplete, onSelect }: {
         const active = viewingStep === n;
         const color  = STEP_COLORS[n];
         return (
-          <Pressable
+          <PressFeedback
             key={n}
             onPress={() => onSelect(n as 1 | 2 | 3 | 4 | 5)}
             hitSlop={8}
@@ -159,7 +160,7 @@ function StepDots({ viewingStep, stepComplete, onSelect }: {
               backgroundColor: done || active ? color : "#E0E0E0",
               opacity: active ? 1 : done ? 0.8 : 0.4,
             }} />
-          </Pressable>
+          </PressFeedback>
         );
       })}
     </View>
@@ -281,9 +282,9 @@ export default function CalibrationModal({ visible, onClose }: Props) {
             {/* Header */}
             <View style={s.headerRow}>
               <Text style={s.brand}>s'pot calibration</Text>
-              <Pressable onPress={handleClose} style={s.closeBtn}>
+              <PressFeedback onPress={handleClose} style={s.closeBtn}>
                 <Ionicons name="close" size={20} color="#999" />
-              </Pressable>
+              </PressFeedback>
             </View>
 
             {/* All-done */}
@@ -313,24 +314,24 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                   recalibrate every 30 days or after a posture change.
                 </Text>
                 <View style={s.allDoneButtons}>
-                  <Pressable style={s.redoBtn} onPress={handleRedoAll}>
+                  <PressFeedback style={s.redoBtn} onPress={handleRedoAll}>
                     <Text style={s.redoBtnText}>redo calibration</Text>
-                  </Pressable>
-                  <Pressable style={s.doneBtn} onPress={handleClose}>
+                  </PressFeedback>
+                  <PressFeedback style={s.doneBtn} onPress={handleClose}>
                     <Text style={s.doneBtnText}>done</Text>
-                  </Pressable>
+                  </PressFeedback>
                 </View>
 
                 <Text style={s.recalOneLabel}>or recalibrate just one step:</Text>
                 <View style={s.recalOneRow}>
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <Pressable
+                    <PressFeedback
                       key={n}
                       style={[s.recalOneChip, { borderColor: STEP_COLORS[n] }]}
                       onPress={() => startReviewingStep(n as 1 | 2 | 3 | 4 | 5)}
                     >
                       <Text style={[s.recalOneChipText, { color: STEP_COLORS[n] }]}>{n}</Text>
-                    </Pressable>
+                    </PressFeedback>
                   ))}
                 </View>
               </View>
@@ -338,10 +339,10 @@ export default function CalibrationModal({ visible, onClose }: Props) {
             ) : (
               <>
                 {reviewingSteps && (
-                  <Pressable onPress={() => setReviewingSteps(false)} style={s.backToSummary} hitSlop={8}>
+                  <PressFeedback feedback="scale" onPress={() => setReviewingSteps(false)} style={s.backToSummary} hitSlop={8}>
                     <Ionicons name="arrow-back" size={14} color={colours.primary} />
                     <Text style={s.backToSummaryText}>back to summary</Text>
-                  </Pressable>
+                  </PressFeedback>
                 )}
 
                 <StepDots
@@ -418,21 +419,21 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                       </View>
                     )}
                     <View style={s.actionRow}>
-                      <Pressable style={s.backBtn} onPress={handleRedo}>
+                      <PressFeedback style={s.backBtn} onPress={handleRedo}>
                         <Text style={s.backBtnText}>redo this step</Text>
-                      </Pressable>
+                      </PressFeedback>
                       {viewingStep < 5 ? (
-                        <Pressable style={[s.startBtn, { backgroundColor: "#4CAF50" }]} onPress={goNext}>
+                        <PressFeedback style={[s.startBtn, { backgroundColor: "#4CAF50" }]} onPress={goNext}>
                           <Text style={s.startBtnText}>next step →</Text>
-                        </Pressable>
+                        </PressFeedback>
                       ) : reviewingSteps ? (
-                        <Pressable style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={() => setReviewingSteps(false)}>
+                        <PressFeedback style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={() => setReviewingSteps(false)}>
                           <Text style={s.startBtnText}>back to summary</Text>
-                        </Pressable>
+                        </PressFeedback>
                       ) : (
-                        <Pressable style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={handleClose}>
+                        <PressFeedback style={[s.startBtn, { backgroundColor: colours.primary }]} onPress={handleClose}>
                           <Text style={s.startBtnText}>finish ✓</Text>
-                        </Pressable>
+                        </PressFeedback>
                       )}
                     </View>
                   </View>
@@ -448,11 +449,11 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                 ) : (
                   <View style={s.actionRow}>
                     {viewingStep > 1 && (
-                      <Pressable style={s.backBtn} onPress={goBack}>
+                      <PressFeedback feedback="scale" style={s.backBtn} onPress={goBack}>
                         <Text style={s.backBtnText}>back</Text>
-                      </Pressable>
+                      </PressFeedback>
                     )}
-                    <Pressable
+                    <PressFeedback
                       style={[
                         s.startBtn,
                         { backgroundColor: canCalibrate ? stepColor : "#ccc" },
@@ -464,14 +465,14 @@ export default function CalibrationModal({ visible, onClose }: Props) {
                       <Text style={s.startBtnText}>
                         {stepDone ? "redo this step" : "start — hold for 3 seconds"}
                       </Text>
-                    </Pressable>
+                    </PressFeedback>
                   </View>
                 )}
 
                 {clinicalBaseline && !allDone && (
-                  <Pressable onPress={handleClose} style={s.skipRow}>
+                  <PressFeedback feedback="link" onPress={handleClose} style={s.skipRow}>
                     <Text style={s.skipText}>keep existing calibration</Text>
-                  </Pressable>
+                  </PressFeedback>
                 )}
               </>
             )}

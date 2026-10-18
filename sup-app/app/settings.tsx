@@ -1,9 +1,10 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   ActivityIndicator,
   Image,
   Linking,
@@ -79,9 +80,9 @@ export default function SettingsScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backIcon}>←</Text>
-        </Pressable>
+        </PressFeedback>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.placeholder} />
       </View>
@@ -93,17 +94,18 @@ export default function SettingsScreen() {
         {tutorialStep === "settings-tip" && (
           <View style={styles.tutorialTip}>
             <Image
-              source={require("../assets/images/mascot.png")}
+              source={require("../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>click here to set your coaching preferences.</Text>
+              <TutorialActions />
             </View>
           </View>
         )}
 
-        <Pressable
+        <PressFeedback
           style={[
             styles.settingItem,
             tutorialStep === "settings-tip" && styles.settingItemHighlighted,
@@ -130,7 +132,7 @@ export default function SettingsScreen() {
             ? <ActivityIndicator size="small" color={colours.primary} />
             : <Text style={styles.chevron}>›</Text>
           }
-        </Pressable>
+        </PressFeedback>
 
       </View>
 
@@ -138,14 +140,14 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data & Privacy</Text>
         
-        <Pressable style={styles.settingItem} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+        <PressFeedback style={styles.settingItem} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
-        </Pressable>
+        </PressFeedback>
 
-        <Pressable
+        <PressFeedback
           style={styles.settingItem}
           onPress={handleDeleteAccount}
           disabled={isDeletingAccount}
@@ -159,7 +161,7 @@ export default function SettingsScreen() {
           ) : (
             <Text style={styles.chevron}>›</Text>
           )}
-        </Pressable>
+        </PressFeedback>
       </View>
 
       {/* About Section */}
@@ -181,7 +183,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <Pressable
+        <PressFeedback
           style={styles.settingItem}
           onPress={() => router.push("/sources-methodology" as any)}
         >
@@ -192,14 +194,14 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Text style={styles.chevron}>›</Text>
-        </Pressable>
+        </PressFeedback>
       </View>
 
       {/* Help Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Help</Text>
 
-        <Pressable
+        <PressFeedback
           style={styles.settingItem}
           onPress={() => {
             router.replace("/(tabs)/home" as any);
@@ -211,7 +213,7 @@ export default function SettingsScreen() {
             <Text style={styles.settingDescription}>Replay the app walkthrough</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
-        </Pressable>
+        </PressFeedback>
       </View>
 
       {/* Sentry crash-report test buttons — disabled for store release; uncomment to test
@@ -241,9 +243,9 @@ export default function SettingsScreen() {
 
       {/* Logout Section */}
       <View style={styles.section}>
-        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+        <PressFeedback style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        </PressFeedback>
       </View>
 
       {/* Footer space */}

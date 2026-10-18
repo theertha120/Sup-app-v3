@@ -1,9 +1,9 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
   Modal,
   KeyboardAvoidingView,
   ScrollView,
@@ -198,20 +198,20 @@ export default function SignInModal() {
                 />
                 {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
-                <Pressable
+                <PressFeedback
                   onPress={() => {
                     setResetEmail(email);
                     setStep("forgot-email");
                   }}
                 >
                   <Text style={styles.linkText}>Forgot password?</Text>
-                </Pressable>
+                </PressFeedback>
 
-                <Pressable style={styles.button} onPress={handleSignIn}>
+                <PressFeedback style={styles.button} onPress={handleSignIn}>
                   <Text style={styles.buttonText}>Sign In</Text>
-                </Pressable>
+                </PressFeedback>
 
-                <Pressable
+                <PressFeedback
                   style={[styles.button, styles.secondaryButton]}
                   onPress={() => {
                     startRegistration();
@@ -219,7 +219,7 @@ export default function SignInModal() {
                   }}
                 >
                   <Text style={[styles.buttonText, styles.secondaryText]}>Create account</Text>
-                </Pressable>
+                </PressFeedback>
               </View>
             </>
           )}
@@ -242,13 +242,13 @@ export default function SignInModal() {
                 />
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
-                <Pressable style={styles.button} onPress={handleSendResetCode} disabled={resetLoading}>
+                <PressFeedback style={styles.button} onPress={handleSendResetCode} disabled={resetLoading}>
                   <Text style={styles.buttonText}>{resetLoading ? "Sending..." : "Send code"}</Text>
-                </Pressable>
+                </PressFeedback>
 
-                <Pressable style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
+                <PressFeedback style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
                   <Text style={[styles.buttonText, styles.secondaryText]}>Back to sign in</Text>
-                </Pressable>
+                </PressFeedback>
               </View>
             </>
           )}
@@ -270,13 +270,13 @@ export default function SignInModal() {
                 />
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
-                <Pressable style={styles.button} onPress={handleVerifyResetCode} disabled={resetLoading}>
+                <PressFeedback style={styles.button} onPress={handleVerifyResetCode} disabled={resetLoading}>
                   <Text style={styles.buttonText}>{resetLoading ? "Verifying..." : "Verify code"}</Text>
-                </Pressable>
+                </PressFeedback>
 
-                <Pressable style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
+                <PressFeedback style={[styles.button, styles.secondaryButton]} onPress={resetToSignIn}>
                   <Text style={[styles.buttonText, styles.secondaryText]}>Back to sign in</Text>
-                </Pressable>
+                </PressFeedback>
               </View>
             </>
           )}
@@ -308,9 +308,9 @@ export default function SignInModal() {
                 />
                 {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
 
-                <Pressable style={styles.button} onPress={handleSetNewPassword} disabled={resetLoading}>
+                <PressFeedback style={styles.button} onPress={handleSetNewPassword} disabled={resetLoading}>
                   <Text style={styles.buttonText}>{resetLoading ? "Saving..." : "Save new password"}</Text>
-                </Pressable>
+                </PressFeedback>
               </ScrollView>
             </>
           )}

@@ -1,5 +1,6 @@
+import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, Image } from "react-native";
+import { StyleSheet, View, Text, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
@@ -34,9 +35,9 @@ export default function Question3Screen() {
       style={styles.container}
     >
       <View style={styles.topNav}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
           <Image source={require("../../assets/images/back.png")} style={styles.backImage} />
-        </TouchableOpacity>
+        </PressFeedback>
         <Text style={styles.questionCounter}>Question {CURRENT_QUESTION} of {TOTAL_QUESTIONS}</Text>
       </View>
 
@@ -53,7 +54,7 @@ export default function Question3Screen() {
 
       <View style={styles.options}>
         {OPTIONS.map(({ key, text }) => (
-          <TouchableOpacity
+          <PressFeedback
             key={key}
             style={[styles.option, selected === key && styles.optionSelected]}
             onPress={() => { setSelected(key); setQ3(key); router.push("/onboarding/question4" as any); }}
@@ -61,7 +62,7 @@ export default function Question3Screen() {
             <Text style={[styles.optionText, selected === key && styles.optionTextSelected]}>
               {key}) {text}
             </Text>
-          </TouchableOpacity>
+          </PressFeedback>
         ))}
       </View>
     </LinearGradient>
