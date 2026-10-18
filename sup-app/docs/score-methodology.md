@@ -12,69 +12,61 @@ actually runs.
 ## 1. One-paragraph summary (for the App Review reply)
 
 s'up estimates a user's sitting posture using two small wearable motion sensors ("s'pots") worn
-on the upper and lower back, and turns that into a daily 0–100 "s'up s'core." The score has three
-parts: **quality** (up to 50 points, based on how upright the user's posture was, averaged across
-the day's tracked sessions), **showing up** (up to 30 points, for tracking any time at all and a
-bonus for longer sessions), and **streak** (up to 20 points, for consecutive days of use). None of
-this is a medical diagnosis — it's a self-monitoring wellness metric, comparable to a step count
+on the upper and lower back, and turns that into a daily 0–100 "s'up s'core." Every tracked minute
+earns posture credit (100 for upright down to 0 for severe slouching), and the s'core is the
+time-weighted average of that credit, blended with a fixed starting point of 50 so that very short
+sessions can't produce extreme scores. None of this is a medical diagnosis — it's a self-monitoring wellness metric, comparable to a step count
 or an activity ring, built on published ergonomics/biomechanics research about seated posture and
 spinal loading (citations in §6).
 
 ---
 
-## 2. The three components
+## 2. The formula
+
+Every tracked minute earns **posture credit** based on its posture classification (see §3c):
+
+| State                 | Credit |
+|-----------------------|--------|
+| upright               | 100    |
+| transition            | 75     |
+| forward_lean          | 50     |
+| tilted_left / right   | 50     |
+| slouched              | 25     |
+| severe                | 0      |
+
+The daily score is the time-weighted average of that credit across all of the day's tracked time,
+blended with a fixed **prior** of 10 minutes at a score of 50:
 
 ```
-sup_score = round(quality + showing_up + streak_pts)          // 0–100
+sup_score = round( (Σ(time_in_state × credit) + 50 × 10 min)
+                   / (total_tracked_time + 10 min) )                 // 0–100
 ```
 
-### 2a. Quality — up to 50 points
+The prior keeps very short sessions from producing extreme scores. A day starts at 50 and moves
+towards the user's real posture as tracked time grows: after 10 minutes the user's own posture
+carries half the weight, after an hour about 86%, after two hours about 92%.
 
-```
-quality = (avgShs / 100) * 50
-```
+| Tracked day                    | s'core |
+|--------------------------------|---------|
+| 1 min, perfect posture         | 55      |
+| 10 min, perfect posture        | 75      |
+| 60 min, perfect posture        | 93      |
+| 60 min at 75% posture credit   | 71      |
+| 1 min, severe posture          | 45      |
 
-`avgShs` is the user's **Spine Health Score (SHS)**, averaged across the day — see §3 for how SHS
-itself is computed. Concretely: if the user's posture was flawless all day, SHS ≈ 100 and quality
-= 50 points; if posture was consistently poor, SHS trends toward 0 and quality trends toward 0
-points.
+The score is always strictly between 0 and 100. A day with no tracked time has no score.
 
-`avgShs` for a day is a **duration-weighted average** across every tracked session that day (a
-20-minute session counts for more than a 2-minute one):
-
-```
-avgShs = Σ(session.avg_shs × session.duration_ms) / Σ(session.duration_ms)
-```
-
-### 2b. Showing up — up to 30 points
-
-Rewards using the app/hardware at all that day, plus a graduated bonus for longer tracked time:
-
-```
-if total tracked time == 0:        0 pts
-else:                               15 pts (base, for any tracked time)
-  + 5  more pts if total tracked time >= 30 minutes   (20 total)
-  + 10 more pts if total tracked time >= 60 minutes   (25 total)
-  + 15 more pts if total tracked time >= 120 minutes  (30 total, cap)
-```
-
-(The bonus tiers aren't additive on top of each other — it's whichever single tier the user's
-total tracked time for the day qualifies for: 15 / 20 / 25 / 30.)
-
-### 2c. Streak — up to 20 points
-
-```
-streak_pts = min(20, streak_days * 3)
-```
+Implementation: `computeSupScore()` in `src/services/posture/postureSyncService.ts`. The inputs
+are the per-state time totals summed across every completed session that day.
 
 So the streak component maxes out at a 7-day streak (7 × 3 = 21, capped to 20) and grows by 3
 points per consecutive day before that. A streak day is defined by the device's local calendar
-day (not UTC): using the app again on the very next calendar day extends the streak by one;
-skipping a day resets it to 1 on the next session.
+day (not UTC): opening the app (cold start, foregrounding, or logging in) on the very next
+calendar day extends the streak by one; skipping a day resets it to 1 on the next open.
 
 ---
 
-## 3. Spine Health Score (SHS) — the number behind "quality"
+## 3. Posture sensing, and the Spine Health Score (SHS)
 
 SHS is a **real-time, per-session** score from 0–100 (starts at 100 each session), computed
 entirely from the two wearable IMU (inertial measurement unit) sensors — no camera, no separate
@@ -143,8 +135,9 @@ intentional: it reflects published research on spinal ligament creep, where sust
 posture builds up strain faster than a brief correction can undo it, so the score doesn't let a
 user "erase" ten minutes of slouching with ten seconds of sitting up straight.
 
-A session's `avg_shs` (used in §2a) is the mean of every per-second SHS value recorded during that
-session.
+A session's `avg_shs` is the mean of every per-second SHS value recorded during that session. SHS
+is shown live in Desk Mode and stored per session/day, but it is **not** an input to `sup_score`
+any more — the score in §2 is computed directly from time spent in each posture state.
 
 ---
 
@@ -177,9 +170,9 @@ avg"), which is simply the percentage of tracked time spent in the `upright` sta
 avg_score = (upright_time_ms / total_tracked_time_ms) * 100
 ```
 
-This is a much simpler metric than SHS/`sup_score` and does not feed into `sup_score` — it's
-shown separately as a plain "percent of time you were upright" figure. Flagged here so it isn't
-mistaken for the same thing as the "quality" component in §2a.
+It does not feed into `sup_score` — it's shown separately as a plain "percent of time you were
+upright" figure. `sup_score` uses the same time totals but gives partial credit to in-between
+states and blends in the 10-minute prior (§2), so the two numbers differ.
 
 ---
 

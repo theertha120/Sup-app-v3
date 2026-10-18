@@ -72,6 +72,10 @@ export default function DetailsScreen() {
     if (!res.success) {
       if (/email rate limit exceeded/i.test(res.error ?? "")) {
         setError("We've hit the email sending limit for now, please try again in about an hour");
+      } else if (/only request this after/i.test(res.error ?? "")) {
+        // Re-signing up with an unverified email re-sends the code, which
+        // Supabase throttles to once a minute.
+        setError("a code was just sent to this email, please wait a minute and try again");
       } else {
         setError(res.error || "registration failed");
       }
@@ -82,6 +86,7 @@ export default function DetailsScreen() {
       lastName: lastName.trim(),
       email: normalizedEmail,
       username: username.trim(),
+      password,
     });
     router.push("/onboarding/verify-email" as any);
   };

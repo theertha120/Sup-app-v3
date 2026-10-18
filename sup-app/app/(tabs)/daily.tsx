@@ -37,15 +37,10 @@ import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/d
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
+import { toLocalDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
-const now = new Date();
-const year = now.getFullYear();
-const month = String(now.getMonth() + 1).padStart(2, "0");
-const day = String(now.getDate()).padStart(2, "0");
-const TODAY_KEY = `${year}-${month}-${day}`;
-// const TODAY_KEY = `2026-07-15`; // hardcoded for testing
 
 const SEGMENT_COLORS: Record<string, string> = {
   upright:  "#6DC96D",
@@ -218,6 +213,9 @@ export default function DailyScreen() {
   const loadDailyPosture = useCallback(async (background = false) => {
     if (!userId) return;
     if (!background) setIsLoadingDaily(true);
+    // Worked out on every load (not once at app start) so the screen rolls
+    // over to the new day if the app stays open past midnight.
+    const TODAY_KEY = toLocalDateKey();
  
     // show cached data immediately so UI and AI prompt unblock right away
     const cached = await getCachedDailyPair(userId, TODAY_KEY);
@@ -370,12 +368,12 @@ export default function DailyScreen() {
     },
     session: {
       title: "s'ession",
-      body: "total time tracked in active posture sessions today. longer sessions unlock more duration points toward your s'core.",
+      body: "total time tracked in active posture sessions today. the more you track, the more your s'core reflects your real posture.",
     },
     score: {
       title: "s'core",
       body:
-        "your overall daily posture score out of 100, made up of three parts:\n\n• quality (up to 50 pts) — based on your average posture quality for the day.\n• showing up (up to 30 pts) — 15 pts for tracking at least one session, plus up to 15 more for session length.\n• streak (up to 20 pts) — 3 pts for every consecutive day you keep it going.",
+        "your daily posture score out of 100, based on how good your posture was across all the time you tracked today.\n\n• every tracked minute earns credit: upright 100, transition 75, forward lean or tilted 50, slouched 25, severe 0.\n• your s'core starts at 50 each day and moves towards your real posture as you track — after 10 minutes your posture counts for half, after an hour it's almost all you.",
     },
   };
 

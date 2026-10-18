@@ -27,6 +27,7 @@ import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "@/src/services/ai/aiProvider";
+import { toLocalDateKey, addDaysToDateKey } from "@/src/lib/dateKey";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -39,23 +40,18 @@ const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before actio
 
 const SKIPPER_INFO: Record<string, InfoModalEntry> = {
   skipper: SKIPPER_DISCLAIMER,
+  // Explains the daily AI insight — mirrors generate-daily-summaries (8am SGT, last 7 days of posture_daily)
+  dailyInsight: {
+    title: "about your daily insight",
+    body:
+      "s'kipper writes this insight only once a day, at 8 am (singapore time).\n\n" +
+      "what goes in: your last 7 days of s'pot data, including your posture session data, plus your daily s'up s'core " +
+      "and total tracked time. if you haven't tracked in the past 7 days, no new insight is made.\n\n" +
+      "what it's for: to spot trends across your week and give you a personalised focus for today. ",
+  },
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-const getLocalDateKey = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-  // return `2026-07-20`; // hardcoded for testing
-};
-
-const getPreviousDateKey = (dateKey: string) => {
-  const date = new Date(dateKey + "T12:00:00"); // noon avoids DST edge cases
-  date.setDate(date.getDate() - 1);
-  return date.toISOString().split("T")[0];
-};
 
 export default function HomeScreen() {
 
@@ -230,11 +226,12 @@ export default function HomeScreen() {
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [hasSummaryData, setHasSummaryData] = useState<boolean | null>(null); // null = unknown
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+  const [showDailyInsightInfo, setShowDailyInsightInfo] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
-    const todayKey = getLocalDateKey();
-    const yesterdayKey = getPreviousDateKey(todayKey);
+    const todayKey = toLocalDateKey();
+    const yesterdayKey = addDaysToDateKey(todayKey, -1);
 
     fetchDailyAiSummary(userId, todayKey)
       .then((summary) => {
@@ -348,6 +345,8 @@ export default function HomeScreen() {
               bubbleAnimStyle(statusBubbleAnim),
             ]}
           >
+            {/* Daily insight explainer — default InfoButton top-right placement */}
+            <InfoButton onPress={() => setShowDailyInsightInfo(true)} color={PRIMARY_TEXT} />
             <View style={styles.skipperHeaderRow}>
               <Text style={styles.bubbleText}>
                 s'kipper says:
@@ -370,6 +369,13 @@ export default function HomeScreen() {
           <InfoModal
             metricKey={showSkipperInfo ? "skipper" : null}
             onClose={() => setShowSkipperInfo(false)}
+            metricInfo={SKIPPER_INFO}
+            accentColor={PRIMARY_TEXT}
+          />
+
+          <InfoModal
+            metricKey={showDailyInsightInfo ? "dailyInsight" : null}
+            onClose={() => setShowDailyInsightInfo(false)}
             metricInfo={SKIPPER_INFO}
             accentColor={PRIMARY_TEXT}
           />

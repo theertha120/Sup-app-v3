@@ -188,31 +188,38 @@ export default function SourcesMethodologyScreen() {
 
         <Section title="the complete s'up s'core formula">
           <Text style={styles.body}>
-            your daily s'up s'core is out of 100 points, made up of three parts:
+            your daily s'up s'core (0–100) reflects how good your posture was across all the time
+            you tracked today. every tracked minute earns credit based on its posture
+            classification:
           </Text>
           <View style={styles.table}>
-            <View style={styles.tableRow}>
-              <Text style={styles.tableLabel}>quality — up to 50 pts</Text>
-              <Text style={styles.tableValue}>
-                (your average posture quality score for the day ÷ 100) × 50
-              </Text>
-            </View>
-            <View style={styles.tableRow}>
-              <Text style={styles.tableLabel}>showing up — up to 30 pts</Text>
-              <Text style={styles.tableValue}>
-                15 pts base for any tracked time, +5/+10/+15 more at 30/60/120 tracked minutes
-              </Text>
-            </View>
-            <View style={styles.tableRow}>
-              <Text style={styles.tableLabel}>streak — up to 20 pts</Text>
-              <Text style={styles.tableValue}>3 pts per consecutive day tracked, capped at 20</Text>
-            </View>
+            {[
+              ["upright", "100"],
+              ["transition", "75"],
+              ["forward lean", "50"],
+              ["tilted left / right", "50"],
+              ["slouched", "25"],
+              ["severe", "0"],
+            ].map(([label, credit]) => (
+              <View key={label} style={styles.tableRow}>
+                <Text style={styles.tableLabel}>{label}</Text>
+                <Text style={styles.tableValue}>{credit}</Text>
+              </View>
+            ))}
           </View>
           <Text style={styles.body}>
-            the "average posture quality" behind the quality component is a real-time score that
-            starts at 100 each session and moves based on the posture classifications above —
-            rising slowly while upright, falling (faster for more severe states) while not — using
-            the same accumulate-fast/recover-slow design as s'train.
+            your s'core is the average credit across your tracked time, blended with a starting
+            point of 50:
+          </Text>
+          <Text style={styles.body}>
+            s'core = (total credit earned + 50 × 10 min) ÷ (minutes tracked + 10 min)
+          </Text>
+          <Text style={styles.body}>
+            in plain terms: your s'core starts at 50 each day and moves towards your real posture
+            as you track. after 10 minutes your posture counts for half of it; after an hour, it's
+            almost all you. this stops a single very short session from producing an extreme score
+            either way — e.g. one perfect minute scores 55, while an hour of perfect posture scores
+            93. days with no tracking have no s'core.
           </Text>
         </Section>
 
@@ -220,7 +227,7 @@ export default function SourcesMethodologyScreen() {
           <Text style={styles.body}>
             to be clear about what's ours and what's cited evidence: the specific angle
             thresholds, point values, and formulas above (posture classification bands, the
-            s'core formula, streak/showing-up scoring) are s'up's own product design choices,
+            s'core formula and its per-state credit values) are s'up's own product design choices,
             tuned by reasoning rather than a clinical study of this exact app. the underlying
             <Text style={{ fontWeight: "700" }}> design principle </Text>
             — that sustained poor posture accumulates strain that recovers more slowly than it

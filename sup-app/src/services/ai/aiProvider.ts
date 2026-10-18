@@ -1,3 +1,5 @@
+import type { SessionComparisonMetric, SessionHighlight } from "@/src/lib/sessionHighlights";
+
 export interface SessionInsightData {
   sessionDurationMs: number;
   currentState: string;
@@ -20,6 +22,8 @@ export interface SessionSummaryData {
   cpl: number;
   sessionStats: Partial<Record<string, number>>;
   previousUpdates: string[];
+  comparison: SessionComparisonMetric[] | null; // null when there's no previous session
+  highlights: SessionHighlight[];
 }
 
 export interface SessionSummaryResult {
