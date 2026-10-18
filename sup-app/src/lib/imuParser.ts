@@ -160,6 +160,8 @@ const TRANSITION_MAX      =  18; // deg
 const FORWARD_MAX         =  28; // deg
 const SLOUCH_MAX          =  42; // deg
 const LATERAL_MAX         =   8; // deg
+const LATERAL_EXIT        =   6; // deg — retain an existing tilt through boundary noise
+const STATE_CONFIRM_MS   = 400;
 
 // ── BLE packet parser ─────────────────────────────────────────────────────────
 
@@ -249,7 +251,8 @@ function computeInstantScore(state: PostureState): number {
 export function classifySpinePosture(
   topSensor:    ParsedIMU,
   bottomSensor: ParsedIMU,
-  baseline:     ClinicalBaseline | NeutralOffset | null = null
+  baseline:     ClinicalBaseline | NeutralOffset | null = null,
+  previousState: PostureState | null = null
 ): PostureClassification {
 
   // Extract neutral offset from either type
@@ -298,8 +301,15 @@ export function classifySpinePosture(
   let state:    PostureState;
   let severity: PostureSeverity;
 
-  if (absRoll > LATERAL_MAX && absRoll > Math.abs(pitchDiff) * 0.7) {
-    // Lateral bending is dominant (lateral must at least equal sagittal to win)
+  // Only the already accepted direction gets the lower exit threshold.
+  // Crossing to the opposite side must exceed the normal 8° entry threshold.
+  const sameLateralDirection =
+    (previousState === "tilted_right" && rollDiff > 0) ||
+    (previousState === "tilted_left" && rollDiff < 0);
+  const lateralActive = sameLateralDirection ? absRoll >= LATERAL_EXIT : absRoll > LATERAL_MAX;
+
+  if (lateralActive && absRoll > Math.abs(pitchDiff) * 0.7) {
+    // Keep the existing forward-versus-sideways priority rule.
     state    = rollDiff > 0 ? "tilted_right" : "tilted_left";
     severity = absRoll > LATERAL_MAX * 2 ? "moderate" : "mild";
 
@@ -337,6 +347,46 @@ export function classifySpinePosture(
     instantScore: computeInstantScore(state),
     pitchDiff,
     rollDiff,
+  };
+}
+
+/**
+ * One stabiliser per sensor stream. Angles stay live, but state, severity and
+ * score stay with the accepted posture until a candidate lasts 400ms.
+ * The first reading establishes the state immediately; reset on disconnect or
+ * calibration changes so neither hysteresis nor a pending transition survives.
+ */
+export function createPostureStabilizer() {
+  let accepted: PostureClassification | null = null;
+  let pending: { state: PostureState; since: number } | null = null;
+
+  return {
+    reset() {
+      accepted = null;
+      pending = null;
+    },
+    update(
+      top: ParsedIMU,
+      bottom: ParsedIMU,
+      baseline: ClinicalBaseline | NeutralOffset | null,
+      now: number,
+    ): PostureClassification {
+      const candidate = classifySpinePosture(top, bottom, baseline, accepted?.state);
+      if (!accepted || candidate.state === accepted.state) {
+        accepted = candidate;
+        pending = null;
+      } else {
+        if (pending?.state !== candidate.state) {
+          pending = { state: candidate.state, since: now };
+        }
+        if (now - pending.since >= STATE_CONFIRM_MS) {
+          accepted = candidate;
+          pending = null;
+        }
+      }
+
+      return { ...accepted, pitchDiff: candidate.pitchDiff, rollDiff: candidate.rollDiff };
+    },
   };
 }
 
