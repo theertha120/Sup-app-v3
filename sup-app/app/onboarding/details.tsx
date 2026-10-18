@@ -100,7 +100,7 @@ export default function DetailsScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     fontFamily: "Agrandir-GrandHeavy",
     color: "#111",
     marginBottom: 0,
-    marginTop: -10,
+    marginTop: 0,
     textAlign: "center",
   },
   subheading: {
