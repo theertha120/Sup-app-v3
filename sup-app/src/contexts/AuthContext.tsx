@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppState } from "react-native";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
+import { checkEmailRegistered as checkEmail, type EmailCheckResult } from "@/src/lib/checkEmail";
 import { captureError, captureFunctionError } from "@/src/lib/sentry";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
 import { checkStreakOnAppOpen } from "@/src/services/posture/postureSyncService";
@@ -26,7 +26,7 @@ interface AuthContextType {
     token: string
   ) => Promise<{ success: boolean; error?: string }>;
   resendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
-  checkEmailRegistered: (email: string) => Promise<{ success: boolean; exists?: boolean; error?: string }>;
+  checkEmailRegistered: (email: string) => Promise<EmailCheckResult>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyPasswordResetOtp: (
     email: string,
@@ -224,24 +224,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function checkEmailRegistered(
-    email: string
-  ): Promise<{ success: boolean; exists?: boolean; error?: string }> {
-    try {
-      const { data, error } = await supabase.functions.invoke("check-email", {
-        body: { email },
-      });
-      if (error) {
-        console.warn("[auth] checkEmailRegistered failed", error);
-        void captureFunctionError("check-email", error);
-        return { success: false, error: error.message };
-      }
-      return { success: true, exists: !!data?.exists };
-    } catch (err) {
-      console.error("[auth] checkEmailRegistered error", err);
-      captureError(err, "check-email");
-      return { success: false, error: String(err) };
-    }
+  email: string
+): Promise<EmailCheckResult> {
+  const result = await checkEmail(
+    email,
+    (name, options) => supabase.functions.invoke(name, options)
+  );
+
+  if (!result.success) {
+    captureError(new Error(result.error), "check-email");
   }
+
+  return result;
+}
 
   async function requestPasswordReset(
     email: string

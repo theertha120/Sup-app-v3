@@ -17,7 +17,6 @@ export default function DetailsScreen() {
     "Agrandir-Regular":    require("../../assets/fonts/Agrandir-Regular.otf"),
   });
 
-  if (!fontsLoaded) return null;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -26,7 +25,10 @@ export default function DetailsScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
+  if (!fontsLoaded) return null;
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
 
   const isValid =
     !!firstName.trim() &&
@@ -55,9 +57,9 @@ export default function DetailsScreen() {
       return;
     }
 
-    const check = await checkEmailRegistered(email.trim());
+    const check = await checkEmailRegistered(normalizedEmail);
     if (!check.success) {
-      setError(check.error || "failed to check email");
+      setError(check.error);
       return;
     }
     if (check.exists) {
@@ -65,7 +67,7 @@ export default function DetailsScreen() {
       return;
     }
 
-    const res = await register(email.trim(), password);
+    const res = await register(normalizedEmail, password);
     if (!res.success) {
       if (/email rate limit exceeded/i.test(res.error ?? "")) {
         setError("We've hit the email sending limit for now, please try again in about an hour");
@@ -81,7 +83,7 @@ export default function DetailsScreen() {
     setPendingSignup({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      email: email.trim(),
+      email: normalizedEmail,
       username: username.trim(),
       password,
     });
