@@ -10,6 +10,7 @@ import { TutorialProvider } from "@/src/contexts/TutorialContext";
 import { initSentry, setSentryScreen, setSentryUser, wrapWithSentry } from "@/src/lib/sentry";
 import { LeaderboardProvider } from "@/src/contexts/LeaderboardContext";
 import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
+import OfflineGate from "@/src/components/ui/OfflineGate";
 
 // Must run at module load so native + JS crash handlers are installed before render.
 initSentry();
@@ -50,6 +51,8 @@ function RootLayout() {
         <PostureHistoryProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
+          {/* Offline popup over every screen; remounts the Stack on reconnect */}
+          <OfflineGate>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -84,6 +87,7 @@ function RootLayout() {
               options={{ presentation: "transparentModal" }}
             />
           </Stack>
+          </OfflineGate>
 
           {/* Global auth modal */}
           <SignInModal />
