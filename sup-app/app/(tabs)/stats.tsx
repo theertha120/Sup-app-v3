@@ -1,6 +1,6 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 import { BlurView } from "expo-blur";
 import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
 import { useFonts } from "expo-font";
+import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
@@ -31,6 +32,8 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -155,6 +158,8 @@ function getPageCountFromRows(rows: PosturePageRow[], range: Range): number {
 // Phone-local YYYY-MM-DD — must match how posture_daily.date is written.
 const toDateKey = (d: Date): string => toLocalDateKey(d);
 
+const DAY_LABELS = ["sun","mon","tue","wed","thu","fri","sat"];
+
 type FullStateTotals = Required<Omit<StateTotals, "transition">>;
 
 function emptyStateTotals(): FullStateTotals {
@@ -220,7 +225,8 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       dayRows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
       pages.push({
-        labels:      ["mon","tue","wed","thu","fri","sat","sun"],
+        // The window is the 7 days ending today, not Mon–Sun, so label each bar by its own weekday.
+        labels:      days.map((d) => DAY_LABELS[d.getDay()]),
         scores:      dayRows.map((r) => r?.supScore ?? 0),
         sessionMins: dayRows.map((r) => sessionMinsOf(r)),
         hasData:     dayRows.map((r) => r !== undefined),
@@ -231,8 +237,9 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       });
 
     } else if (range === "month") {
-      const ref   = new Date(now);
-      ref.setMonth(ref.getMonth() - p);
+      // Built from day 1: setMonth() on e.g. 31 Oct → "31 Sep" overflows to 1 Oct,
+      // which repeated the current month and skipped the previous one.
+      const ref   = new Date(now.getFullYear(), now.getMonth() - p, 1);
       const year  = ref.getFullYear();
       const month = ref.getMonth();
       const start = new Date(year, month, 1);
@@ -880,15 +887,26 @@ export default function StatsScreen() {
     lastUpdatedAt,
     error,
     refresh,
+    ensureFreshForToday,
   } = usePostureHistory();
+
+  // Reloads only if the calendar day rolled over since the last pull.
+  useFocusEffect(
+    useCallback(() => {
+      ensureFreshForToday();
+    }, [ensureFreshForToday])
+  );
 
   // Shown by each card while there is nothing to chart yet.
   const emptyMessage = error ?? "loading…";
 
   // Derived from the history loaded at login, so changing range is instant.
+  // Empty until a load has succeeded, so the cards show "loading…" / the error
+  // instead of a page of zero bars (buildPages always returns at least one page).
+  const hasHistory = lastUpdatedAt != null;
   const pages = useMemo(
-    () => (isAuthenticated && userId ? buildPages(history, range) : []),
-    [history, range, isAuthenticated, userId]
+    () => (isAuthenticated && userId && hasHistory ? buildPages(history, range) : []),
+    [history, range, isAuthenticated, userId, hasHistory]
   );
 
   const closePopup = () => setActivePopup(null);

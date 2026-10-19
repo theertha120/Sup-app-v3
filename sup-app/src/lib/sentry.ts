@@ -26,9 +26,50 @@ export function sentryBreadcrumb(message: string, data?: Record<string, unknown>
   Sentry.addBreadcrumb({ category: "app", message, data, level: "info" });
 }
 
-/** Report a handled (caught) error — Sentry only sees uncaught ones on its own. */
-export function captureError(error: unknown, context: string) {
-  Sentry.captureException(error, { tags: { context } });
+/** Tags every later event with the current route, and leaves a navigation trail. */
+export function setSentryScreen(pathname: string) {
+  Sentry.setTag("screen", pathname);
+  Sentry.addBreadcrumb({ category: "navigation", message: pathname, level: "info" });
+}
+
+type PlainError = { message?: unknown; code?: unknown; details?: unknown; hint?: unknown; name?: unknown };
+
+// Supabase/PostgREST errors are plain objects, which Sentry reports as
+// "Object captured as exception" with no message or stack. Wrap them in a real
+// Error and keep their code/details/hint as extras.
+function normalizeError(error: unknown): { err: unknown; extra: Record<string, unknown> } {
+  if (error instanceof Error || error === null || typeof error !== "object") {
+    return { err: error, extra: {} };
+  }
+  const e = error as PlainError;
+  if (typeof e.message !== "string") return { err: error, extra: {} };
+  const err = new Error(e.message);
+  if (typeof e.name === "string") err.name = e.name;
+  return { err, extra: { code: e.code, details: e.details, hint: e.hint } };
+}
+
+function isNetworkError(error: unknown) {
+  const msg = (error as PlainError | null)?.message;
+  return typeof msg === "string" && /network request failed|failed to fetch|timed? ?out/i.test(msg);
+}
+
+/**
+ * Report a handled (caught) error — Sentry only sees uncaught ones on its own.
+ * Offline/network failures are sent as warnings so they don't drown real bugs.
+ */
+export function captureError(error: unknown, context: string, extra?: Record<string, unknown>) {
+  const { err, extra: errExtra } = normalizeError(error);
+  const network = isNetworkError(error);
+  Sentry.captureException(err, {
+    level: network ? "warning" : "error",
+    tags: { context, network: String(network) },
+    extra: { ...errExtra, ...extra },
+  });
+}
+
+/** Report a render crash caught by a screen's error boundary (app keeps running). */
+export function captureRenderError(error: Error) {
+  Sentry.captureException(error, { level: "fatal", tags: { context: "render", boundary: "screen" } });
 }
 
 /**

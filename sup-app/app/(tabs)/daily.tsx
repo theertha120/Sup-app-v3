@@ -38,6 +38,9 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+import { captureError } from "@/src/lib/sentry";
+
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -230,7 +233,11 @@ export default function DailyScreen() {
         setDailyPair(fresh);
         setCachedDailyPair(userId, TODAY_KEY, fresh);
       })
-      .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
+      // On failure, keep whatever is on screen (cached pair) rather than zeroing the day.
+      .catch((err) => {
+        console.error("[DailyScreen] fetchDailyPosturePair failed", err);
+        captureError(err, "daily-posture-pair", { dateKey: TODAY_KEY, hadCache: cached != null });
+      })
       .finally(() => setIsLoadingDaily(false));
   }, [userId]);
  
@@ -243,6 +250,7 @@ export default function DailyScreen() {
       })
       .catch((err) => {
         console.error("[DailyScreen] Failed to load user profile", err);
+        captureError(err, "daily-profile");
       })
       .finally(() => setIsLoadingProfile(false));
   }, []);
@@ -269,7 +277,7 @@ export default function DailyScreen() {
       setCurrentUser(userProfileToUser(updatedProfile));
     });
     return unsubscribe;
-  }, []);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -299,6 +307,7 @@ export default function DailyScreen() {
       showToast("Username updated", "success");
     } catch (err) {
       console.error("[DailyScreen] Failed to update username", err);
+      captureError(err, "daily-username-update");
       showToast("Couldn't update username, try again", "error");
     }
   };
@@ -314,15 +323,14 @@ export default function DailyScreen() {
   const prevSupScore = previous?.supScore ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
 
-  console.log("[DailyScreen] dailyPair", dailyPair);
-
   const sessionHours = Math.floor(totalDeskMs / 3_600_000);
   const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
   const prevSessionMins = prevTotalDeskMs / 60000;
 
   // % changes per metric (computed here so they use live step data)
-  const scoreChange   = Math.round(((supScore - prevSupScore) / prevSupScore) * 100);
-  const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
+  // null when yesterday's value is 0 — dividing by it rendered "↑Infinity%" / "↓NaN%".
+  const scoreChange   = prevSupScore > 0 ? Math.round(((supScore - prevSupScore) / prevSupScore) * 100) : null;
+  const sessionChange = prevTotalDeskMs > 0 ? Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100) : null;
   const showBadges = today != null && previous != null;
 
   const STATE_TOTALS = {
@@ -470,7 +478,7 @@ export default function DailyScreen() {
             ]}
           >
             <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
-            {showBadges && <ChangeBadge value={sessionChange} />}
+            {showBadges && sessionChange != null && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
             <Text style={styles.statValue}>
               {sessionHours}h {sessionMinutes}m
@@ -488,7 +496,7 @@ export default function DailyScreen() {
             ]}
           >
             <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
-            {showBadges && <ChangeBadge value={scoreChange} />}
+            {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
             <Text style={styles.statValue}>{supScore}</Text>
           </View>

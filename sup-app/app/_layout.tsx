@@ -1,5 +1,5 @@
 import React from "react";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { IMUProvider } from "@/src/contexts/IMUContext";
 import SignInModal from "@/src/components/modals/SignInModal";
@@ -7,7 +7,7 @@ import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
 import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 import { TutorialProvider } from "@/src/contexts/TutorialContext";
-import { initSentry, setSentryUser, wrapWithSentry } from "@/src/lib/sentry";
+import { initSentry, setSentryScreen, setSentryUser, wrapWithSentry } from "@/src/lib/sentry";
 import { LeaderboardProvider } from "@/src/contexts/LeaderboardContext";
 import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
 
@@ -23,6 +23,15 @@ function SentryUserSync() {
   return null;
 }
 
+/** Tags crash reports with the screen the user was on (renders nothing). */
+function SentryScreenSync() {
+  const pathname = usePathname();
+  React.useEffect(() => {
+    setSentryScreen(pathname);
+  }, [pathname]);
+  return null;
+}
+
 function RootLayout() {
   // Initialize reminder notifications
   useReminderNotifications();
@@ -30,6 +39,7 @@ function RootLayout() {
   return (
     <AuthProvider>
       <SentryUserSync />
+      <SentryScreenSync />
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>

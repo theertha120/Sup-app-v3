@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { DailyPosturePair } from "./postureSyncService";
+import { captureError } from "@/src/lib/sentry";
 
 const STALE_MS = 60_000; // 1 minute
 
@@ -17,7 +18,9 @@ export async function getCachedDailyPair(
     const { data, cachedAt } = JSON.parse(raw);
     if (Date.now() - cachedAt > STALE_MS) return null; // expired, force fresh fetch
     return data as DailyPosturePair;
-  } catch {
+  } catch (e) {
+    // Corrupt entry or storage failure — fall through to a fresh fetch.
+    captureError(e, "daily-cache-read");
     return null;
   }
 }
@@ -32,5 +35,7 @@ export async function setCachedDailyPair(
       cacheKey(userId, dateKey),
       JSON.stringify({ data: pair, cachedAt: Date.now() })
     );
-  } catch {}
+  } catch (e) {
+    captureError(e, "daily-cache-write");
+  }
 }

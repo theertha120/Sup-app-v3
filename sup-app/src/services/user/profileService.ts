@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
+import { captureError } from "@/src/lib/sentry";
 import type { User } from "@/constants/env";
 
 const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
@@ -365,11 +366,13 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
         return null;
       }
       console.warn("[profile] Failed to fetch profile with stats", error);
+      captureError(error, "profile-with-stats");
       return null;
     } else if (data) {
-      console.log("[profile] Fetched profile with stats:", data);
+      // Dev only: console output becomes Sentry breadcrumbs, and this includes name/username.
+      if (__DEV__) console.log("[profile] Fetched profile with stats:", data);
       const profile = mapRowToUserProfile(data as ProfileRow);
-      console.log("[profile] Mapped profile with stats:", profile);
+      if (__DEV__) console.log("[profile] Mapped profile with stats:", profile);
       // If there's a locally stored supsona for this user, prefer it for avatar
       try {
         const local = await getLocalSupsona(userId);
@@ -380,6 +383,7 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
     }
   } catch (err) {
     console.warn("[profile] Supabase profile-with-stats fetch threw", err);
+    captureError(err, "profile-with-stats");
     return null;
   }
 

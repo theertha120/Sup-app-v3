@@ -28,6 +28,9 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "@/src/services/ai/aiProvider";
 import { toLocalDateKey, addDaysToDateKey } from "@/src/lib/dateKey";
+import { captureError } from "@/src/lib/sentry";
+
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -190,6 +193,7 @@ export default function HomeScreen() {
       })
       .catch((err) => {
         console.error("[HomeScreen] Failed to load user profile", err);
+        captureError(err, "home-profile");
       })
       .finally(() => setIsLoadingProfile(false));
   }, []);
@@ -243,7 +247,9 @@ export default function HomeScreen() {
         setAiSummary(summary);
         setHasSummaryData(summary != null);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[HomeScreen] Failed to load daily AI summary", err);
+        captureError(err, "home-ai-summary", { todayKey });
         setAiSummary(null);
         setHasSummaryData(false);
       })
@@ -274,6 +280,7 @@ export default function HomeScreen() {
       showToast("username updated", "success");
     } catch (err) {
       console.error("[HomeScreen] Failed to update username", err);
+      captureError(err, "home-username-update");
       showToast("couldn't update username, try again", "error");
     }
   };
