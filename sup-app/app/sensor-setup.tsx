@@ -1,4 +1,5 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 /**
  * sensor-setup.tsx
  *
@@ -156,7 +157,7 @@ export default function SensorSetupScreen() {
     setShowPlacementCheck(true);
   }, [bothConnected, isNeutralCalibrated]);
 
-  // ── Tutorial: once calibration actually completes, move on to desk mode ──
+  // ── Tutorial: once calibration actually completes, point to desk mode ───
   //
   // Only reacts to a fresh false→true flip while this tip is showing — if
   // calibration.isComplete was already true when we arrived here (e.g.
@@ -170,10 +171,17 @@ export default function SensorSetupScreen() {
     prevCalibrationCompleteRef.current = calibration.isComplete;
 
     if (tutorialStep === "calibrate-tip" && calibration.isComplete && !wasComplete) {
-      setTutorialStep("figure-tip");
-      router.push("/desk" as any);
+      setTutorialStep("go-desk-tip");
     }
   }, [tutorialStep, calibration.isComplete, setTutorialStep]);
+
+  // The "go back and tap …" tip sits at the top of the page.
+  const scrollRef = useRef<ScrollView>(null);
+  const showBackTip = tutorialStep === "go-desk-tip" || tutorialStep === "go-stats-tip";
+
+  useEffect(() => {
+    if (showBackTip) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [showBackTip]);
 
   // ── Load saved device identity ────────────────────────────────────────────
 
@@ -489,11 +497,15 @@ export default function SensorSetupScreen() {
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
-          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backBtn}>
+          <PressFeedback
+            feedback="scale"
+            onPress={() => router.back()}
+            style={[styles.backBtn, showBackTip && [styles.tutorialHighlight, styles.backBtnHighlight]]}
+          >
             <Ionicons name="chevron-back" size={24} color={colours.textPrimary} />
           </PressFeedback>
           <View>
@@ -501,6 +513,24 @@ export default function SensorSetupScreen() {
             <Text style={styles.headerSub}>manage your posture s'pots</Text>
           </View>
         </View>
+
+        {showBackTip && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../assets/images/mascot_tutorial.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                {tutorialStep === "go-desk-tip"
+                  ? "nice! tap the back arrow, then desk mode in the navbar."
+                  : "tap the back arrow, then stats in the navbar."}
+              </Text>
+              <TutorialActions hideSkip />
+            </View>
+          </View>
+        )}
 
         {/* Connection status banner */}
         <View style={[
@@ -603,12 +633,7 @@ export default function SensorSetupScreen() {
                 <Text style={styles.tutorialTipText}>
                   scan the qr code provided and turn on both your top and bottom s'pots to connect them. once they're both connected, a session starts automatically.
                 </Text>
-                <PressFeedback feedback="link"
-                  onPress={() => {
-                    setTutorialStep("stats-tip");
-                    router.replace("/(tabs)/stats" as any);
-                  }}
-                >
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("go-stats-tip")}>
                   <Text style={styles.tutorialTipNext}>skip for now and go to stats</Text>
                 </PressFeedback>
               </View>
@@ -674,12 +699,7 @@ export default function SensorSetupScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>{calibrationTipText}</Text>
-              <PressFeedback feedback="link"
-                onPress={() => {
-                  setTutorialStep("figure-tip");
-                  router.push("/desk" as any);
-                }}
-              >
+              <PressFeedback feedback="link" onPress={() => setTutorialStep("go-desk-tip")}>
                 <Text style={styles.tutorialTipNext}>skip and do calibration later</Text>
               </PressFeedback>
             </View>
@@ -800,6 +820,7 @@ const styles = StyleSheet.create({
 
   header:      { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   backBtn:     { padding: 4 },
+  backBtnHighlight: { borderRadius: 20, backgroundColor: "#FFFFFF" },
   headerTitle: { fontSize: 22, color: colours.textPrimary, fontFamily: "Agrandir-GrandHeavy" },
   headerSub:   { fontSize: 13, color: colours.textSecondary, fontFamily: "Agrandir-Regular" },
 

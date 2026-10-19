@@ -57,36 +57,12 @@ export default function LeaderboardScreen() {
   const { userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
   const scrollRef = useRef<ScrollView>(null);
-  const tutorialScrollFrame = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (tutorialScrollFrame.current !== null) {
-      cancelAnimationFrame(tutorialScrollFrame.current);
-      tutorialScrollFrame.current = null;
-    }
-  }, [tutorialStep]);
 
   useEffect(() => {
-    if (tutorialStep === "add-friends-tip") {
+    if (tutorialStep === "community-tip" || tutorialStep === "add-friends-tip") {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, [tutorialStep]);
-
-  const scrollToFullLeaderboardTip = (y: number) => {
-    if (tutorialStep !== "community-tip-full") return;
-    if (tutorialScrollFrame.current !== null) {
-      cancelAnimationFrame(tutorialScrollFrame.current);
-    }
-    // Wait for the newly inserted tip and the content height to be laid out.
-    tutorialScrollFrame.current = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 48), animated: true });
-      tutorialScrollFrame.current = null;
-    });
-  };
-
-  const showAddFriendsTip = () => {
-    setTutorialStep("add-friends-tip");
-  };
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
@@ -159,7 +135,7 @@ export default function LeaderboardScreen() {
                 see how your weekly points stack up against the community!
               </Text>
               <TutorialActions>
-                <PressFeedback feedback="link" onPress={() => setTutorialStep("community-tip-full")}>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("add-friends-tip")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
                 </PressFeedback>
               </TutorialActions>
@@ -262,19 +238,10 @@ export default function LeaderboardScreen() {
           </>
         )}
 
-        {tutorialStep === "community-tip-full" && (
-          <View onLayout={({ nativeEvent }) => scrollToFullLeaderboardTip(nativeEvent.layout.y)}>
-            <FullLeaderboardTip onNext={showAddFriendsTip} />
-          </View>
-        )}
-
         {/* ── See full leaderboard ── */}
         {showLeaderboard && (
           <PressFeedback
-            style={[
-              styles.fullLeaderboardButton,
-              tutorialStep === "community-tip-full" && styles.fullLeaderboardButtonHighlighted,
-            ]}
+            style={styles.fullLeaderboardButton}
             onPress={() =>
               router.push({ pathname: "/leaderboard-full", params: { period: SUMMARY_PERIOD } })
             }
@@ -284,30 +251,6 @@ export default function LeaderboardScreen() {
         )}
       </ScrollView>
     </Animated.View>
-  );
-}
-
-// Shown after the final person, directly above the highlighted leaderboard button.
-const FULL_LEADERBOARD_TIP =
-  "see the full leaderboard here.";
-
-function FullLeaderboardTip({ onNext }: { onNext: () => void }) {
-  return (
-    <View style={[styles.tutorialTip, { marginTop: 8 }]}>
-      <Image
-        source={require("../../assets/images/mascot_tutorial.png")}
-        style={styles.tutorialTipMascot}
-        resizeMode="contain"
-      />
-      <View style={styles.tutorialTipTextWrap}>
-        <Text style={styles.tutorialTipText}>{FULL_LEADERBOARD_TIP}</Text>
-        <TutorialActions>
-          <PressFeedback feedback="link" onPress={onNext}>
-            <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-          </PressFeedback>
-        </TutorialActions>
-      </View>
-    </View>
   );
 }
 
@@ -579,16 +522,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.55)",
-  },
-  fullLeaderboardButtonHighlighted: {
-    marginTop: -5,
-    borderWidth: 3,
-    borderColor: "#5222AE",
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#5222AE",
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 10,
   },
   fullLeaderboardButtonText: {
     fontFamily: "Agrandir-Regular",

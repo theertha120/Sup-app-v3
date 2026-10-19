@@ -12,6 +12,7 @@ import {
 import React, { useState } from "react";
 import { BrandAlert, BrandAlertButton } from "../src/components/ui/BrandAlert";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 // import * as Sentry from "@sentry/react-native"; // needed only for the crash test buttons
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
@@ -80,8 +81,12 @@ export default function SettingsScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backIcon}>←</Text>
+        <PressFeedback
+          feedback="scale"
+          onPress={() => router.back()}
+          style={[styles.backButton, tutorialStep === "go-sensor-tip" && styles.backButtonHighlighted]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#222" />
         </PressFeedback>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.placeholder} />
@@ -101,6 +106,22 @@ export default function SettingsScreen() {
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>click here to set your coaching preferences.</Text>
               <TutorialActions />
+            </View>
+          </View>
+        )}
+
+        {tutorialStep === "go-sensor-tip" && (
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../assets/images/mascot_tutorial.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>
+                all set! tap the back arrow, then the s'pot icon at the top to set up your s'pots.
+              </Text>
+              <TutorialActions hideSkip />
             </View>
           </View>
         )}
@@ -259,10 +280,7 @@ export default function SettingsScreen() {
         onComplete={() => {
           setShowCoachingModal(false);
           showToast("Coaching preferences saved", "success");
-          if (tutorialStep === "coaching-tip") {
-            setTutorialStep("connect-tip");
-            router.push("/sensor-setup" as any);
-          }
+          if (tutorialStep === "coaching-tip") setTutorialStep("go-sensor-tip");
         }}
         onCancel={() => setShowCoachingModal(false)}
       />
@@ -300,9 +318,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  backIcon: {
-    fontSize: 24,
-    color: "#222",
+  backButtonHighlighted: {
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: "#5222AE",
+    backgroundColor: "rgba(82, 34, 174, 0.06)",
   },
   headerTitle: {
     fontSize: 20,

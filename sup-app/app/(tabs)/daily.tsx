@@ -449,12 +449,7 @@ export default function DailyScreen() {
                 here's your total session time and s'up score for today's s'pot sessions.
               </Text>
               <TutorialActions>
-                <PressFeedback feedback="link"
-                  onPress={() => {
-                    setTutorialStep("settings-tip");
-                    router.push("/settings");
-                  }}
-                >
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("go-settings-tip")}>
                   <Text style={styles.tutorialTipNext}>got it</Text>
                 </PressFeedback>
               </TutorialActions>

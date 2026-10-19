@@ -18,7 +18,6 @@ import { BlurView } from "expo-blur";
 import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import RefreshButton from "@/src/components/ui/RefreshButton";
@@ -28,7 +27,7 @@ import type {
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
-import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
+import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
@@ -862,27 +861,12 @@ export default function StatsScreen() {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
   const scrollRef = useRef<ScrollView>(null);
-  const tutorialScrollFrame = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (tutorialScrollFrame.current !== null) {
-      cancelAnimationFrame(tutorialScrollFrame.current);
-      tutorialScrollFrame.current = null;
+  useEffect(() => {
+    if (tutorialStep === "stats-tip") {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, [tutorialStep]);
-
-  // Measure after the tip is inserted: removing the previous tip also moves
-  // the following cards, so positions saved before Next would be stale.
-  const scrollToTutorialCard = (step: TutorialStep, y: number) => {
-    if (tutorialStep !== step) return;
-    if (tutorialScrollFrame.current !== null) {
-      cancelAnimationFrame(tutorialScrollFrame.current);
-    }
-    tutorialScrollFrame.current = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 48), animated: true });
-      tutorialScrollFrame.current = null;
-    });
-  };
 
   const [range, setRange]             = useState<Range>("week");
   const [resetKey, setResetKey]       = useState("week");
@@ -955,10 +939,7 @@ export default function StatsScreen() {
         />
 
         {tutorialStep === "stats-tip" && (
-          <View
-            style={styles.tutorialTip}
-            onLayout={() => scrollToTutorialCard("stats-tip", 0)}
-          >
+          <View style={styles.tutorialTip}>
             <Image
               source={require("../../assets/images/mascot_tutorial.png")}
               style={styles.tutorialTipMascot}
@@ -966,10 +947,10 @@ export default function StatsScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                switch between weekly, monthly, and yearly data here. let me walk you through what each card below means!
+                track your posture over time here. tap any "?" to learn more!
               </Text>
               <TutorialActions>
-                <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-trend")}>
+                <PressFeedback feedback="link" onPress={() => setTutorialStep("go-community-tip")}>
                   <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
                 </PressFeedback>
               </TutorialActions>
@@ -980,26 +961,6 @@ export default function StatsScreen() {
         {/* S'CORE TREND */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
-
-          {tutorialStep === "stats-tip-trend" && (
-            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
-              <Image
-                source={require("../../assets/images/mascot_tutorial.png")}
-                style={styles.tutorialTipMascot}
-                resizeMode="contain"
-              />
-              <View style={styles.tutorialTipTextWrap}>
-                <Text style={styles.tutorialTipText}>
-                  this is your s'up s'core trend. each bar is a score out of 100. tap a bar to see the exact number, or the "?" for how it's calculated.
-                </Text>
-                <TutorialActions>
-                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-session")}>
-                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                  </PressFeedback>
-                </TutorialActions>
-              </View>
-            </View>
-          )}
 
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
@@ -1020,31 +981,8 @@ export default function StatsScreen() {
         </View>
 
         {/* S'ESSION TIME */}
-        <View
-          style={[styles.card, styles.shadow]}
-          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-session", nativeEvent.layout.y)}
-        >
+        <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
-
-          {tutorialStep === "stats-tip-session" && (
-            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
-              <Image
-                source={require("../../assets/images/mascot_tutorial.png")}
-                style={styles.tutorialTipMascot}
-                resizeMode="contain"
-              />
-              <View style={styles.tutorialTipTextWrap}>
-                <Text style={styles.tutorialTipText}>
-                  s'ession time is how long you tracked posture in each period. the more you track, the more your s'up s'core reflects your real posture.
-                </Text>
-                <TutorialActions>
-                  <PressFeedback feedback="link" onPress={() => setTutorialStep("stats-tip-breakdown")}>
-                    <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                  </PressFeedback>
-                </TutorialActions>
-              </View>
-            </View>
-          )}
 
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
@@ -1084,36 +1022,8 @@ export default function StatsScreen() {
         </View> */}
 
         {/* POSTURE BREAKDOWN */}
-        <View
-          style={[styles.card, styles.shadow]}
-          onLayout={({ nativeEvent }) => scrollToTutorialCard("stats-tip-breakdown", nativeEvent.layout.y)}
-        >
+        <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
-
-          {tutorialStep === "stats-tip-breakdown" && (
-            <View style={[styles.tutorialTip, styles.tutorialTipInCard]}>
-              <Image
-                source={require("../../assets/images/mascot_tutorial.png")}
-                style={styles.tutorialTipMascot}
-                resizeMode="contain"
-              />
-              <View style={styles.tutorialTipTextWrap}>
-                <Text style={styles.tutorialTipText}>
-                  posture breakdown shows the share of your tracked time in each posture state. tap "?" for the full details.
-                </Text>
-                <TutorialActions>
-                  <PressFeedback feedback="link"
-                    onPress={() => {
-                      setTutorialStep("community-tip");
-                      router.replace("/leaderboard" as any);
-                    }}
-                  >
-                    <Text style={styles.tutorialTipNext}>got it! {'>>'}</Text>
-                  </PressFeedback>
-                </TutorialActions>
-              </View>
-            </View>
-          )}
 
           {pages && pages.length > 0 ? (
             <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
@@ -1191,15 +1101,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 6,
-  },
-  // Used when the tip sits inside a card (next to its "?" InfoButton) instead
-  // of full-bleed in the scroll flow — the card already has its own
-  // horizontal margin/padding, so this drops tutorialTip's own and adds a
-  // little breathing room under the InfoButton instead.
-  tutorialTipInCard: {
-    marginHorizontal: 0,
-    marginTop: 8,
-    marginBottom: 12,
   },
   tutorialTipMascot: {
     width: 34,

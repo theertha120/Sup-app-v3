@@ -20,7 +20,6 @@ import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { useFocusEffect } from "expo-router";
-import { router } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
@@ -765,12 +764,7 @@ export default function DeskScreen() {
                     click 'end session' button to end your session.
                   </Text>
                   <TutorialActions>
-                    <PressFeedback feedback="link"
-                      onPress={() => {
-                        setTutorialStep("stats-tip");
-                        router.replace("/(tabs)/stats" as any);
-                      }}
-                    >
+                    <PressFeedback feedback="link" onPress={() => setTutorialStep("go-stats-tip")}>
                       <Text style={s.tutorialTipNext}>next {'>>'}</Text>
                     </PressFeedback>
                   </TutorialActions>
