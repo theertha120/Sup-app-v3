@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useFocusEffect } from "expo-router/react-navigation";
+import { useFocusEffect } from "expo-router";
 import { displayName } from "@/src/utils/displayName";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";

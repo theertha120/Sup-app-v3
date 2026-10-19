@@ -3,7 +3,7 @@ import React, { useRef, useCallback, useEffect } from "react";
 import { Animated, StyleSheet, Text, View, Image } from "react-native";
 import { useFonts } from "expo-font";
 
-import { useFocusEffect } from "expo-router/react-navigation";
+import { useFocusEffect } from "expo-router";
 import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import { supabase } from "../../src/lib/supabase";
