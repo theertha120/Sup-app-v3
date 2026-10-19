@@ -65,6 +65,21 @@ const HEADER_TIPS: Record<HeaderTipStep, {
   },
 };
 
+// "Go to" prompts: the user opens the next page from the header themselves.
+// Tapping the highlighted icon starts that page's tips.
+type HeaderPromptStep = "go-settings-tip" | "go-sensor-tip";
+
+const HEADER_PROMPTS: Record<HeaderPromptStep, { text: string; slot: number }> = {
+  "go-settings-tip": {
+    text: "now tap the settings icon up here to open your settings.",
+    slot: 3,
+  },
+  "go-sensor-tip": {
+    text: "now tap the s'pot icon up here to set up your s'pots.",
+    slot: 2,
+  },
+};
+
 const ICON_SIZE = 40; // styles.iconButton width
 const ICON_GAP  = 8;  // styles.headerButtons gap
 const CARET_SIZE = 14;
@@ -87,7 +102,10 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const headerTip = tutorialStep && tutorialStep in HEADER_TIPS
     ? HEADER_TIPS[tutorialStep as HeaderTipStep]
     : null;
- 
+  const headerPrompt = tutorialStep && tutorialStep in HEADER_PROMPTS
+    ? HEADER_PROMPTS[tutorialStep as HeaderPromptStep]
+    : null;
+
   const [streakDays, setStreakDays] = useState(0);
   const [weeklyPoints, setWeeklyPoints] = useState(0);
   const [username, setUsername] = useState("you");
@@ -191,7 +209,13 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   };
  
   const handleSettingsPress = () => {
+    if (tutorialStep === "go-settings-tip") setTutorialStep("settings-tip");
     router.push("/settings");
+  };
+
+  const handleSensorPress = () => {
+    if (tutorialStep === "go-sensor-tip") setTutorialStep("connect-tip");
+    router.push("/sensor-setup");
   };
  
   const handleOpenFriends = () => {
@@ -214,13 +238,24 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         {/* Icon row */}
         <View style={styles.headerButtons}>
  
-          <PressFeedback style={styles.iconButton} onPress={handleSettingsPress}>
+          <PressFeedback
+            style={[
+              styles.iconButton,
+              (tutorialStep === "header-settings-tip" || tutorialStep === "go-settings-tip") &&
+                styles.iconButtonHighlighted,
+            ]}
+            onPress={handleSettingsPress}
+          >
             <Ionicons name="settings-outline" size={22} color={PRIMARY_TEXT} />
           </PressFeedback>
  
           <PressFeedback
-            style={styles.iconButton}
-            onPress={() => router.push("/sensor-setup")}
+            style={[
+              styles.iconButton,
+              (tutorialStep === "header-sensor-tip" || tutorialStep === "go-sensor-tip") &&
+                styles.iconButtonHighlighted,
+            ]}
+            onPress={handleSensorPress}
           >
             <Ionicons name="hardware-chip-outline" size={22} color={PRIMARY_TEXT} />
           </PressFeedback>
@@ -262,14 +297,34 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
               resizeMode="contain"
             />
             <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                add friends by username by choosing the profile icon here. then you're all set!
-              </Text>
+              <Text style={styles.tutorialTipText}>{headerTip.text}</Text>
               <TutorialActions>
-                <PressFeedback feedback="link" onPress={dismissTutorial}>
-                  <Text style={styles.tutorialTipNext}>start exploring the app!</Text>
+                <PressFeedback
+                  feedback="link"
+                  onPress={() => headerTip.next ? setTutorialStep(headerTip.next) : dismissTutorial()}
+                >
+                  <Text style={styles.tutorialTipNext}>
+                    {headerTip.next ? "next >>" : "start exploring the app!"}
+                  </Text>
                 </PressFeedback>
               </TutorialActions>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {headerPrompt && (
+        <View style={styles.tutorialTipAnchor}>
+          <View style={[styles.tutorialTipCaret, { marginRight: caretRightFor(headerPrompt.slot) }]} />
+          <View style={styles.tutorialTip}>
+            <Image
+              source={require("../../../assets/images/mascot_tutorial.png")}
+              style={styles.tutorialTipMascot}
+              resizeMode="contain"
+            />
+            <View style={styles.tutorialTipTextWrap}>
+              <Text style={styles.tutorialTipText}>{headerPrompt.text}</Text>
+              <TutorialActions hideSkip />
             </View>
           </View>
         </View>

@@ -13,15 +13,21 @@ export type TutorialStep =
   | "supdate-tip"
   | "end-session-tip"
   | "stats-tip"
-  | "stats-tip-trend"
-  | "stats-tip-session"
-  | "stats-tip-breakdown"
   | "community-tip"
-  | "community-tip-full"
   | "add-friends-tip"
   | "header-settings-tip"
   | "header-sensor-tip"
   | "header-streak-tip"
+  // "Go to" prompts between pages: the user opens the next page themselves
+  // (navbar tab or header icon) so they learn how to get there; tapping the
+  // highlighted target starts that page's tips.
+  | "go-home-tip"
+  | "go-daily-tip"
+  | "go-settings-tip"
+  | "go-sensor-tip"
+  | "go-desk-tip"
+  | "go-stats-tip"
+  | "go-community-tip"
   | null;
 
 interface TutorialContextType {
@@ -40,7 +46,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     <TutorialContext.Provider value={{
       tutorialStep,
       setTutorialStep,
-      startTutorial: () => setTutorialStep("goals-tip"),
+      startTutorial: () => setTutorialStep("go-home-tip"),
       dismissTutorial: () => setTutorialStep(null),
     }}>
       {children}

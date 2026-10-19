@@ -31,33 +31,39 @@ function skip(tutorialStep, options = {}) {
   return calls;
 }
 
-for (const [steps, nextStep, method, route] of [
-  [['goals-tip', 'data-tip'], 'snapshot-tip', 'push', '/(tabs)/daily'],
-  [['snapshot-tip', 'snapshot-tip-stats'], 'settings-tip', 'push', '/settings'],
-  [['settings-tip', 'coaching-tip'], 'connect-tip', 'push', '/sensor-setup'],
-  [['figure-tip', 'supdate-tip', 'end-session-tip'], 'stats-tip', 'replace', '/(tabs)/stats'],
-  [['stats-tip', 'stats-tip-trend', 'stats-tip-session', 'stats-tip-breakdown'], 'community-tip', 'replace', '/(tabs)/leaderboard'],
+// Every page is reached from the header or navbar: skipping shows the
+// "go to" prompt and the user navigates themselves.
+for (const [steps, prompt] of [
+  [['goals-tip', 'data-tip'], 'go-daily-tip'],
+  [['snapshot-tip', 'snapshot-tip-stats'], 'go-settings-tip'],
+  [['settings-tip', 'coaching-tip'], 'go-sensor-tip'],
+  [['figure-tip', 'supdate-tip', 'end-session-tip'], 'go-stats-tip'],
+  [['stats-tip'], 'go-community-tip'],
 ]) {
-  test(`every tip on ${steps[0]} skips to the next page's first tip`, () => {
+  test(`every tip on ${steps[0]} skips to the ${prompt} prompt without navigating`, () => {
     for (const step of steps) {
-      assert.deepEqual(skip(step), [['step', nextStep], [method, route]]);
+      assert.deepEqual(skip(step), [['step', prompt]]);
     }
   });
 }
 
-test('skipping Community still shows the final start-exploring message', () => {
-  for (const step of ['community-tip', 'community-tip-full']) {
-    assert.deepEqual(skip(step), [['step', 'add-friends-tip']]);
+test('"go to" prompts have nothing to skip', () => {
+  for (const step of ['go-home-tip', 'go-daily-tip', 'go-settings-tip', 'go-sensor-tip', 'go-desk-tip', 'go-stats-tip', 'go-community-tip']) {
+    assert.deepEqual(skip(step), []);
   }
+});
+
+test('skipping Community still shows the final start-exploring message', () => {
+  assert.deepEqual(skip('community-tip'), [['step', 'add-friends-tip']]);
 });
 
 test('skipping the final message finishes the tutorial without navigating', () => {
   assert.deepEqual(skip('add-friends-tip'), [['dismiss']]);
 });
 
-test('closes coaching setup before navigation and cannot skip during a save', () => {
+test('closes coaching setup before moving on and cannot skip during a save', () => {
   assert.deepEqual(skip('coaching-tip', { modal: true }), [
-    ['close-modal'], ['step', 'connect-tip'], ['push', '/sensor-setup'],
+    ['close-modal'], ['step', 'go-sensor-tip'],
   ]);
   assert.deepEqual(skip('coaching-tip', { modal: true, disabled: true }), []);
 });

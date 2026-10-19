@@ -1,9 +1,9 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { View, Dimensions, StyleSheet, Image } from "react-native";
+import { View, Dimensions, StyleSheet, Image, Text } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Defs, Mask, Rect } from "react-native-svg";
-import { BottomTabBarProps } from "expo-router/js-tabs";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Animated, {
@@ -12,10 +12,29 @@ import Animated, {
 } from "react-native-reanimated";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { logNavbarClick, type NavbarTab } from "@/src/services/analytics/navbarClickService";
+import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
+import TutorialActions from "@/src/components/onboarding/TutorialActions";
 
 const { width } = Dimensions.get("window");
 
 const TAB_BAR_WIDTH = width - 40;
+const TAB_BAR_HEIGHT = 72;
+const TIP_WIDTH = Math.min(260, TAB_BAR_WIDTH);
+const CARET_SIZE = 14;
+
+// Tutorial "go to" prompts: the user opens the next page from the navbar
+// themselves. Tapping the highlighted tab starts that page's tips.
+const NAV_PROMPTS: Partial<Record<NonNullable<TutorialStep>, {
+  route: string;
+  text: string;
+  firstStep: TutorialStep;
+}>> = {
+  "go-home-tip":      { route: "home",        text: "let's start! tap home in the navbar.",                firstStep: "goals-tip" },
+  "go-daily-tip":     { route: "daily",       text: "now tap the daily summary in the navbar.",            firstStep: "snapshot-tip" },
+  "go-desk-tip":      { route: "desk",        text: "now tap desk mode in the navbar.",                    firstStep: "figure-tip" },
+  "go-stats-tip":     { route: "stats",       text: "now tap stats in the navbar to see your progress.",   firstStep: "stats-tip" },
+  "go-community-tip": { route: "leaderboard", text: "now tap the community tab in the navbar.",            firstStep: "community-tip" },
+};
 
 const ROUTE_TO_TAB: Record<string, NavbarTab> = {
   home: "home",
@@ -52,6 +71,11 @@ export default function LiquidGlass({
   const activeIndex = state.index;
   const TAB_WIDTH = TAB_BAR_WIDTH / state.routes.length;
   const { bottom: bottomInset } = useSafeAreaInsets();
+  const { tutorialStep, setTutorialStep } = useTutorial();
+  const prompt = tutorialStep ? NAV_PROMPTS[tutorialStep] : undefined;
+  const promptIndex = prompt ? state.routes.findIndex((r: { name: string }) => r.name === prompt.route) : -1;
+  const promptCenterX = (promptIndex + 0.5) * TAB_WIDTH;
+  const tipLeft = Math.max(0, Math.min(promptCenterX - TIP_WIDTH / 2, TAB_BAR_WIDTH - TIP_WIDTH));
 
   const animatedBubbleStyle = useAnimatedStyle(() => {
     return {
@@ -77,6 +101,28 @@ export default function LiquidGlass({
   };
 
   return (
+    <>
+    {/* A sibling of the bar (not a child) so its buttons stay tappable on
+        Android, which ignores touches outside a parent's bounds. */}
+    {prompt && promptIndex >= 0 && (
+      <View
+        pointerEvents="box-none"
+        style={[styles.tipAnchor, { bottom: 25 + bottomInset + TAB_BAR_HEIGHT + 12 }]}
+      >
+        <View style={[styles.tip, { marginLeft: tipLeft }]}>
+          <Image
+            source={require("../../../assets/images/mascot_tutorial.png")}
+            style={styles.tipMascot}
+            resizeMode="contain"
+          />
+          <View style={styles.tipTextWrap}>
+            <Text style={styles.tipText}>{prompt.text}</Text>
+            <TutorialActions hideSkip />
+          </View>
+        </View>
+        <View style={[styles.tipCaret, { marginLeft: promptCenterX - CARET_SIZE / 2 }]} />
+      </View>
+    )}
     <View style={[styles.wrapper, { bottom: 25 + bottomInset }]}>
       <BlurView intensity={100} tint="light" style={styles.container}>
         <View style={styles.shine} />
@@ -89,9 +135,12 @@ export default function LiquidGlass({
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
 
+          const isPromptTarget = index === promptIndex;
+
           const onPress = () => {
             const tab = ROUTE_TO_TAB[route.name];
             if (tab) logNavbarClick(userId, tab);
+            if (isPromptTarget && prompt) setTutorialStep(prompt.firstStep);
 
             const event = navigation.emit({
               type: "tabPress",
@@ -119,6 +168,7 @@ export default function LiquidGlass({
               onPress={onPress}
               style={styles.tab}
             >
+              {isPromptTarget && <View style={styles.tabHighlight} />}
               <Animated.View style={scaleStyle}>
                 {NAV_IMAGES[route.name] ? (
                   <Image
@@ -135,6 +185,7 @@ export default function LiquidGlass({
         })}
       </BlurView>
     </View>
+    </>
   );
 }
 
@@ -202,5 +253,58 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  /* Tutorial "go to" prompt */
+  tabHighlight: {
+    position: "absolute",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 3,
+    borderColor: "#5222AE",
+  },
+  tipAnchor: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+  },
+  tip: {
+    width: TIP_WIDTH,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  tipCaret: {
+    width: CARET_SIZE,
+    height: CARET_SIZE,
+    marginTop: -7,
+    backgroundColor: "rgba(30, 24, 46, 0.94)",
+    borderRadius: 3,
+    transform: [{ rotate: "45deg" }],
+    elevation: 6,
+  },
+  tipMascot: {
+    width: 34,
+    height: 34,
+  },
+  tipTextWrap: {
+    flex: 1,
+  },
+  tipText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 15,
+    color: "#FFFFFF",
+    lineHeight: 20,
+    marginBottom: 4,
   },
 });
