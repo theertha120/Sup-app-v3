@@ -93,6 +93,9 @@ interface HeaderBarProps {
   logoSize?: number;
 }
 
+// Shared top bar on every tab: wordmark plus settings, s'pot setup, streak and
+// profile icons. The profile icon opens a dropdown (friends, edit username, log out).
+// Also renders the header steps of the app tutorial.
 export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const router = useRouter();
   const { isAuthenticated, userId, streakVersion } = useAuth();
@@ -139,6 +142,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
       });
   };
  
+  // Load on sign-in and whenever the streak changes (streakVersion bumps after a session).
   useEffect(() => {
     if (!isAuthenticated) {
       setUsername("you");
@@ -149,6 +153,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     loadProfile();
   }, [isAuthenticated, streakVersion]);
  
+  // Keep the shown name in sync with profile edits made elsewhere.
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
       if (!userId || updatedProfile.id !== userId) return;
@@ -161,6 +166,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const streakActive = streakDays > 1;
   const streakColor = streakActive ? STREAK_COLOUR : PRIMARY_TEXT;
  
+  // Measures the profile icon so the dropdown opens just below it.
   const openDropdown = () => {
     profileButtonRef.current?.measure((_fx, _fy, _w, _h, px, py) => {
       setDropdownX(px);
@@ -177,6 +183,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     closeDropdown();
   };
  
+  // Rejects empty names, checks uniqueness only if the name actually changed, then saves.
   const handleSaveUsername = async () => {
     const trimmed = draftName.trim();
     if (trimmed.length === 0) {
@@ -208,6 +215,8 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     router.replace("/home");
   };
  
+  // Settings / s'pot icons: if the tutorial is pointing at this icon, advance it
+  // to that page's first tip before navigating.
   const handleSettingsPress = () => {
     if (tutorialStep === "go-settings-tip") setTutorialStep("settings-tip");
     router.push("/settings");

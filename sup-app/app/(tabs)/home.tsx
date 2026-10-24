@@ -1,3 +1,5 @@
+// Home tab: s'kipper's greeting, today's AI insight and a link to today's data.
+// The three chat bubbles animate in one after another once the profile and fonts are ready.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import { View, Text, StyleSheet, ScrollView, Animated, Image } from "react-native";
@@ -136,6 +138,7 @@ export default function HomeScreen() {
   // Match the floating navigation bar: 72 high, 25 above the safe area.
   const tutorialBottomClearance = 72 + 25 + bottomInset + 16;
 
+  // Cancel a pending tutorial scroll when the step changes or the screen unmounts.
   useEffect(() => () => {
     if (tutorialScrollFrame.current !== null) {
       cancelAnimationFrame(tutorialScrollFrame.current);
@@ -143,6 +146,7 @@ export default function HomeScreen() {
     }
   }, [tutorialStep]);
 
+  // Scrolls the "data-tip" tutorial bubble into view on the next frame (after layout).
   const revealDataTip = () => {
     if (tutorialStep !== "data-tip") return;
     if (tutorialScrollFrame.current !== null) {
@@ -178,6 +182,8 @@ export default function HomeScreen() {
       friction: 9,
     });
 
+  // Greeting pops in → name types out → status bubble → action bubble, each
+  // step chained off the previous one's completion callback.
   const runEntrySequence = useCallback((name: string) => {
     // Reset
     greetingBubbleAnim.setValue(0);
@@ -240,6 +246,7 @@ export default function HomeScreen() {
   }, [isLoadingProfile, fontsLoaded, currentUser, runEntrySequence]);
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Fetches the profile for the greeting name; ends the loading state either way.
   const loadProfile = useCallback(() => {
     return fetchCurrentUserProfileWithStats()
       .then((profile) => {
@@ -261,6 +268,7 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated]);
 
+  // Picks up profile edits made elsewhere (e.g. a name change) without refetching.
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
       if (!userId) return;
@@ -271,6 +279,7 @@ export default function HomeScreen() {
     return unsubscribe;
   }, [userId]);
 
+  // Reload the profile every time Home is focused (including first mount).
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;

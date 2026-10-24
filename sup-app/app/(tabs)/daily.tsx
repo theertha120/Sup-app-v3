@@ -1,3 +1,6 @@
+// Daily tab ("today:"): today's posture snapshot (share of time per state),
+// session time and s'up s'core, with % change badges against yesterday.
+// Data is today's + yesterday's posture_daily row, refetched on every focus.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
@@ -5,14 +8,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Animated,
   Dimensions,
   Image,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import React, { useRef, useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
@@ -43,6 +45,7 @@ const SEGMENT_COLORS: Record<string, string> = {
   tilted_right:  "#F5A623",
 };
 
+/** Stacked bar: one segment per posture state, each as wide as its % of the day. */
 function ScoreBar({ postureAverages }: { postureAverages: Record<string, number> }) {
   const segments = Object.entries(postureAverages).map(([key, pct]) => ({
       pct,
@@ -190,9 +193,10 @@ export default function DailyScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
+  // Stale-while-revalidate: paint the cached pair (if under a minute old), then
+  // replace it with a fresh fetch and re-cache.
   const loadDailyPosture = useCallback(async () => {
     if (!userId) return;
     // Worked out on every load (not once at app start) so the screen rolls
@@ -226,22 +230,12 @@ export default function DailyScreen() {
     }
   }, [isAuthenticated]);
 
+  // Refetch every time the tab is focused, so a just-finished session shows up.
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;
       loadDailyPosture();
     }, [isAuthenticated, loadDailyPosture])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
   );
 
   const { today, previous } = dailyPair;
@@ -262,6 +256,7 @@ export default function DailyScreen() {
   const sessionChange = prevTotalDeskMs > 0 ? Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100) : null;
   const showBadges = today != null && previous != null;
 
+  // Today's ms per posture state (transition excluded), filled with 0 for missing states.
   const STATE_TOTALS = {
     upright: stateTotals.upright ?? 0,
     forward_lean: stateTotals.forward_lean ?? 0,
@@ -317,7 +312,7 @@ export default function DailyScreen() {
   if (!fontsLoaded) return null;
 
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
       <InfoModal
@@ -436,7 +431,7 @@ export default function DailyScreen() {
         </View>
 
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 

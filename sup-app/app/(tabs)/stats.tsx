@@ -1,3 +1,6 @@
+// Stats tab: s'core trend, s'ession time and posture breakdown over a week,
+// month or year. All pages are built in memory from PostureHistoryContext's
+// full history (no per-page queries); each card swipes back through older pages.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
@@ -117,11 +120,13 @@ export interface PageData {
   pointDates:  string[];
 }
 
+// "5 oct" — page date-range header
 function fmt(d: Date) {
   const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
   return `${d.getDate()} ${M[d.getMonth()]}`;
 }
 
+// "5 oct 2026" — week-view popup date
 function fmtFull(d: Date) {
   const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
   return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
@@ -162,6 +167,7 @@ const DAY_LABELS = ["sun","mon","tue","wed","thu","fri","sat"];
 
 type FullStateTotals = Required<Omit<StateTotals, "transition">>;
 
+// Zeroed ms-per-state accumulator for one page (transition is never charted).
 function emptyStateTotals(): FullStateTotals {
   return {
     upright: 0,
@@ -173,6 +179,7 @@ function emptyStateTotals(): FullStateTotals {
   };
 }
 
+// Adds one day's ms-per-state into the page total (so breakdown % is time-weighted).
 function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | undefined) {
   if (!row) return;
   const totals = row.stateTotals;
@@ -182,12 +189,14 @@ function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | un
   }
 }
 
+// Rounded mean ignoring NaN (days with no score); 0 if none are valid.
 function avgOf(values: number[]): number {
   const valid = values.filter((v) => !isNaN(v));
   if (!valid.length) return 0;
   return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
 }
 
+// A day's tracked minutes; prefers exact total_desk_ms, falls back to rounded total_minutes.
 function sessionMinsOf(row: PosturePageRow | undefined): number {
   if (!row) return 0;
   if (row.totalDeskMs != null) return row.totalDeskMs / 60000;
@@ -320,6 +329,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   return pages;
 }
 
+// Active-bar colour band for a 0–100 score (green → yellow → orange → red).
 function scoreColor(s: number) {
   if (s >= 75) return "#6DC96D";
   if (s >= 55) return "#FFD600";
@@ -380,6 +390,7 @@ const popupStyles = StyleSheet.create({
 
 // LiquidGlass range selector
 
+// week / month / year tabs with a highlight bubble that springs under the selected tab.
 function RangeSelector({ range, onChange }: { range: Range; onChange: (r: Range) => void }) {
   const RANGES: Range[] = ["week", "month", "year"];
   const TAB_W   = (SCREEN_W - 40 - 8) / 3;
@@ -454,6 +465,8 @@ const PAGE_W           = CARD_W - CARD_PADDING_X * 2;
 // Pages sit a full card-padding apart so a neighbour starts just past the card edge
 const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
 
+// Horizontal pager for one card. Page 0 is the current period; swiping left
+// goes back in time. renderPage also gets the next-older page for ↑/↓ comparisons.
 function SwipeCard({
   pages,
   renderPage,
@@ -477,6 +490,9 @@ function SwipeCard({
   const offset       = useRef(new Animated.Value(0)).current;
   const animatingRef = useRef(false);
 
+  // Claims only clearly-horizontal drags (so vertical scrolling still works),
+  // follows the finger, then settles on the next/previous page if the drag
+  // passed SWIPE_DISTANCE or was a fast flick; otherwise snaps back.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -505,6 +521,7 @@ function SwipeCard({
     })
   ).current;
 
+  // Animates the row to page idx's slot, then commits idx as the current page.
   function settleOn(idx: number) {
     animatingRef.current = true;
     Animated.timing(offset, {
@@ -524,12 +541,15 @@ function SwipeCard({
     if (!animatingRef.current) offset.setValue(-pageIdx * PAGE_STRIDE);
   }, [pageIdx, offset]);
 
+  // Tell the parent (it closes any open popup, which would point at the old page).
   useEffect(() => {
     onPageChange?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIdx]);
 
   const currentPage = pages[pageIdx] ?? pages[0];
+  // (Note: resetKey has since been replaced by key={range}, which remounts at
+  // page 0; the clamp below is kept as a cheap safety net.)
   // Extra guard against the one-render gap between a resetKey change and the
   // deferred setPageIdx(0) above actually landing (e.g. switching from a
   // long range straight to a short one) — keeps the counter's numerator from
@@ -776,6 +796,8 @@ const barStyles = StyleSheet.create({
 
 // Posture breakdown
 
+// Stacked bar + list of each posture state's share of the page's summed time.
+// Tapping a segment or row opens its % popup.
 const PostureBreakdown = React.memo(function PostureBreakdown({
   stateTotals, range, activeKey, onOpenPopup, onClosePopup,
 }: {
@@ -861,6 +883,7 @@ export default function StatsScreen() {
   const { tutorialStep, setTutorialStep } = useTutorial();
   const scrollRef = useRef<ScrollView>(null);
 
+  // Scroll to the top so the stats tutorial tip is visible.
   useEffect(() => {
     if (tutorialStep === "stats-tip") {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -917,6 +940,8 @@ export default function StatsScreen() {
 
   if (!fontsLoaded) return null;
 
+  // Popup sits above the tapped bar, centred on it but clamped 16px inside the
+  // screen edges; the pointer line still points at the bar's true centre.
   let bubbleTop = 0, bubbleLeft = 0, lineLeft = 0;
   if (activePopup) {
     const { x, y } = activePopup.info;

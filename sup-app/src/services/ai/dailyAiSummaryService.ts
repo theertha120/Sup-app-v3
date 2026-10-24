@@ -1,5 +1,9 @@
 import { supabase } from "@/src/lib/supabase";
 
+// Reads/writes s'kipper's daily insight rows (daily_ai_summary, one per user per day).
+// Rows are normally written by the generate-daily-summaries Edge Function.
+
+// Insert or replace the summary for one user and date.
 export async function upsertDailyAiSummary(
   userId: string,
   date: string,       // YYYY-MM-DD
@@ -16,6 +20,7 @@ export async function upsertDailyAiSummary(
   if (error) throw error;
 }
 
+// The summary for exactly one date, or null if none was generated.
 export async function fetchDailyAiSummary(
   userId: string,
   date: string
