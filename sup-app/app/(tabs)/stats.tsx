@@ -15,7 +15,6 @@ import {
   Image,
 } from "react-native";
 import { BlurView } from "expo-blur";
-import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
 import { useFonts } from "expo-font";
 import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -203,9 +202,18 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
 
   // Rows arrive sorted by date, so a filtered slice keeps that order — matching
   // what the old per-page query returned.
-  const sliceRows = (startKey: string, endKey: string) =>
-    history.filter((r) => r.date >= startKey && r.date <= endKey);
-  const rowByDate = new Map(history.map((r) => [r.date, r]));
+  // One pass into "YYYY-MM" buckets, so month/year pages don't each rescan the whole history.
+  const rowByDate = new Map<string, PosturePageRow>();
+  const rowsByMonth = new Map<string, PosturePageRow[]>();
+  for (const r of history) {
+    rowByDate.set(r.date, r);
+    const monthKey = r.date.slice(0, 7);
+    const bucket = rowsByMonth.get(monthKey);
+    if (bucket) bucket.push(r);
+    else rowsByMonth.set(monthKey, [r]);
+  }
+  const monthRows = (d: Date) => rowsByMonth.get(toDateKey(d).slice(0, 7)) ?? [];
+  const dayOfMonth = (r: PosturePageRow) => Number(r.date.slice(8, 10));
 
   const pages: PageData[] = [];
 
@@ -244,10 +252,8 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       const month = ref.getMonth();
       const start = new Date(year, month, 1);
       const end   = new Date(year, month + 1, 0);
-      const startKey = toDateKey(start);
-      const endKey   = toDateKey(end);
 
-      const rows = sliceRows(startKey, endKey);
+      const rows = monthRows(start);
       rows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
       // 4 weekly buckets: 1-7, 8-14, 15-21, 22-end
@@ -256,7 +262,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       ];
       const weekly = weekBounds.map(([dStart, dEnd]) => {
         const bucketRows = rows.filter((r) => {
-          const day = new Date(`${r.date}T00:00:00.000Z`).getUTCDate();
+          const day = dayOfMonth(r);
           return day >= dStart && day <= dEnd;
         });
         return {
@@ -285,20 +291,11 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
 
     } else {
       const yr = now.getFullYear() - p;
-      const start = new Date(yr, 0, 1);
-      const end   = new Date(yr, 11, 31);
-      const startKey = toDateKey(start);
-      const endKey   = toDateKey(end);
-
-      const rows = sliceRows(startKey, endKey);
-      rows.forEach((r) => accumulateStateTotals(stateTotals, r));
 
       const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       const monthly = Array.from({ length: 12 }, (_, m) => {
-        const bucketRows = rows.filter((r) => {
-          const month = new Date(`${r.date}T00:00:00.000Z`).getUTCMonth();
-          return month === m;
-        });
+        const bucketRows = monthRows(new Date(yr, m, 1));
+        bucketRows.forEach((r) => accumulateStateTotals(stateTotals, r));
         return {
           score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
           sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
@@ -326,15 +323,6 @@ function scoreColor(s: number) {
   if (s >= 75) return "#6DC96D";
   if (s >= 55) return "#FFD600";
   if (s >= 40) return "#F5A623";
-  return "#EC555E";
-}
-
-function heatColor(score: number) {
-  if (score === 0)   return "rgba(63,36,131,0.07)";
-  if (score >= 75)   return "#6DC96D";
-  if (score >= 55)   return "#C3E87C";
-  if (score >= 40)   return "#FFD600";
-  if (score >= 25)   return "#F5A623";
   return "#EC555E";
 }
 
@@ -468,20 +456,14 @@ const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
 function SwipeCard({
   pages,
   renderPage,
-  resetKey,
   onPageChange,
 }: {
   pages:      PageData[];
   renderPage: (page: PageData, prevPage: PageData | null) => React.ReactNode;
-  resetKey:   string;
   onPageChange?: () => void;
 }) {
+  // Callers pass key={range}, so a range change remounts this at page 0.
   const [pageIdx, setPageIdx] = useState(0);
-  const prevResetKey = useRef(resetKey);
-  if (prevResetKey.current !== resetKey) {
-    prevResetKey.current = resetKey;
-    Promise.resolve().then(() => setPageIdx(0));
-  }
 
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
@@ -552,6 +534,10 @@ function SwipeCard({
   // long range straight to a short one) — keeps the counter's numerator from
   // ever reading ahead of the *current* pages array too.
   const displayIdx  = Math.min(pageIdx, pages.length - 1);
+  // Only the current page and its neighbours get a View; the first one is
+  // pushed to its slot with a margin so slots before it don't need empty Views.
+  const firstIdx    = Math.max(0, displayIdx - 1);
+  const windowPages = pages.slice(firstIdx, displayIdx + 2);
 
   return (
     <View>
@@ -560,11 +546,14 @@ function SwipeCard({
       </Text>
       <View style={swipeStyles.clip} {...panResponder.panHandlers}>
         <Animated.View style={[swipeStyles.row, { transform: [{ translateX: offset }] }]}>
-          {pages.map((p, i) => (
-            <View key={i} style={swipeStyles.page}>
-              {Math.abs(i - displayIdx) <= 1 ? renderPage(p, pages[i + 1] ?? null) : null}
-            </View>
-          ))}
+          {windowPages.map((p, j) => {
+            const i = firstIdx + j;
+            return (
+              <View key={i} style={[swipeStyles.page, j === 0 && { marginLeft: i * PAGE_STRIDE }]}>
+                {renderPage(p, pages[i + 1] ?? null)}
+              </View>
+            );
+          })}
         </Animated.View>
       </View>
 
@@ -602,10 +591,6 @@ const swipeStyles = StyleSheet.create({
 
 // Shared helpers
 
-function avg(arr: number[]) {
-  return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
-}
-
 function avgLabel(range: Range): string {
   if (range === "week")  return "Daily avg";
   if (range === "month") return "Weekly avg";
@@ -623,16 +608,27 @@ function fmtMinsLong(m: number) {
   return h > 0 ? `${h}h ${r} min` : `${r} min`;
 }
 
-function BarChart({
+// Session time averages every bar (an untracked day really is 0 min); score
+// averages only bars with data, since a 0 there means "no score", not a bad one.
+function avgValues(page: PageData, type: string): number | null {
+  const values = type === "session"
+    ? page.sessionMins
+    : page.scores.filter((_, i) => page.hasData[i]);
+  if (!values.length) return null;
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+// Memoised so opening a popup on one chart doesn't re-render the others.
+const BarChart = React.memo(function BarChart({
   data, prevData, range, type, hasData, activeIndex, onOpenPopup, onClosePopup,
 }: {
   data: PageData;
   prevData: PageData | null;
   range: Range;
-  type: string;
+  type: string; // also the popup chartId ("score" | "session")
   hasData: boolean[];
   activeIndex: number | null;
-  onOpenPopup: (index: number, info: PopupInfo) => void;
+  onOpenPopup: (chartId: string, index: number, info: PopupInfo) => void;
   onClosePopup: () => void;
 }) {
   const maxBarH = 72;
@@ -640,22 +636,18 @@ function BarChart({
 
   const values = type === "session" ? data.sessionMins : data.scores;
   const maxV   = Math.max(...values, 1);
-  const n      = values.length;
-  const curAvgMins = Math.round(values.reduce((a, b) => a + b, 0) / n);
+  const curAvg = avgValues(data, type);
+  const curAvgMins = curAvg ?? 0;
 
-  let prevAvgMins: number | null = null;
-  if (prevData) {
-    const prevValues = type === "session" ? prevData.sessionMins : prevData.scores;
-    prevAvgMins = Math.round(prevValues.reduce((a, b) => a + b, 0) / prevValues.length);
-  }
+  const prevAvgMins = prevData ? avgValues(prevData, type) : null;
 
   const chartW   = CARD_W - 36;
-  const diffMins = prevAvgMins !== null ? curAvgMins - prevAvgMins : null;
+  const diffMins = curAvg !== null && prevAvgMins !== null ? curAvg - prevAvgMins : null;
 
   const handleBarPress = (i: number) => {
     if (activeIndex === i) { onClosePopup(); return; }
     barRefs.current[i]?.measureInWindow((x, y, width) => {
-      onOpenPopup(i, {
+      onOpenPopup(type, i, {
         x: x + width / 2,
         y,
         value: type === "session" ? Number(values[i].toFixed(2)) : values[i], //fix to 2 decimal places for session time
@@ -705,7 +697,7 @@ function BarChart({
       </View>
     </View>
   );
-}
+});
 
 const barStyles = StyleSheet.create({
   statRow:   { flexDirection: "row", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 4 },
@@ -785,13 +777,13 @@ const barStyles = StyleSheet.create({
 
 // Posture breakdown
 
-function PostureBreakdown({
+const PostureBreakdown = React.memo(function PostureBreakdown({
   stateTotals, range, activeKey, onOpenPopup, onClosePopup,
 }: {
   stateTotals: Record<string, number>;
   range: Range;
   activeKey: string | null;
-  onOpenPopup: (key: string, info: PopupInfo) => void;
+  onOpenPopup: (chartId: string, key: string, info: PopupInfo) => void;
   onClosePopup: () => void;
 }) {
   const keys  = Object.keys(stateTotals);
@@ -807,7 +799,7 @@ function PostureBreakdown({
     if (pcts[k] === 0) return;
     if (activeKey === k) { onClosePopup(); return; }
     refs.current[k]?.measureInWindow((x, y, width) => {
-      onOpenPopup(k, {
+      onOpenPopup("breakdown", k, {
         x: x + width / 2,
         y,
         value: Math.round(pcts[k] * 10) / 10, unit: "%",
@@ -849,7 +841,7 @@ function PostureBreakdown({
       </View>
     </View>
   );
-}
+});
 
 const bdStyles = StyleSheet.create({
   track:    { flexDirection: "row", height: 14, borderRadius: 7, overflow: "hidden" },
@@ -876,7 +868,6 @@ export default function StatsScreen() {
   }, [tutorialStep]);
 
   const [range, setRange]             = useState<Range>("week");
-  const [resetKey, setResetKey]       = useState("week");
   const [activePopup, setActivePopup] = useState<ActivePopup | null>(null);
   const [activeMetricInfo, setActiveMetricInfo] = useState<string | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
@@ -909,13 +900,13 @@ export default function StatsScreen() {
     [history, range, isAuthenticated, userId, hasHistory]
   );
 
-  const closePopup = () => setActivePopup(null);
-  const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
-    setActivePopup({ chartId, index, info });
+  // Stable identities so the memoised charts skip re-rendering.
+  const closePopup = useCallback(() => setActivePopup(null), []);
+  const openPopup  = useCallback((chartId: string, index: number | string, info: PopupInfo) =>
+    setActivePopup({ chartId, index, info }), []);
 
   const handleRangeChange = (r: Range) => {
     setRange(r);
-    setResetKey(r);
     closePopup(); // data is changing — any open popup would be pointing at stale info
   };
 
@@ -981,14 +972,14 @@ export default function StatsScreen() {
           <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+            <SwipeCard key={range} pages={pages} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
                 <Text style={styles.cardTitle}>s'core trend</Text>
                 <BarChart
                   data={p} prevData={prev} range={range} type="score"
                   hasData={p.hasData}
                   activeIndex={activePopup?.chartId === "score" ? (activePopup.index as number) : null}
-                  onOpenPopup={(i, info) => openPopup("score", i, info)}
+                  onOpenPopup={openPopup}
                   onClosePopup={closePopup}
                 />
               </>
@@ -1003,14 +994,14 @@ export default function StatsScreen() {
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+            <SwipeCard key={range} pages={pages} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
                 <Text style={styles.cardTitle}>s'ession time</Text>
                 <BarChart
                   data={p} prevData={prev} range={range} type="session"
                   hasData={p.hasData}
                   activeIndex={activePopup?.chartId === "session" ? (activePopup.index as number) : null}
-                  onOpenPopup={(i, info) => openPopup("session", i, info)}
+                  onOpenPopup={openPopup}
                   onClosePopup={closePopup}
                 />
               </>
@@ -1044,13 +1035,13 @@ export default function StatsScreen() {
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
+            <SwipeCard key={range} pages={pages} onPageChange={closePopup} renderPage={(p) => (
               <>
                 <Text style={styles.cardTitle}>posture breakdown</Text>
                 <PostureBreakdown
                   stateTotals={p.stateTotals} range={range}
                   activeKey={activePopup?.chartId === "breakdown" ? (activePopup.index as string) : null}
-                  onOpenPopup={(k, info) => openPopup("breakdown", k, info)}
+                  onOpenPopup={openPopup}
                   onClosePopup={closePopup}
                 />
               </>

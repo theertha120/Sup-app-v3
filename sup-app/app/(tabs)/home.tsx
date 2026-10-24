@@ -1,28 +1,22 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import { View, Text, StyleSheet, ScrollView, Animated, Dimensions, Image } from "react-native";
-import { router } from "expo-router";
+import { View, Text, StyleSheet, ScrollView, Animated, Image } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useFocusEffect } from "expo-router";
+import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle } from "react";
 import { displayName } from "@/src/utils/displayName";
 import { colours } from "../../theme/colours";
 import { useAuth } from "../../src/contexts/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
 import { type User } from "../../constants/env";
 import {
   fetchCurrentUserProfileWithStats,
   subscribeToProfileUpdates,
   userProfileToUser,
-  updateCurrentUserProfile,
 } from "../../src/services/user/profileService";
-import ProfileModal from "../../src/components/modals/ProfileModal";
-import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
-import { useToast } from "../../src/contexts/ToastContext";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
-import { fetchDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
+import { fetchLatestDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
@@ -32,11 +26,8 @@ import { captureError } from "@/src/lib/sentry";
 
 export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-
 // ─── Animation timing constants ──────────────────────────────────────────────
-const BUBBLE_POP_DURATION_MS   = 600;  // how long each bubble takes to pop in
-const GREETING_DELAY_MS        = 400;  // delay before greeting bubble starts
+const GREETING_DELAY_MS       = 400;  // delay before greeting bubble starts
 const TYPEWRITER_CHAR_DELAY_MS = 150;   // delay between each typed character
 const STATUS_BUBBLE_DELAY_MS   = 400;  // delay after typewriter finishes before status bubble
 const ACTION_BUBBLE_DELAY_MS   = 450;  // delay after status bubble before action bubble
@@ -55,6 +46,79 @@ const SKIPPER_INFO: Record<string, InfoModalEntry> = {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Bubble animated styles
+const bubbleAnimStyle = (anim: Animated.Value) => ({
+  opacity: anim,
+  transform: [
+    {
+      scale: anim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.85, 1],
+      }),
+    },
+    {
+      translateY: anim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [12, 0],
+      }),
+    },
+  ],
+});
+
+type TypedGreetingHandle = {
+  reset: () => void;
+  start: (chars: string, onDone: () => void) => void;
+  cancel: () => void;
+};
+
+// Owns the typewriter state so each typed character re-renders only this Text,
+// not the whole home screen.
+const TypedGreeting = React.forwardRef<TypedGreetingHandle, { name: string }>(
+  function TypedGreeting({ name }, ref) {
+    const [typedName, setTypedName] = useState("");
+    const [nameFullyTyped, setNameFullyTyped] = useState(false);
+    const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const cancel = useCallback(() => {
+      if (typewriterRef.current) clearTimeout(typewriterRef.current);
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+      reset: () => {
+        cancel();
+        setTypedName("");
+        setNameFullyTyped(false);
+      },
+      start: (chars, onDone) => {
+        let i = 0;
+        const typeNext = () => {
+          if (i <= chars.length) {
+            setTypedName(chars.slice(0, i));
+            i++;
+            typewriterRef.current = setTimeout(typeNext, TYPEWRITER_CHAR_DELAY_MS);
+          } else {
+            setNameFullyTyped(true);
+            onDone();
+          }
+        };
+        typeNext();
+      },
+      cancel,
+    }), [cancel]);
+
+    useEffect(() => cancel, [cancel]);
+
+    return (
+      <Text style={styles.bubbleText}>
+        {nameFullyTyped
+          ? (name ? `${name}!\nyou're back :)` : "hey!\nyou're back :)")
+          : (typedName
+            ? `${typedName}\nyou're back :)`
+            : "hey!\nyou're back :)")}
+      </Text>
+    );
+  }
+);
 
 export default function HomeScreen() {
 
@@ -64,7 +128,6 @@ export default function HomeScreen() {
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { showToast } = useToast();
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
   const scrollRef = useRef<ScrollView>(null);
@@ -92,18 +155,18 @@ export default function HomeScreen() {
   };
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   // ─── Bubble entrance animations ────────────────────────────────────────────
   const greetingBubbleAnim = useRef(new Animated.Value(0)).current;
   const statusBubbleAnim   = useRef(new Animated.Value(0)).current;
   const actionBubbleAnim   = useRef(new Animated.Value(0)).current;
+  const greetingStyle = useMemo(() => bubbleAnimStyle(greetingBubbleAnim), [greetingBubbleAnim]);
+  const statusStyle   = useMemo(() => bubbleAnimStyle(statusBubbleAnim), [statusBubbleAnim]);
+  const actionStyle   = useMemo(() => bubbleAnimStyle(actionBubbleAnim), [actionBubbleAnim]);
 
   // Typewriter state
-  const [typedName, setTypedName] = useState("");
-  const [nameFullyTyped, setNameFullyTyped] = useState(false);
-  const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const greetingRef   = useRef<TypedGreetingHandle>(null);
   const sequenceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAnimatedRef = useRef(false);
 
@@ -120,8 +183,7 @@ export default function HomeScreen() {
     greetingBubbleAnim.setValue(0);
     statusBubbleAnim.setValue(0);
     actionBubbleAnim.setValue(0);
-    setTypedName("");
-    setNameFullyTyped(false);
+    greetingRef.current?.reset();
 
     // 1. Greeting bubble pops in
     sequenceRef.current = setTimeout(() => {
@@ -129,28 +191,19 @@ export default function HomeScreen() {
 
         // 2. Type out the name character by character
         const chars = name ? `${name}!` : "hey!";
-        let i = 0;
-        const typeNext = () => {
-          if (i <= chars.length) {
-            setTypedName(chars.slice(0, i));
-            i++;
-            typewriterRef.current = setTimeout(typeNext, TYPEWRITER_CHAR_DELAY_MS);
-          } else {
-            setNameFullyTyped(true);
+        greetingRef.current?.start(chars, () => {
 
-            // 3. Status bubble pops in after typewriter finishes
-            sequenceRef.current = setTimeout(() => {
-              popIn(statusBubbleAnim).start(() => {
+          // 3. Status bubble pops in after typewriter finishes
+          sequenceRef.current = setTimeout(() => {
+            popIn(statusBubbleAnim).start(() => {
 
-                // 4. Action bubble pops in after status bubble
-                sequenceRef.current = setTimeout(() => {
-                  popIn(actionBubbleAnim).start();
-                }, ACTION_BUBBLE_DELAY_MS);
-              });
-            }, STATUS_BUBBLE_DELAY_MS);
-          }
-        };
-        typeNext();
+              // 4. Action bubble pops in after status bubble
+              sequenceRef.current = setTimeout(() => {
+                popIn(actionBubbleAnim).start();
+              }, ACTION_BUBBLE_DELAY_MS);
+            });
+          }, STATUS_BUBBLE_DELAY_MS);
+        });
       });
     }, GREETING_DELAY_MS);
   }, [greetingBubbleAnim, statusBubbleAnim, actionBubbleAnim]);
@@ -169,7 +222,7 @@ export default function HomeScreen() {
 
       return () => {
         // clean up timers when leaving screen
-        if (typewriterRef.current) clearTimeout(typewriterRef.current);
+        greetingRef.current?.cancel();
         if (sequenceRef.current)  clearTimeout(sequenceRef.current);
       };
     }, [fadeAnim])
@@ -178,12 +231,13 @@ export default function HomeScreen() {
   // Trigger entry sequence once profile is known (could be null = no user)
   useEffect(() => {
     if (isLoadingProfile) return;
+    if (!fontsLoaded) return; // TypedGreeting isn't mounted until fonts load
     if (hasAnimatedRef.current) return;
     hasAnimatedRef.current = true;
 
     const name = displayName(currentUser);
     runEntrySequence(name);
-  }, [isLoadingProfile, currentUser, runEntrySequence]);
+  }, [isLoadingProfile, fontsLoaded, currentUser, runEntrySequence]);
   // ─────────────────────────────────────────────────────────────────────────
 
   const loadProfile = useCallback(() => {
@@ -198,15 +252,13 @@ export default function HomeScreen() {
       .finally(() => setIsLoadingProfile(false));
   }, []);
 
+  // Reset on sign-out only; loading is done by the focus effect below, which
+  // also fires on first mount (calling it here too fetched the profile twice).
   useEffect(() => {
     if (!isAuthenticated) {
       setCurrentUser(null);
-      setShowProfileModal(false);
       setIsLoadingProfile(true);
-      return;
     }
-
-    loadProfile();
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -226,87 +278,39 @@ export default function HomeScreen() {
     }, [isAuthenticated, loadProfile])
   );
 
-  const [aiSummary, setAiSummary] = useState<{ insight: string; concised_summary: string } | null>(null);
+  const [aiSummary, setAiSummary] = useState<{ insight: string } | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [hasSummaryData, setHasSummaryData] = useState<boolean | null>(null); // null = unknown
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
   const [showDailyInsightInfo, setShowDailyInsightInfo] = useState(false);
 
-  useEffect(() => {
-    if (!userId) return;
-    const todayKey = toLocalDateKey();
-    const yesterdayKey = addDaysToDateKey(todayKey, -1);
+  // On focus (not just login) so a summary generated while the app stays open,
+  // or a new day, shows up without a restart.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      const todayKey = toLocalDateKey();
+      const yesterdayKey = addDaysToDateKey(todayKey, -1);
 
-    fetchDailyAiSummary(userId, todayKey)
-      .then((summary) => {
-        if (summary) return summary;
-        // Fall back to yesterday's summary if today's isn't ready yet
-        return fetchDailyAiSummary(userId, yesterdayKey);
-      })
-      .then((summary) => {
-        setAiSummary(summary);
-        setHasSummaryData(summary != null);
-      })
-      .catch((err) => {
-        console.error("[HomeScreen] Failed to load daily AI summary", err);
-        captureError(err, "home-ai-summary", { todayKey });
-        setAiSummary(null);
-        setHasSummaryData(false);
-      })
-      .finally(() => setIsLoadingSummary(false));
-  }, [userId]);
-
-  const handleProfilePress = () => {
-    setShowProfileModal(true);
-  };
-
-  const handleCloseProfile = () => {
-    setShowProfileModal(false);
-  };
-
-  const handleSaveProfile = async (updatedUser: User) => {
-    setCurrentUser(updatedUser);
-    showToast("profile glow-up saved", "success");
-  };
-
-  const handleUsernameChange = async (newName: string) => {
-    try {
-      const updatedProfile = await updateCurrentUserProfile({ name: newName });
-      setCurrentUser(prev =>
-        updatedProfile
-          ? userProfileToUser(updatedProfile)
-          : prev ? { ...prev, name: newName } : null
-      );
-      showToast("username updated", "success");
-    } catch (err) {
-      console.error("[HomeScreen] Failed to update username", err);
-      captureError(err, "home-username-update");
-      showToast("couldn't update username, try again", "error");
-    }
-  };
+      // Newest of today/yesterday — falls back to yesterday's if today's isn't ready yet
+      fetchLatestDailyAiSummary(userId, [todayKey, yesterdayKey])
+        .then((summary) => {
+          setAiSummary(summary);
+          setHasSummaryData(summary != null);
+        })
+        .catch((err) => {
+          console.error("[HomeScreen] Failed to load daily AI summary", err);
+          captureError(err, "home-ai-summary", { todayKey });
+          // Keep an insight already on screen; a failed refresh shouldn't blank it.
+          setHasSummaryData((prev) => prev === true);
+        })
+        .finally(() => setIsLoadingSummary(false));
+    }, [userId])
+  );
 
   if (!fontsLoaded) {
     return null;
   }
-
-  // Bubble animated styles
-  const bubbleAnimStyle = (anim: Animated.Value) => ({
-    opacity: anim,
-    transform: [
-      {
-        scale: anim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.85, 1],
-        }),
-      },
-      {
-        translateY: anim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [12, 0],
-        }),
-      },
-    ],
-  });
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
@@ -330,14 +334,8 @@ export default function HomeScreen() {
           tutorialStep === "data-tip" && styles.bubblesWithTutorial,
         ]}>
           {/* Greeting bubble */}
-          <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, bubbleAnimStyle(greetingBubbleAnim)]}>
-            <Text style={styles.bubbleText}>
-              {nameFullyTyped
-                ? (displayName(currentUser) ? `${displayName(currentUser)}!\nyou're back :)` : "hey!\nyou're back :)")
-                : (typedName
-                  ? `${typedName}\nyou're back :)`
-                  : "hey!\nyou're back :)")}
-            </Text>
+          <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, greetingStyle]}>
+            <TypedGreeting ref={greetingRef} name={displayName(currentUser)} />
           </Animated.View>
 
           {/* Status bubble */}
@@ -349,7 +347,7 @@ export default function HomeScreen() {
               styles.shadow,
               styles.highlightable,
               tutorialStep === "goals-tip" && styles.highlighted,
-              bubbleAnimStyle(statusBubbleAnim),
+              statusStyle,
             ]}
           >
             {/* Daily insight explainer — default InfoButton top-right placement */}
@@ -389,7 +387,7 @@ export default function HomeScreen() {
 
           {/* Action bubble — navigate to daily summary */}
           <View style={styles.actionBubbleWrap}>
-            <Animated.View style={bubbleAnimStyle(actionBubbleAnim)}>
+            <Animated.View style={actionStyle}>
               <PressFeedback
                 style={[
                   styles.bubble,
@@ -468,35 +466,6 @@ const styles = StyleSheet.create({
     flexBasis: "auto",
     flexShrink: 0,
   },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 56,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  logo: {
-    color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 50,
-  },
-  logoApostrophe: {
-    fontFamily: "Arial",
-  },
-  headerButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderRadius: 20,
-  },
 
   bubble: {
     backgroundColor: "#FFFFFF",
@@ -551,13 +520,6 @@ const styles = StyleSheet.create({
     position: "relative",
     top: 0,
     right: 0,
-  },
-  bubbleHeadline: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 22,
-    fontWeight: "700",
-    color: PRIMARY_TEXT,
-    marginBottom: 8,
   },
   bubbleSubtext: {
     fontFamily: "Agrandir-Regular",
@@ -625,77 +587,4 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  profileContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  avatarWrapper: {
-    position: "relative",
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    color: colours.primary,
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  editBadge: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: PRIMARY_TEXT,
-  },
-  editBadgeText: {
-    fontSize: 11,
-    color: PRIMARY_TEXT,
-  },
-  profileInfo: {
-    flex: 1,
-    gap: 8,
-  },
-  userName: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 20,
-    fontWeight: "700",
-    color: PRIMARY_TEXT,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  statBadge: {
-    backgroundColor: "rgba(63, 36, 131, 0.12)",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-  },
-  statBadgeText: {
-    fontFamily: "Agrandir-Regular",
-    color: PRIMARY_TEXT,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  footer: {
-    fontFamily: "Agrandir-Regular",
-    textAlign: "center",
-    color: PRIMARY_TEXT,
-    opacity: 0.7,
-    fontSize: 12,
-    padding: 24,
-  },
 });

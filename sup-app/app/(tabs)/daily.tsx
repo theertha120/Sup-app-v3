@@ -7,31 +7,18 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Modal,
-  TouchableWithoutFeedback,
   Image,
 } from "react-native";
-import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
 import React, { useRef, useCallback, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useStepCount } from "../../src/hooks/useStepCount";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { useToast } from "@/src/contexts/ToastContext";
-import { type User } from "../../constants/env";
-import {
-  fetchCurrentUserProfileWithStats,
-  subscribeToProfileUpdates,
-  userProfileToUser,
-  updateCurrentUserProfile,
-} from "../../src/services/user/profileService";
 import {
   fetchDailyPosturePair,
   type DailyPosturePair,
-  type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 import { useTutorial } from "@/src/contexts/TutorialContext";
@@ -42,7 +29,7 @@ import { captureError } from "@/src/lib/sentry";
 
 export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
 
 const SEGMENT_COLORS: Record<string, string> = {
@@ -195,15 +182,9 @@ const breakdownStyles = StyleSheet.create({
 
 export default function DailyScreen() {
   const { isAuthenticated, userId } = useAuth();
-  const { showToast } = useToast();
   const { tutorialStep, setTutorialStep } = useTutorial();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [streakDays, setStreakDays] = useState<number | null>(null);
-  const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
 
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
-  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
 
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
@@ -213,9 +194,8 @@ export default function DailyScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
-  const loadDailyPosture = useCallback(async (background = false) => {
+  const loadDailyPosture = useCallback(async () => {
     if (!userId) return;
-    if (!background) setIsLoadingDaily(true);
     // Worked out on every load (not once at app start) so the screen rolls
     // over to the new day if the app stays open past midnight.
     const TODAY_KEY = toLocalDateKey();
@@ -224,7 +204,6 @@ export default function DailyScreen() {
     const cached = await getCachedDailyPair(userId, TODAY_KEY);
     if (cached) {
       setDailyPair(cached);
-      setIsLoadingDaily(false);
     }
  
     // fetch fresh in background regardless
@@ -237,54 +216,22 @@ export default function DailyScreen() {
       .catch((err) => {
         console.error("[DailyScreen] fetchDailyPosturePair failed", err);
         captureError(err, "daily-posture-pair", { dateKey: TODAY_KEY, hadCache: cached != null });
-      })
-      .finally(() => setIsLoadingDaily(false));
+      });
   }, [userId]);
- 
-  const loadProfile = useCallback(() => {
-    return fetchCurrentUserProfileWithStats()
-      .then((profile) => {
-        setCurrentUser(profile ? userProfileToUser(profile) : null);
-        setStreakDays(profile?.currentStreak ?? null);
-        setWeeklyAvgPoints(profile?.weeklyAvgPoints ?? null);
-      })
-      .catch((err) => {
-        console.error("[DailyScreen] Failed to load user profile", err);
-        captureError(err, "daily-profile");
-      })
-      .finally(() => setIsLoadingProfile(false));
-  }, []);
- 
-  // initial load: run all fetches in parallel
+
+  // Reset on sign-out only; loading is done by the focus effect below, which
+  // also fires on first mount (calling it here too fetched the day twice).
   useEffect(() => {
     if (!isAuthenticated) {
-      setCurrentUser(null);
-      setIsLoadingProfile(true);
       setDailyPair({ today: null, previous: null });
-      return;
     }
- 
-    Promise.all([
-      loadProfile(),
-      loadDailyPosture(),
-    ]);
   }, [isAuthenticated]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
-      if (!userId) return;
-      if (updatedProfile.id !== userId) return;
-      setCurrentUser(userProfileToUser(updatedProfile));
-    });
-    return unsubscribe;
-  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;
-      loadProfile();
-      loadDailyPosture(true);
-    }, [isAuthenticated, loadProfile, loadDailyPosture])
+      loadDailyPosture();
+    }, [isAuthenticated, loadDailyPosture])
   );
 
   useFocusEffect(
@@ -297,20 +244,6 @@ export default function DailyScreen() {
       }).start();
     }, [fadeAnim])
   );
-
-  const handleUsernameChange = async (newName: string) => {
-    try {
-      const updatedProfile = await updateCurrentUserProfile({ username: newName });
-      if (updatedProfile) {
-        setCurrentUser(userProfileToUser(updatedProfile));
-      }
-      showToast("Username updated", "success");
-    } catch (err) {
-      console.error("[DailyScreen] Failed to update username", err);
-      captureError(err, "daily-username-update");
-      showToast("Couldn't update username, try again", "error");
-    }
-  };
 
   const { today, previous } = dailyPair;
 
@@ -325,7 +258,6 @@ export default function DailyScreen() {
 
   const sessionHours = Math.floor(totalDeskMs / 3_600_000);
   const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
-  const prevSessionMins = prevTotalDeskMs / 60000;
 
   // % changes per metric (computed here so they use live step data)
   // null when yesterday's value is 0 — dividing by it rendered "↑Infinity%" / "↓NaN%".
@@ -511,35 +443,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 56,
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-  },
-  logo: {
-    color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 50,
-  },
-  logoApostrophe: {
-    fontFamily: "Arial",
-  },
-  headerButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderRadius: 20,
-  },
 
   sectionRow: {
     flexDirection: "row",
@@ -625,14 +528,6 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 10,
   },
-  snapshotMessage: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 14,
-    color: PRIMARY_TEXT,
-    textAlign: "center",
-    lineHeight: 20,
-    opacity: 0.9,
-  },
 
   grid: {
     flexDirection: "row",
@@ -662,12 +557,4 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
 
-  footer: {
-    fontFamily: "Agrandir-Regular",
-    textAlign: "center",
-    color: PRIMARY_TEXT,
-    opacity: 0.7,
-    fontSize: 12,
-    padding: 24,
-  },
 });

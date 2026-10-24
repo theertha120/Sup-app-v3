@@ -251,10 +251,13 @@ function userToUserProfile(user: User): UserProfile {
  */
 async function getCurrentUserId(): Promise<string> {
   try {
+    // getSession() reads the stored session locally; getUser() was a network
+    // round-trip on every profile fetch. RLS still checks the JWT server-side.
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) {
       throw new Error("No authenticated user");
     }
@@ -379,7 +382,6 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
         if (local != null) profile.avatar = local;
       } catch {}
       return profile;
-      console.log("[profile] Fetched profile with stats:", profile);
     }
   } catch (err) {
     console.warn("[profile] Supabase profile-with-stats fetch threw", err);
