@@ -503,11 +503,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#AB99FA",
   },
   bubbleText: {
-    fontFamily: "Agrandir-Regular",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 24,
     lineHeight: 30,
     color: PRIMARY_TEXT,
-    fontWeight: "600",
   },
   skipperHeaderRow: {
     flexDirection: "row",
@@ -529,9 +528,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bubbleActionText: {
-    fontFamily: "Agrandir-Regular",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 16,
-    fontWeight: "600",
     color: "white",
   },
 
@@ -580,9 +578,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tutorialTipNext: {
-    fontFamily: "Agrandir-Regular",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 14,
-    fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",
   },

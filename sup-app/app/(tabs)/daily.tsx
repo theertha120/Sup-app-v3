@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useRef, useCallback, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
@@ -25,6 +26,7 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+import { formatSessionMins } from "@/src/lib/formatDuration";
 import { captureError } from "@/src/lib/sentry";
 
 export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
@@ -49,7 +51,7 @@ function ScoreBar({ postureAverages }: { postureAverages: Record<string, number>
   );
 
   return (
-    <View style={[scoreBarStyles.track, scoreBarStyles.shadow]}>
+    <View style={scoreBarStyles.track}>
       {segments.map(({ pct, color }, i) =>
         pct > 0 ? (
           <View
@@ -63,19 +65,12 @@ function ScoreBar({ postureAverages }: { postureAverages: Record<string, number>
 }
 
 const scoreBarStyles = StyleSheet.create({
+  // Matches stats.tsx's posture breakdown bar (bdStyles.track)
   track: {
     flexDirection: "row",
-    height: 18,
-    borderRadius: 9,
+    height: 14,
+    borderRadius: 7,
     overflow: "hidden",
-    marginVertical: 12,
-  },
-  shadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   segment: {
     height: "100%",
@@ -105,9 +100,9 @@ const badgeStyles = StyleSheet.create({
     zIndex: 1,
   },
   text: {
+    fontFamily: "Agrandir-GrandHeavy",
     color: "white",
     fontSize: 11,
-    fontWeight: "700",
   },
 });
 
@@ -140,42 +135,43 @@ function PostureBreakdown({ stats }: { stats: { label: string; value: string; co
   );
 }
 
+// Matches stats.tsx's posture breakdown list (bdStyles)
 const breakdownStyles = StyleSheet.create({
   container: {
     width: "100%",
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "rgba(63, 36, 131, 0.06)",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 10,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 7,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(63, 36, 131, 0.08)",
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   dot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
   label: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: PRIMARY_TEXT,
     opacity: 0.75,
   },
   value: {
     fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 13,
+    fontSize: 12,
     color: PRIMARY_TEXT,
   },
 });
@@ -183,6 +179,9 @@ const breakdownStyles = StyleSheet.create({
 export default function DailyScreen() {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  // Clears the floating navigation bar: 72 high, 25 above the safe area (same as stats.tsx).
+  const scrollPaddingBottom = 72 + 25 + bottomInset + 16;
 
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
 
@@ -256,8 +255,6 @@ export default function DailyScreen() {
   const prevSupScore = previous?.supScore ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
 
-  const sessionHours = Math.floor(totalDeskMs / 3_600_000);
-  const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
 
   // % changes per metric (computed here so they use live step data)
   // null when yesterday's value is 0 — dividing by it rendered "↑Infinity%" / "↓NaN%".
@@ -293,12 +290,12 @@ export default function DailyScreen() {
   }
 
   const POSTURE_STATS = [
-    { label: "Upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
-    { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
-    { label: "Slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
-    { label: "Severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
-    { label: "Tilted Left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
-    { label: "Tilted Right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
+    { label: "upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: SEGMENT_COLORS.upright },
+    { label: "forward lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: SEGMENT_COLORS.forward_lean },
+    { label: "slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: SEGMENT_COLORS.slouched },
+    { label: "severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: SEGMENT_COLORS.severe },
+    { label: "tilted left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: SEGMENT_COLORS.tilted_left },
+    { label: "tilted right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: SEGMENT_COLORS.tilted_right },
   ];
 
   const METRIC_INFO: Record<string, { title: string; body: string }> = {
@@ -330,7 +327,11 @@ export default function DailyScreen() {
         accentColor={PRIMARY_TEXT}
       />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
+      >
         {/* Top bar */}
         <HeaderBar />
 
@@ -372,7 +373,7 @@ export default function DailyScreen() {
           ]}
         >
           <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
-          <Text style={styles.statLabel}>s'napshot</Text>
+          <Text style={styles.cardTitle}>s'napshot</Text>
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
           <PostureBreakdown stats={POSTURE_STATS} />
         </View>
@@ -412,8 +413,8 @@ export default function DailyScreen() {
             <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
             {showBadges && sessionChange != null && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
-            <Text style={styles.statValue}>
-              {sessionHours}h {sessionMinutes}m
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {formatSessionMins(totalDeskMs / 60_000)}
             </Text>
           </View>
 
@@ -430,7 +431,7 @@ export default function DailyScreen() {
             <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
             {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
-            <Text style={styles.statValue}>{supScore}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
           </View>
         </View>
 
@@ -472,8 +473,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginBottom: 14,
+    marginHorizontal: 20,
+    marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -495,9 +496,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tutorialTipNext: {
-    fontFamily: "Agrandir-Regular",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 15,
-    fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",
   },
@@ -506,9 +506,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     marginHorizontal: 20,
     marginBottom: 16,
-    padding: 20,
+    padding: 18,
+    paddingTop: 16,
     borderRadius: 28,
     position: "relative",
+  },
+  // Matches stats.tsx's card title
+  cardTitle: {
+    fontFamily: "Agrandir-GrandHeavy",
+    fontSize: 14,
+    color: PRIMARY_TEXT,
+    opacity: 0.75,
+    marginBottom: 12,
   },
   shadow: {
     shadowColor: "#1D014A",

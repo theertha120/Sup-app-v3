@@ -31,6 +31,7 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+import { formatSessionMins } from "@/src/lib/formatDuration";
 
 export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
@@ -51,12 +52,12 @@ const SEGMENT_COLORS: Record<string, string> = {
 };
 
 const SEGMENT_LABELS: Record<string, string> = {
-  upright:      "Upright",
-  forward_lean: "Forward Lean",
-  slouched:     "Slouched",
-  severe:       "Severe",
-  tilted_left:  "Tilted Left",
-  tilted_right: "Tilted Right",
+  upright:      "upright",
+  forward_lean: "forward lean",
+  slouched:     "slouched",
+  severe:       "severe",
+  tilted_left:  "tilted left",
+  tilted_right: "tilted right",
 };
 
 // "?" popup content for the three cards below — same content regardless of
@@ -93,7 +94,7 @@ type Range = "week" | "month" | "year";
 interface PopupInfo {
   x: number;
   y: number;
-  value: number;
+  value: number | string;
   unit: string;
   dateRange: string;
   avgLabel: string;
@@ -122,7 +123,7 @@ function fmt(d: Date) {
 }
 
 function fmtFull(d: Date) {
-  const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
   return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
 }
 
@@ -272,7 +273,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
         };
       });
 
-      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       pages.push({
         labels:      ["wk 1","wk 2","wk 3","wk 4"],
         scores:      weekly.map((w) => w.score),
@@ -292,7 +293,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
     } else {
       const yr = now.getFullYear() - p;
 
-      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       const monthly = Array.from({ length: 12 }, (_, m) => {
         const bucketRows = monthRows(new Date(yr, m, 1));
         bucketRows.forEach((r) => accumulateStateTotals(stateTotals, r));
@@ -592,28 +593,27 @@ const swipeStyles = StyleSheet.create({
 // Shared helpers
 
 function avgLabel(range: Range): string {
-  if (range === "week")  return "Daily avg";
-  if (range === "month") return "Weekly avg";
-  return "Monthly avg";
+  if (range === "week")  return "daily avg";
+  if (range === "month") return "weekly avg";
+  return "monthly avg";
+}
+
+// Session bars are totals, so their popup says "total" rather than "avg".
+function totalLabel(range: Range): string {
+  if (range === "week")  return "daily total";
+  if (range === "month") return "weekly total";
+  return "monthly total";
 }
 
 // Bar chart
 
-function fmtMins(m: number) {
-  const h = Math.floor(m / 60); const r = m % 60;
-  return h > 0 ? `${h}h ${r}m` : `${r}m`;
-}
-function fmtMinsLong(m: number) {
-  const h = Math.floor(m / 60); const r = m % 60;
-  return h > 0 ? `${h}h ${r} min` : `${r} min`;
-}
-
-// Session time averages every bar (an untracked day really is 0 min); score
-// averages only bars with data, since a 0 there means "no score", not a bad one.
-function avgValues(page: PageData, type: string): number | null {
-  const values = type === "session"
-    ? page.sessionMins
-    : page.scores.filter((_, i) => page.hasData[i]);
+// Session time is the page's total; score averages only bars with data, since
+// a 0 there means "no score", not a bad one.
+function summaryValue(page: PageData, type: string): number | null {
+  if (type === "session") {
+    return Math.round(page.sessionMins.reduce((a, b) => a + b, 0));
+  }
+  const values = page.scores.filter((_, i) => page.hasData[i]);
   if (!values.length) return null;
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 }
@@ -636,13 +636,11 @@ const BarChart = React.memo(function BarChart({
 
   const values = type === "session" ? data.sessionMins : data.scores;
   const maxV   = Math.max(...values, 1);
-  const curAvg = avgValues(data, type);
-  const curAvgMins = curAvg ?? 0;
-
-  const prevAvgMins = prevData ? avgValues(prevData, type) : null;
+  const curValue  = summaryValue(data, type);
+  const prevValue = prevData ? summaryValue(prevData, type) : null;
 
   const chartW   = CARD_W - 36;
-  const diffMins = curAvg !== null && prevAvgMins !== null ? curAvg - prevAvgMins : null;
+  const diff     = curValue !== null && prevValue !== null ? curValue - prevValue : null;
 
   const handleBarPress = (i: number) => {
     if (activeIndex === i) { onClosePopup(); return; }
@@ -650,10 +648,11 @@ const BarChart = React.memo(function BarChart({
       onOpenPopup(type, i, {
         x: x + width / 2,
         y,
-        value: type === "session" ? Number(values[i].toFixed(2)) : values[i], //fix to 2 decimal places for session time
-        unit: type === "session" ? "min" : "pts",
+        // Session time is pre-formatted ("1h 5min"), so it carries its own unit
+        value: type === "session" ? formatSessionMins(values[i]) : values[i],
+        unit: type === "session" ? "" : "pts",
         dateRange: data.pointDates[i] ?? data.labels[i],
-        avgLabel:  avgLabel(range),
+        avgLabel:  type === "session" ? totalLabel(range) : avgLabel(range),
       });
     });
   };
@@ -662,12 +661,12 @@ const BarChart = React.memo(function BarChart({
     <View>
       <View style={barStyles.statRow}>
         <Text style={barStyles.statText}>
-          avg {type === "session" ? fmtMinsLong(curAvgMins) : `${curAvgMins} pts`}
+          {type === "session" ? `total ${formatSessionMins(curValue ?? 0)}` : `avg ${curValue ?? 0} pts`}
         </Text>
-        {diffMins !== null && (
-          <Text style={[barStyles.statText, { color: diffMins >= 0 ? "#6DC96D" : "#EC555E" }]}>
-            {"  "}{diffMins >= 0 ? "↑" : "↓"}{" "}
-            {type === "session" ? fmtMins(Math.abs(diffMins)) : `${Math.abs(diffMins)} pts`}
+        {diff !== null && (
+          <Text style={[barStyles.statText, { color: diff >= 0 ? "#6DC96D" : "#EC555E" }]}>
+            {"  "}{diff >= 0 ? "↑" : "↓"}{" "}
+            {type === "session" ? formatSessionMins(Math.abs(diff)) : `${Math.abs(diff)} pts`}
           </Text>
         )}
       </View>
@@ -705,7 +704,7 @@ const barStyles = StyleSheet.create({
   container: { flexDirection: "row", alignItems: "flex-end", height: 88, gap: 3 },
   col:       { flex: 1, alignItems: "center", gap: 3 },
   bar:       { width: "100%", borderRadius: 3, backgroundColor: "#6DC96D" },
-  label:     { fontSize: 8, color: "rgba(29,1,74,0.5)", fontWeight: "600" },
+  label:     { fontFamily: "Agrandir-GrandHeavy", fontSize: 8, color: "rgba(29,1,74,0.5)" },
 });
 
 // Posture heatmap
@@ -804,7 +803,8 @@ const PostureBreakdown = React.memo(function PostureBreakdown({
         y,
         value: Math.round(pcts[k] * 10) / 10, unit: "%",
         dateRange: SEGMENT_LABELS[k],
-        avgLabel: avgLabel(range),
+        // A share of the period's summed time, not an average
+        avgLabel: "of session time",
       });
     });
   };
@@ -1070,7 +1070,9 @@ export default function StatsScreen() {
               <Text style={popupStyles.dateText}>{activePopup.info.dateRange}</Text>
               <Text style={popupStyles.valueText}>
                 {activePopup.info.value}
-                <Text style={popupStyles.unitText}> {activePopup.info.unit}</Text>
+                {activePopup.info.unit ? (
+                  <Text style={popupStyles.unitText}> {activePopup.info.unit}</Text>
+                ) : null}
               </Text>
               <Text style={popupStyles.avgText}>{activePopup.info.avgLabel}</Text>
               <View style={[popupStyles.line, { left: lineLeft }]} />
@@ -1126,9 +1128,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tutorialTipNext: {
-    fontFamily: "Agrandir-Regular",
+    fontFamily: "Agrandir-GrandHeavy",
     fontSize: 15,
-    fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",
   },
