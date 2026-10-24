@@ -724,7 +724,7 @@ const barStyles = StyleSheet.create({
   container: { flexDirection: "row", alignItems: "flex-end", height: 88, gap: 3 },
   col:       { flex: 1, alignItems: "center", gap: 3 },
   bar:       { width: "100%", borderRadius: 3, backgroundColor: "#6DC96D" },
-  label:     { fontFamily: "Agrandir-GrandHeavy", fontSize: 8, color: "rgba(29,1,74,0.5)" },
+  label:     { fontFamily: "Agrandir-Regular", fontSize: 8, color: "rgba(29,1,74,0.5)", fontWeight: "600" },
 });
 
 // Posture heatmap
@@ -1153,8 +1153,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tutorialTipNext: {
-    fontFamily: "Agrandir-GrandHeavy",
+    fontFamily: "Agrandir-Regular",
     fontSize: 15,
+    fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",
   },

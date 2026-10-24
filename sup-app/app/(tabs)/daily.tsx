@@ -103,9 +103,10 @@ const badgeStyles = StyleSheet.create({
     zIndex: 1,
   },
   text: {
-    fontFamily: "Agrandir-GrandHeavy",
+    fontFamily: "Agrandir-Regular",
     color: "white",
     fontSize: 11,
+    fontWeight: "700",
   },
 });
 
@@ -491,8 +492,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tutorialTipNext: {
-    fontFamily: "Agrandir-GrandHeavy",
+    fontFamily: "Agrandir-Regular",
     fontSize: 15,
+    fontWeight: "700",
     color: colours.primary,
     textDecorationLine: "underline",
   },
