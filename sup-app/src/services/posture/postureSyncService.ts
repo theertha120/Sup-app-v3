@@ -364,8 +364,9 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await getCurrentStreak(userId);
-      const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
+      // Score comes from the day's per-state time only (docs/score-methodology.md §2);
+      // streak and avg_shs are no longer inputs.
+      const supScore = computeSupScore(stateTotals);
       await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
@@ -420,26 +421,6 @@ function computeSupScore(stateTotals: StateTotals): number | null {
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
   const todayLocal = toLocalDateKey();
   return { todayLocal, yesterdayLocal: addDaysToDateKey(todayLocal, -1) };
-}
-
-/**
- * Reads current_streak for sup_score. Read-only — the streak is maintained by
- * checkStreakOnAppOpen, which has always run before a session can end.
- */
-async function getCurrentStreak(userId: string): Promise<number> {
-  try {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("current_streak")
-      .eq("id", userId)
-      .single();
-
-    if (error) { console.warn("[postureSync] getCurrentStreak fetch failed", error); return 1; }
-    return Math.max(1, Number(profile?.current_streak ?? 1));
-  } catch (e) {
-    console.warn("[postureSync] getCurrentStreak threw", e);
-    return 1;
-  }
 }
 
 /**
