@@ -51,6 +51,8 @@ export default function TabsLayout() {
         name="stats"
         options={{
           title: "Stats",
+          // Keep this data screen visible when tab switches interrupt a transition.
+          animation: "none",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
           ),

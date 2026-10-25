@@ -1,10 +1,12 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import React, { useState, useRef, useEffect, useMemo, useCallback, useId } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback, useId, createContext, useContext } from "react";
 import {
   View,
   AppState,
-  Text,
+  Text as NativeText,
+  Platform,
+  type TextProps,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -32,6 +34,18 @@ import { toLocalDateKey } from "@/src/lib/dateKey";
 import { watchStatsFreshness } from "@/src/services/stats/statsFreshness";
 import { statsWindowKey, STATS_STALE_MS } from "@/src/services/stats/statsHistoryStore";
 import { buildStatsPage, statsPageCount, statsPageWindow, type PageData, type StatsRange } from "@/src/services/stats/statsPages";
+
+// Font assets are cosmetic: charts and navigation must remain usable if their
+// download is slow or fails. Stats uses native text until the fonts are ready.
+const StatsFontsContext = createContext(false);
+function Text({ style, ...props }: TextProps) {
+  const ready = useContext(StatsFontsContext);
+  const flat = StyleSheet.flatten(style);
+  return <NativeText {...props} style={[style, !ready && {
+    fontFamily: Platform.OS === "ios" ? "System" : "sans-serif",
+    fontWeight: flat?.fontFamily === "Agrandir-GrandHeavy" ? "700" : (flat?.fontWeight ?? "400"),
+  }]} />;
+}
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -250,6 +264,7 @@ const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
 
 type StatsPages = {
   length: number;
+  loadingMessage?: string;
   get: (index: number) => PageData;
   ensure: (index: number) => void;
   observe: (id: string, indices: number[]) => () => void;
@@ -357,7 +372,7 @@ function SwipeCard({
           {visibleIndices.map((i) => {
             const page = pages.get(i);
             return <View key={i} style={swipeStyles.page}>
-              {page.isLoading ? <Text style={styles.cardTitle}>loading…</Text>
+              {page.isLoading ? <Text style={styles.cardTitle}>{pages.loadingMessage ?? "loading…"}</Text>
                 : renderPage(page, i + 1 < pages.length ? pages.get(i + 1) : null)}
             </View>;
           })}
@@ -704,7 +719,7 @@ export default function StatsScreen() {
     // One aggregation per requested index, shared by all three cards. No work
     // or placeholder views are created for the rest of the user's history.
     const prepared = new Map<number, PageData>();
-    return { length, ensure: ensurePage, observe: observePages, get(index) {
+    return { length, loadingMessage: error ?? "loading…", ensure: ensurePage, observe: observePages, get(index) {
       let page = prepared.get(index);
       if (!page) {
         const window = statsPageWindow(range, index, anchor);
@@ -714,7 +729,7 @@ export default function StatsScreen() {
       }
       return page;
     } };
-  }, [windows, earliest, range, anchor, isAuthenticated, userId, ensurePage, observePages]);
+  }, [windows, earliest, range, anchor, isAuthenticated, userId, ensurePage, observePages, error]);
 
   const closePopup = () => setActivePopup(null);
   const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
@@ -731,7 +746,6 @@ export default function StatsScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
-  if (!fontsLoaded) return null;
 
   let bubbleTop = 0, bubbleLeft = 0, lineLeft = 0;
   if (activePopup) {
@@ -743,6 +757,7 @@ export default function StatsScreen() {
   }
 
   return (
+    <StatsFontsContext.Provider value={fontsLoaded}>
     <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
       <ScrollView
@@ -897,6 +912,7 @@ export default function StatsScreen() {
         </Modal>
       )}
     </View>
+    </StatsFontsContext.Provider>
   );
 }
 

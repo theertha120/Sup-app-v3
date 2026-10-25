@@ -1,6 +1,7 @@
 import type { PosturePageRow } from "../posture/postureSyncService";
 
 export const STATS_STALE_MS = 60_000;
+export const STATS_REQUEST_TIMEOUT_MS = 15_000;
 export type StatsWindow = { start: string; end: string };
 type CachedWindow = StatsWindow & { rows: PosturePageRow[]; loadedAt: number };
 export type StatsHistoryState = {
@@ -11,8 +12,8 @@ export type StatsHistoryState = {
   lastUpdatedAt: number | null;
 };
 type Source = {
-  fetchWindow: (start: string, end: string) => Promise<PosturePageRow[]>;
-  fetchEarliest: () => Promise<string | null>;
+  fetchWindow: (start: string, end: string, signal: AbortSignal) => Promise<PosturePageRow[]>;
+  fetchEarliest: (signal: AbortSignal) => Promise<string | null>;
 };
 export const statsWindowKey = ({ start, end }: StatsWindow) => `${start}:${end}`;
 
@@ -25,7 +26,7 @@ export class StatsHistoryStore {
   private earliestLoadedAt: number | null = null;
   private disposed = false;
 
-  constructor(private source: Source, private changed: (state: StatsHistoryState) => void, private now = Date.now) {}
+  constructor(private source: Source, private changed: (state: StatsHistoryState) => void, private now = Date.now, private timeoutMs = STATS_REQUEST_TIMEOUT_MS) {}
 
   activate() { this.disposed = false; }
   dispose() { this.disposed = true; }
@@ -36,14 +37,23 @@ export class StatsHistoryStore {
     this.changed(this.state);
   }
 
-  private run(key: string, work: () => Promise<void>): Promise<void> {
+  private run(key: string, work: (signal: AbortSignal) => Promise<void>): Promise<void> {
     const existing = this.requests.get(key);
     if (existing) return existing;
     if (this.disposed) return Promise.resolve();
     this.update({ pending: this.state.pending + 1 });
-    const request = Promise.resolve().then(work).catch(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Stats request timed out"));
+      }, this.timeoutMs);
+    });
+    const request = Promise.race([Promise.resolve().then(() => work(controller.signal)), deadline]).catch(() => {
       this.update({ error: "couldn’t update your stats — tap refresh to try again." });
     }).finally(() => {
+      clearTimeout(timer);
       this.requests.delete(key);
       this.update({ pending: this.state.pending - 1 });
     });
@@ -53,8 +63,9 @@ export class StatsHistoryStore {
 
   ensureEarliest(force = false): Promise<void> {
     if (!force && this.earliestLoadedAt !== null && this.now() - this.earliestLoadedAt < STATS_STALE_MS) return Promise.resolve();
-    return this.run("earliest", async () => {
-      const earliest = await this.source.fetchEarliest();
+    return this.run("earliest", async (signal) => {
+      const earliest = await this.source.fetchEarliest(signal);
+      if (signal.aborted) return;
       this.earliestLoadedAt = this.now();
       this.update({ earliest });
     });
@@ -68,8 +79,9 @@ export class StatsHistoryStore {
     while (this.recent.size > 12) this.recent.delete(this.recent.keys().next().value!);
     const cached = this.state.windows[key];
     if (!force && cached && this.now() - cached.loadedAt < STATS_STALE_MS) return Promise.resolve();
-    return this.run(key, async () => {
-      const rows = await this.source.fetchWindow(window.start, window.end);
+    return this.run(key, async (signal) => {
+      const rows = await this.source.fetchWindow(window.start, window.end, signal);
+      if (signal.aborted) return;
       const loadedAt = this.now();
       const windows = { ...this.state.windows, [key]: { ...window, rows, loadedAt } };
       // Bound memory as someone browses years of history. Keep recently viewed

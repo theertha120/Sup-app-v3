@@ -9,8 +9,8 @@ function useHistoryValue() {
   const [, render] = useState(0);
   // A new account gets a separate cache; old requests can never write into it.
   const store = useMemo(() => new StatsHistoryStore({
-    fetchWindow: (start, end) => userId && isAuthenticated ? fetchStatsWindow(userId, start, end) : Promise.resolve([]),
-    fetchEarliest: () => userId && isAuthenticated ? fetchEarliestStatsDate(userId) : Promise.resolve(null),
+    fetchWindow: (start, end, signal) => userId && isAuthenticated ? fetchStatsWindow(userId, start, end, signal) : Promise.resolve([]),
+    fetchEarliest: (signal) => userId && isAuthenticated ? fetchEarliestStatsDate(userId, signal) : Promise.resolve(null),
   }, () => render((n) => n + 1)), [userId, isAuthenticated]);
 
   const ensureWindow = useCallback((window: StatsWindow) => {
