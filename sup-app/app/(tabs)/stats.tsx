@@ -1,6 +1,6 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback, useId } from "react";
 import {
   View,
   Text,
@@ -21,16 +21,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import RefreshButton from "@/src/components/ui/RefreshButton";
-import type {
-  PosturePageRow,
-  StateTotals,
-} from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+import { statsWindowKey } from "@/src/services/stats/statsHistoryStore";
+import { buildStatsPage, statsPageCount, statsPageWindow, type PageData, type StatsRange } from "@/src/services/stats/statsPages";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -86,7 +84,7 @@ const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
 // };
 
 
-type Range = "week" | "month" | "year";
+type Range = StatsRange;
 
 interface PopupInfo {
   x: number;
@@ -103,217 +101,6 @@ interface ActivePopup {
   info: PopupInfo;
 }
 
-export interface PageData {
-  labels:      string[];
-  scores:      number[];
-  sessionMins: number[];
-  hasData:     boolean[];
-  stateTotals: Record<string, number>;
-  startDate:   string;
-  endDate:     string;
-  pointDates:  string[];
-}
-
-function fmt(d: Date) {
-  const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-  return `${d.getDate()} ${M[d.getMonth()]}`;
-}
-
-function fmtFull(d: Date) {
-  const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-// ─── Page count ───────────────────────────────────────────────────────────────
-// How many historical pages exist for this range. No cap — the user can swipe
-// all the way back to the first ever recorded session. Derived from the history
-// already in memory, so it costs no query of its own.
-function getPageCountFromRows(rows: PosturePageRow[], range: Range): number {
-  // Anchored on the oldest row we hold. Falls back to the same placeholder the
-  // previous query-based version used when the user has no rows at all.
-  const earliestKey = rows[0]?.date;
-  const dataStart = earliestKey
-    ? new Date(`${earliestKey}T00:00:00.000Z`)
-    : new Date(2026, 0, 1);
-  const now = new Date();
-
-  if (range === "week") {
-    const msPerWeek = 7 * 86_400_000;
-    return Math.max(1, Math.ceil((now.getTime() - dataStart.getTime()) / msPerWeek));
-  } else if (range === "month") {
-    const monthDiff =
-      (now.getFullYear() - dataStart.getFullYear()) * 12 +
-      (now.getMonth() - dataStart.getMonth());
-    return Math.max(1, monthDiff + 1);
-  } else {
-    const yearDiff = now.getFullYear() - dataStart.getFullYear();
-    return Math.max(1, yearDiff + 1);
-  }
-}
-
-
-// Phone-local YYYY-MM-DD — must match how posture_daily.date is written.
-const toDateKey = (d: Date): string => toLocalDateKey(d);
-
-type FullStateTotals = Required<Omit<StateTotals, "transition">>;
-
-function emptyStateTotals(): FullStateTotals {
-  return {
-    upright: 0,
-    forward_lean: 0,
-    slouched: 0,
-    severe: 0,
-    tilted_left: 0,
-    tilted_right: 0,
-  };
-}
-
-function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | undefined) {
-  if (!row) return;
-  const totals = row.stateTotals;
-  if (!totals) return;
-  for (const key of Object.keys(target) as (keyof FullStateTotals)[]) {
-    target[key] += totals[key] ?? 0; // transition, if present on totals, is never iterated
-  }
-}
-
-function avgOf(values: number[]): number {
-  const valid = values.filter((v) => !isNaN(v));
-  if (!valid.length) return 0;
-  return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
-}
-
-function sessionMinsOf(row: PosturePageRow | undefined): number {
-  if (!row) return 0;
-  if (row.totalDeskMs != null) return row.totalDeskMs / 60000;
-  return row.totalMinutes ?? 0;
-}
-
-// Builds every page for a range from the history already in memory. Pure, so
-// switching range or swiping pages costs no network call — this used to issue one
-// query per page, serially, on every range change.
-function buildPages(history: PosturePageRow[], range: Range): PageData[] {
-  const now    = new Date();
-  const PAGES  = getPageCountFromRows(history, range);
-
-  // Rows arrive sorted by date, so a filtered slice keeps that order — matching
-  // what the old per-page query returned.
-  const sliceRows = (startKey: string, endKey: string) =>
-    history.filter((r) => r.date >= startKey && r.date <= endKey);
-  const rowByDate = new Map(history.map((r) => [r.date, r]));
-
-  const pages: PageData[] = [];
-
-  for (let p = 0; p < PAGES; p++) {
-    const stateTotals: FullStateTotals = emptyStateTotals();
-    if (range === "week") {
-      // Calendar-day steps (setDate) rather than fixed 24h ms steps, so a
-      // daylight-saving change can't shift a bar onto the wrong day.
-      const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - p * 7);
-      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
-
-      const days = Array.from({ length: 7 }, (_, i) =>
-        new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
-      const dayKeys = days.map(toDateKey);
-      const dayRows = dayKeys.map((k) => rowByDate.get(k));
-
-      dayRows.forEach((r) => accumulateStateTotals(stateTotals, r));
-
-      pages.push({
-        labels:      ["mon","tue","wed","thu","fri","sat","sun"],
-        scores:      dayRows.map((r) => r?.supScore ?? 0),
-        sessionMins: dayRows.map((r) => sessionMinsOf(r)),
-        hasData:     dayRows.map((r) => r !== undefined),
-        stateTotals,
-        startDate:   fmt(start),
-        endDate:     fmt(end),
-        pointDates:  days.map((d) => fmtFull(d)),
-      });
-
-    } else if (range === "month") {
-      const ref   = new Date(now);
-      ref.setMonth(ref.getMonth() - p);
-      const year  = ref.getFullYear();
-      const month = ref.getMonth();
-      const start = new Date(year, month, 1);
-      const end   = new Date(year, month + 1, 0);
-      const startKey = toDateKey(start);
-      const endKey   = toDateKey(end);
-
-      const rows = sliceRows(startKey, endKey);
-      rows.forEach((r) => accumulateStateTotals(stateTotals, r));
-
-      // 4 weekly buckets: 1-7, 8-14, 15-21, 22-end
-      const weekBounds = [
-        [1, 7], [8, 14], [15, 21], [22, end.getDate()],
-      ];
-      const weekly = weekBounds.map(([dStart, dEnd]) => {
-        const bucketRows = rows.filter((r) => {
-          const day = new Date(`${r.date}T00:00:00.000Z`).getUTCDate();
-          return day >= dStart && day <= dEnd;
-        });
-        return {
-          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
-          sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
-          hasData:     bucketRows.length > 0,
-        };
-      });
-
-      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      pages.push({
-        labels:      ["wk 1","wk 2","wk 3","wk 4"],
-        scores:      weekly.map((w) => w.score),
-        sessionMins: weekly.map((w) => w.sessionMins),
-        hasData:     weekly.map((w) => w.hasData),
-        stateTotals,
-        startDate:   fmt(start),
-        endDate:     fmt(end),
-        pointDates:  [
-          `1–7 ${M[month]} ${year}`,
-          `8–14 ${M[month]} ${year}`,
-          `15–21 ${M[month]} ${year}`,
-          `22–${end.getDate()} ${M[month]} ${year}`,
-        ],
-      });
-
-    } else {
-      const yr = now.getFullYear() - p;
-      const start = new Date(yr, 0, 1);
-      const end   = new Date(yr, 11, 31);
-      const startKey = toDateKey(start);
-      const endKey   = toDateKey(end);
-
-      const rows = sliceRows(startKey, endKey);
-      rows.forEach((r) => accumulateStateTotals(stateTotals, r));
-
-      const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      const monthly = Array.from({ length: 12 }, (_, m) => {
-        const bucketRows = rows.filter((r) => {
-          const month = new Date(`${r.date}T00:00:00.000Z`).getUTCMonth();
-          return month === m;
-        });
-        return {
-          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
-          sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
-          hasData:     bucketRows.length > 0,
-        };
-      });
-
-      pages.push({
-        labels:      ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"],
-        scores:      monthly.map((m) => m.score),
-        sessionMins: monthly.map((m) => m.sessionMins),
-        hasData:     monthly.map((m) => m.hasData),
-        stateTotals,
-        startDate:   `1 jan ${yr}`,
-        endDate:     `31 dec ${yr}`,
-        pointDates:  M.map((m) => `${m} ${yr}`),
-      });
-    }
-  }
-
-  return pages;
-}
 
 function scoreColor(s: number) {
   if (s >= 75) return "#6DC96D";
@@ -458,23 +245,24 @@ const PAGE_W           = CARD_W - CARD_PADDING_X * 2;
 // Pages sit a full card-padding apart so a neighbour starts just past the card edge
 const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
 
+type StatsPages = {
+  length: number;
+  get: (index: number) => PageData;
+  ensure: (index: number) => void;
+  observe: (id: string, indices: number[]) => () => void;
+};
+
 function SwipeCard({
   pages,
   renderPage,
-  resetKey,
   onPageChange,
 }: {
-  pages:      PageData[];
+  pages:      StatsPages;
   renderPage: (page: PageData, prevPage: PageData | null) => React.ReactNode;
-  resetKey:   string;
   onPageChange?: () => void;
 }) {
   const [pageIdx, setPageIdx] = useState(0);
-  const prevResetKey = useRef(resetKey);
-  if (prevResetKey.current !== resetKey) {
-    prevResetKey.current = resetKey;
-    Promise.resolve().then(() => setPageIdx(0));
-  }
+  const observerId = useId();
 
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
@@ -539,12 +327,22 @@ function SwipeCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIdx]);
 
-  const currentPage = pages[pageIdx] ?? pages[0];
-  // Extra guard against the one-render gap between a resetKey change and the
-  // deferred setPageIdx(0) above actually landing (e.g. switching from a
-  // long range straight to a short one) — keeps the counter's numerator from
-  // ever reading ahead of the *current* pages array too.
+  const currentPage = pages.get(Math.min(pageIdx, pages.length - 1));
   const displayIdx  = Math.min(pageIdx, pages.length - 1);
+  const firstVisible = Math.max(0, displayIdx - 1);
+  const visibleIndices = Array.from({ length: Math.min(pages.length - 1, displayIdx + 1) - firstVisible + 1 }, (_, i) => firstVisible + i);
+  const ensure = pages.ensure;
+  const observe = pages.observe;
+  const pageCount = pages.length;
+  useEffect(() => {
+    const indices = Array.from(
+      { length: Math.min(pageCount - 1, displayIdx + 1) - firstVisible + 1 },
+      (_, i) => firstVisible + i
+    );
+    const stop = observe(observerId, indices);
+    indices.forEach(ensure);
+    return stop;
+  }, [displayIdx, firstVisible, pageCount, ensure, observe, observerId]);
 
   return (
     <View>
@@ -552,12 +350,14 @@ function SwipeCard({
         {currentPage.startDate} – {currentPage.endDate}
       </Text>
       <View style={swipeStyles.clip} {...panResponder.panHandlers}>
-        <Animated.View style={[swipeStyles.row, { transform: [{ translateX: offset }] }]}>
-          {pages.map((p, i) => (
-            <View key={i} style={swipeStyles.page}>
-              {Math.abs(i - displayIdx) <= 1 ? renderPage(p, pages[i + 1] ?? null) : null}
-            </View>
-          ))}
+        <Animated.View style={[swipeStyles.row, { marginLeft: firstVisible * PAGE_STRIDE, transform: [{ translateX: offset }] }]}>
+          {visibleIndices.map((i) => {
+            const page = pages.get(i);
+            return <View key={i} style={swipeStyles.page}>
+              {page.isLoading ? <Text style={styles.cardTitle}>loading…</Text>
+                : renderPage(page, i + 1 < pages.length ? pages.get(i + 1) : null)}
+            </View>;
+          })}
         </Animated.View>
       </View>
 
@@ -874,22 +674,34 @@ export default function StatsScreen() {
   const [activeMetricInfo, setActiveMetricInfo] = useState<string | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
-  const {
-    rows: history,
-    isRefreshing,
-    lastUpdatedAt,
-    error,
-    refresh,
-  } = usePostureHistory();
+  const { windows, earliest, pending, lastUpdatedAt, error, refresh, ensureWindow, observe } = usePostureHistory();
+  const [todayKey] = useState(toLocalDateKey());
+  const isRefreshing = pending > 0;
+  const emptyMessage = isAuthenticated ? (error ?? "loading…") : "sign in to see your stats";
 
-  // Shown by each card while there is nothing to chart yet.
-  const emptyMessage = error ?? "loading…";
 
-  // Derived from the history loaded at login, so changing range is instant.
-  const pages = useMemo(
-    () => (isAuthenticated && userId ? buildPages(history, range) : []),
-    [history, range, isAuthenticated, userId]
-  );
+  const anchor = useMemo(() => new Date(`${todayKey}T12:00:00`), [todayKey]);
+  const ensurePage = useCallback((index: number) => {
+    void ensureWindow(statsPageWindow(range, index, anchor));
+  }, [range, anchor, ensureWindow]);
+  const observePages = useCallback((id: string, indices: number[]) =>
+    observe(id, indices.map((index) => statsPageWindow(range, index, anchor))), [observe, range, anchor]);
+  const pages = useMemo<StatsPages>(() => {
+    const length = isAuthenticated && userId ? statsPageCount(earliest, range, anchor) : 0;
+    // One aggregation per requested index, shared by all three cards. No work
+    // or placeholder views are created for the rest of the user's history.
+    const prepared = new Map<number, PageData>();
+    return { length, ensure: ensurePage, observe: observePages, get(index) {
+      let page = prepared.get(index);
+      if (!page) {
+        const window = statsPageWindow(range, index, anchor);
+        const cached = windows[statsWindowKey(window)];
+        page = { ...buildStatsPage(cached?.rows ?? [], range, index, anchor), isLoading: !cached };
+        prepared.set(index, page);
+      }
+      return page;
+    } };
+  }, [windows, earliest, range, anchor, isAuthenticated, userId, ensurePage, observePages]);
 
   const closePopup = () => setActivePopup(null);
   const openPopup  = (chartId: string, index: number | string, info: PopupInfo) =>
@@ -947,7 +759,7 @@ export default function StatsScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                track your posture over time here. tap any "?" to learn more!
+                track your posture over time here. tap any &quot;?&quot; to learn more!
               </Text>
               <TutorialActions>
                 <PressFeedback feedback="link" onPress={() => setTutorialStep("go-community-tip")}>
@@ -958,14 +770,16 @@ export default function StatsScreen() {
           </View>
         )}
 
+        {error && <Text accessibilityRole="alert" style={styles.cardTitle}>{error}</Text>}
+
         {/* S'CORE TREND */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+            <SwipeCard pages={pages} key={`${resetKey}:${todayKey}:${userId}`} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
-                <Text style={styles.cardTitle}>s'core trend</Text>
+                <Text style={styles.cardTitle}>s&apos;core trend</Text>
                 <BarChart
                   data={p} prevData={prev} range={range} type="score"
                   hasData={p.hasData}
@@ -985,9 +799,9 @@ export default function StatsScreen() {
           <InfoButton onPress={() => setActiveMetricInfo("session")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p, prev) => (
+            <SwipeCard pages={pages} key={`${resetKey}:${todayKey}:${userId}`} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
-                <Text style={styles.cardTitle}>s'ession time</Text>
+                <Text style={styles.cardTitle}>s&apos;ession time</Text>
                 <BarChart
                   data={p} prevData={prev} range={range} type="session"
                   hasData={p.hasData}
@@ -1005,7 +819,7 @@ export default function StatsScreen() {
         {/* WHEN YOUR POSTURE SLIPS */}
         {/* <View style={[styles.card, styles.shadow]}>
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={() => (
+            <SwipeCard pages={pages} key={`${resetKey}:${todayKey}:${userId}`} onPageChange={closePopup} renderPage={() => (
               <>
                 <Text style={styles.cardTitle}>when your posture slips</Text>
                 <PostureHeatmap
@@ -1026,7 +840,7 @@ export default function StatsScreen() {
           <InfoButton onPress={() => setActiveMetricInfo("breakdown")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
-            <SwipeCard pages={pages} resetKey={resetKey} onPageChange={closePopup} renderPage={(p) => (
+            <SwipeCard pages={pages} key={`${resetKey}:${todayKey}:${userId}`} onPageChange={closePopup} renderPage={(p) => (
               <>
                 <Text style={styles.cardTitle}>posture breakdown</Text>
                 <PostureBreakdown
