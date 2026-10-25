@@ -12,7 +12,7 @@ export const leaderboardQueryKey = (query: LeaderboardQuery) => `${query.dateKey
 
 type Profile = { id: string; name: string; username: string | null; avatar_url: string | null };
 type Score = { user_id: string; date: string; sup_score: number | null };
-type Friendship = { from_user_id: string; to_user_id: string };
+type Friendship = { from_user_id: string | null; to_user_id: string | null };
 type RankedRow = Profile & { avg_sup_score: number; sessions_counted: number; rank: number };
 
 type QueryResult<T> = { data: T[] | null; error: unknown };
@@ -35,7 +35,7 @@ function toEntry(row: RankedRow): LeaderboardEntry {
 
 /** Compatibility path until the ranking migration is applied. Only compact scores cross the network. */
 export function rankCompactLeaderboard(profiles: Profile[], scores: Score[], friendships: Friendship[], userId: string, scope: LeaderboardScope): LeaderboardPage {
-  const friends = new Set(friendships.map((row) => row.from_user_id === userId ? row.to_user_id : row.from_user_id).filter((id) => id !== userId));
+  const friends = new Set(friendships.map((row) => row.from_user_id === userId ? row.to_user_id : row.from_user_id).filter((id): id is string => typeof id === "string" && id !== userId));
   const totals = new Map<string, { sum: number; count: number }>();
   for (const score of scores) {
     const total = totals.get(score.user_id) ?? { sum: 0, count: 0 };

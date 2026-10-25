@@ -48,6 +48,7 @@ test('ranking preserves daily means, null-score treatment, ties and zero-data us
 test('friends scope includes self, both relationship directions, and no duplicates', () => {
   const result = api.rankCompactLeaderboard(['me', 'friend', 'other'].map((id) => profile(id)), [], [
     { from_user_id: 'me', to_user_id: 'friend' }, { from_user_id: 'friend', to_user_id: 'me' },
+    { from_user_id: 'me', to_user_id: null },
   ], 'me', 'friends');
   assert.equal(result.friendCount, 1);
   assert.deepEqual(result.entries.map((e) => e.user.id).sort(), ['friend', 'me']);
@@ -214,4 +215,74 @@ test('responses after sign-out cannot write to the disposed account cache', asyn
   resolve({ entries: [entry(0)], ownEntry: null, total: 1, friendCount: 0 });
   await request;
   assert.equal(store.get(query).entries.length, 0);
+});
+
+test('full leaderboard passes rows to a virtual list without rendering them all', () => {
+  const source = ts.createSourceFile('leaderboard-full.tsx', readFileSync(new URL('../app/leaderboard-full.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const screen = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'FullLeaderboardScreen');
+  assert.ok(screen);
+  const entries = Array.from({ length: 10000 }, (_, i) => entry(i));
+  let more = 0;
+  const dependencies = {
+    React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    useState: (initial) => [initial, () => {}], useRef: (current) => ({ current }), useEffect: (fn) => fn(), useCallback: (fn) => fn,
+    useAuth: () => ({ userId: 'u9999' }), useLocalSearchParams: () => ({}),
+    require: () => 1,
+    useFonts: () => [true], useFocusEffect: (fn) => fn(),
+    useLeaderboard: () => ({ entries, total: 12000, isLoading: false, isLoadingMore: false, isRefreshing: false,
+      friendCount: 0, error: null, refresh: () => {}, loadMore: () => { more++; } }),
+    Animated: { Value: class { setValue() {} }, timing: () => ({ start() {} }), View: 'AnimatedView' },
+    View: 'View', Text: 'Text', FlatList: 'FlatList', PressFeedback: 'PressFeedback', Ionicons: 'Ionicons',
+    HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton', BackgroundBlobs: 'BackgroundBlobs',
+    LeaderboardRow: 'LeaderboardRow', styles: {}, PRIMARY_TEXT: '#000',
+    PERIODS: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }],
+  };
+  const js = ts.transpile(screen.getText(source).replace("export default ", ""), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
+  const Screen = new Function(...Object.keys(dependencies), `${js}; return FullLeaderboardScreen;`)(...Object.values(dependencies));
+  const tree = Screen();
+  const list = tree.children.find((child) => child.type === 'FlatList');
+  assert.ok(list);
+  assert.equal(list.props.data, entries);
+  assert.equal(list.props.initialNumToRender, 10);
+  assert.equal(list.props.maxToRenderPerBatch, 10);
+  assert.equal(list.children.length, 0);
+  assert.equal(list.props.renderItem({ item: entries[9999] }).props.isCurrentUser, true);
+  list.props.onEndReached();
+  assert.equal(more, 1);
+});
+
+test('concurrent fallback scopes share the compact source snapshot', async () => {
+  const db = fallbackDatabase();
+  const source = service(db.supabase).createLeaderboardSource('u0000');
+  const [everyone, friends] = await Promise.all([
+    source(query, 0, 5), source({ ...query, scope: 'friends' }, 0, 5),
+  ]);
+  assert.equal(everyone.total, 1501);
+  assert.equal(friends.total, 2);
+  // One profiles scan, including the final empty page, despite two views.
+  assert.equal(db.calls.filter((call) => call.table === 'profiles').length, Math.ceil(1501 / 137) + 1);
+});
+
+test('the server function is adopted after it becomes available', async (t) => {
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const db = fallbackDatabase();
+  const source = service(db.supabase).createLeaderboardSource('u0000');
+  await source(query, 0, 5);
+  const reads = db.calls.length;
+  db.supabase.rpc = async () => ({ data: { entries: [], own_entry: null, total: 0, friend_count: 0 }, error: null });
+  now += api.LEADERBOARD_STALE_MS;
+  const result = await source(query, 0, 5);
+  assert.equal(result.total, 0);
+  assert.equal(db.calls.length, reads);
+});
+
+test('a successful empty leaderboard is cached without repeated loading', async () => {
+  const { store, calls } = fixture(0);
+  await store.ensure(query, 50);
+  await store.ensure(query, 50);
+  await store.loadMore(query);
+  assert.equal(calls.length, 1);
+  assert.equal(store.get(query).isLoading, false);
+  assert.equal(store.get(query).lastUpdatedAt, 1000);
 });

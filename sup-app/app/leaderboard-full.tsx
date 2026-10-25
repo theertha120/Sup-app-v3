@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Animated,
 } from "react-native";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useEffect } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
@@ -48,21 +48,21 @@ export default function FullLeaderboardScreen() {
 
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [scope, setScope] = useState<Scope>("everyone");
+  const listRef = useRef<FlatList<LeaderboardEntry>>(null);
+  useEffect(() => { listRef.current?.scrollToOffset({ offset: 0, animated: false }); }, [scope, period]);
 
   const {
-    getEntries,
+    entries,
+    total,
+    isLoadingMore,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
-
-  // Both toggles read the cache loaded at login, so switching period or scope
-  // is instant and costs no network call.
-  const entries: LeaderboardEntry[] = getEntries(scope, period);
+    loadMore,
+  } = useLeaderboard(scope, period);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,97 +72,101 @@ export default function FullLeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
+    }, [fadeAnim])
   );
 
+  const renderItem = useCallback(({ item }: { item: LeaderboardEntry }) => (
+    <LeaderboardRow rank={item.rank} entry={item} isCurrentUser={item.user.id === userId} />
+  ), [userId]);
+  const showFriends = scope !== "friends" || friendCount > 0;
+  const emptyMessage = isLoading ? "Loading leaderboard…" : error
+    ?? (!showFriends ? "you haven't added any friends yet — add some from the profile menu to see them here."
+      : "No posture data for this period yet.");
   if (!fontsLoaded) return null;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <HeaderBar />
+      <FlatList
+        ref={listRef}
+        style={styles.container}
+        data={showFriends ? entries : []}
+        keyExtractor={(entry) => entry.user.id}
+        renderItem={renderItem}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        onEndReached={() => { if (!error && !isLoading && !isRefreshing && !isLoadingMore && entries.length < total) void loadMore(); }}
+        onEndReachedThreshold={0.5}
+        refreshing={isRefreshing}
+        onRefresh={refresh}
+        ListHeaderComponent={<>
+          <HeaderBar />
 
-        <View style={styles.sectionRow}>
-          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
-            <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
-          </PressFeedback>
-          <Text style={styles.sectionLabel}>Full Leaderboard</Text>
-        </View>
-
-        <RefreshButton
-          onPress={refresh}
-          isRefreshing={isRefreshing}
-          lastUpdatedAt={lastUpdatedAt}
-        />
-        {/* Scope toggle — everyone vs friends only */}
-        <View style={styles.periodToggle}>
-          {(["everyone", "friends"] as Scope[]).map((s) => (
-            <PressFeedback
-              key={s}
-              style={[styles.periodButton, scope === s && styles.periodButtonActive]}
-              onPress={() => setScope(s)}
-            >
-              <Text
-                style={[
-                  styles.periodButtonText,
-                  scope === s && styles.periodButtonTextActive,
-                ]}
-              >
-                {s === "everyone" ? "Everyone" : "Friends"}
-              </Text>
+          <View style={styles.sectionRow}>
+            <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
+              <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
             </PressFeedback>
-          ))}
-        </View>
+            <Text style={styles.sectionLabel}>Full Leaderboard</Text>
+          </View>
 
-        {/* Period toggle */}
-        <View style={styles.periodToggle}>
-          {PERIODS.map((p) => (
-            <PressFeedback
-              key={p.key}
-              style={[styles.periodButton, period === p.key && styles.periodButtonActive]}
-              onPress={() => setPeriod(p.key)}
-            >
-              <Text
-                style={[
-                  styles.periodButtonText,
-                  period === p.key && styles.periodButtonTextActive,
-                ]}
+          <RefreshButton
+            onPress={refresh}
+            isRefreshing={isRefreshing}
+            lastUpdatedAt={lastUpdatedAt}
+          />
+          {/* Scope toggle — everyone vs friends only */}
+          <View style={styles.periodToggle}>
+            {(["everyone", "friends"] as Scope[]).map((s) => (
+              <PressFeedback
+                key={s}
+                style={[styles.periodButton, scope === s && styles.periodButtonActive]}
+                onPress={() => setScope(s)}
               >
-                {p.label}
-              </Text>
-            </PressFeedback>
-          ))}
-        </View>
-
-        {isLoading ? (
-          <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
-          <Text style={styles.loadingText}>{error}</Text>
-        ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
-          <Text style={styles.loadingText}>
-            you haven't added any friends yet — add some from the profile menu to see them here.
-          </Text>
-        ) : entries.length === 0 ? (
-          <Text style={styles.loadingText}>No posture data for this period yet.</Text>
-        ) : (
-          <View style={styles.list}>
-            {entries.map((entry) => (
-              <LeaderboardRow
-                key={entry.user.id}
-                rank={entry.rank}
-                entry={entry}
-                isCurrentUser={userId ? entry.user.id === userId : false}
-              />
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    scope === s && styles.periodButtonTextActive,
+                  ]}
+                >
+                  {s === "everyone" ? "Everyone" : "Friends"}
+                </Text>
+              </PressFeedback>
             ))}
           </View>
-        )}
 
-        <View style={{ height: 32 }} />
-      </ScrollView>
+          {/* Period toggle */}
+          <View style={styles.periodToggle}>
+            {PERIODS.map((p) => (
+              <PressFeedback
+                key={p.key}
+                style={[styles.periodButton, period === p.key && styles.periodButtonActive]}
+                onPress={() => setPeriod(p.key)}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    period === p.key && styles.periodButtonTextActive,
+                  ]}
+                >
+                  {p.label}
+                </Text>
+              </PressFeedback>
+            ))}
+          </View>
+
+          {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
+        </>}
+        ListEmptyComponent={<Text style={styles.loadingText}>{emptyMessage}</Text>}
+        ListFooterComponent={<View style={{ paddingBottom: 32 }}>
+          {isLoadingMore && <Text style={styles.loadingText}>Loading more…</Text>}
+          {error && entries.length > 0 && entries.length < total && <PressFeedback onPress={loadMore}>
+            <Text style={styles.loadingText}>retry loading more</Text>
+          </PressFeedback>}
+        </View>}
+      />
     </Animated.View>
   );
 }
@@ -173,7 +177,7 @@ interface LeaderboardRowProps {
   isCurrentUser: boolean;
 }
 
-function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
+const LeaderboardRow = React.memo(function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
   const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
   return (
     <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
@@ -198,12 +202,12 @@ function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
-        s'up score: {entry.avgSupScore.toFixed(1)}
+        s&apos;up score: {entry.avgSupScore.toFixed(1)}
         </Text>
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -271,10 +275,8 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
 
-  list: {
-    marginHorizontal: 20,
-  },
   row: {
+    marginHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",

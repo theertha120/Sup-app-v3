@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
-  Dimensions,
   Image,
 } from "react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -20,19 +19,12 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLeaderboard } from "@/src/contexts/LeaderboardContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
-import { supabase } from "../../src/lib/supabase";
-import ProfileModal from "../../src/components/modals/ProfileModal";
-import {
-  subscribeToProfileUpdates,
-  userProfileToUser,
-} from "../../src/services/user/profileService";
 import type { LeaderboardEntry } from "../../src/services/social/leaderboardPeriodService";
 import { displayName } from "@/src/utils/displayName";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 
 type Scope = "everyone" | "friends";
 
-const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
 
 // Matches the floating tab bar (LiquidGlass): height 72, offset 25 from the
@@ -41,7 +33,7 @@ const NAV_BAR_HEIGHT = 72;
 const NAV_BOTTOM_OFFSET = 25;
 
 // Fixed window for the at-a-glance summary screen. The full, filterable
-// leaderboard (Day / Week / Month / All time) lives on /leaderboard-full.
+// leaderboard (Day / Week) lives on /leaderboard-full.
 const SUMMARY_PERIOD = "day" as const;
 
 const BADGE_COLORS = {
@@ -72,21 +64,17 @@ export default function LeaderboardScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
+  const [scope, setScope] = useState<Scope>("everyone");
   const {
-    getEntries,
+    entries,
+    ownEntry,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
-  const [scope, setScope] = useState<Scope>("everyone");
-
-  // A read-only slice of the cache loaded at login. Switching scope costs no
-  // network call, and focusing the tab no longer refetches.
-  const entries: LeaderboardEntry[] = getEntries(scope, SUMMARY_PERIOD);
+  } = useLeaderboard(scope, SUMMARY_PERIOD, 5);
 
   useFocusEffect(
     useCallback(() => {
@@ -96,17 +84,13 @@ export default function LeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
+    }, [fadeAnim])
   );
 
   const top3 = entries.slice(0, 3);
   const nextTwo = entries.slice(3, 5);
-  const ownIndex = userId ? entries.findIndex((e) => e.user.id === userId) : -1;
-  const ownEntry = ownIndex >= 0 ? entries[ownIndex] : undefined;
-  const showOwnRankCard = ownIndex >= 5;
-  const showLeaderboard = !isLoading && !error && entries.length > 0
+  const showOwnRankCard = !!ownEntry && !entries.slice(0, 5).some((entry) => entry.user.id === ownEntry.user.id);
+  const showLeaderboard = !isLoading && entries.length > 0
     && (scope !== "friends" || (friendCount ?? 0) > 0);
 
   if (!fontsLoaded) return null;
@@ -132,7 +116,7 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                see how your weekly points stack up against the community!
+                see how your daily score stacks up against the community!
               </Text>
               <TutorialActions>
                 <PressFeedback feedback="link" onPress={() => setTutorialStep("add-friends-tip")}>
@@ -168,16 +152,17 @@ export default function LeaderboardScreen() {
           ))}
         </View>
 
+        {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
+        ) : error && entries.length === 0 ? (
           <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>
-            you haven't added any friends yet — add some from the profile menu to see them here.
+            you haven&apos;t added any friends yet — add some from the profile menu to see them here.
           </Text>
         ) : entries.length === 0 ? (
-          <Text style={styles.loadingText}>No posture data for this week yet.</Text>
+          <Text style={styles.loadingText}>No posture data for today yet.</Text>
         ) : (
           <>
             {/* ── Podium (top 3) ── */}
