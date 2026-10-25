@@ -405,6 +405,11 @@ const SUP_SCORE_PRIOR_MS    = 10 * 60_000;
  * tracked (a day off has no score rather than a free 50).
  */
 function computeSupScore(stateTotals: StateTotals): number | null {
+  const score = unroundedSupScore(stateTotals);
+  return score === null ? null : Math.round(score);
+}
+
+function unroundedSupScore(stateTotals: StateTotals): number | null {
   let trackedMs = 0;
   let creditMs  = 0;
   for (const state of ALL_STATES) {
@@ -413,9 +418,23 @@ function computeSupScore(stateTotals: StateTotals): number | null {
     creditMs  += ms * POSTURE_CREDIT[state];
   }
   if (trackedMs <= 0) return null;
-  return Math.round(
-    (creditMs + SUP_SCORE_PRIOR_SCORE * SUP_SCORE_PRIOR_MS) / (trackedMs + SUP_SCORE_PRIOR_MS)
-  );
+  return (creditMs + SUP_SCORE_PRIOR_SCORE * SUP_SCORE_PRIOR_MS) / (trackedMs + SUP_SCORE_PRIOR_MS);
+}
+
+/**
+ * s'up s'core for a multi-day period (unrounded): the daily formula applied to
+ * the period's summed per-state time, so the prior counts once per period and
+ * each day weighs by its tracked time. Rows without state_totals are skipped.
+ */
+export function supScoreForRows(rows: Pick<DailyPostureRow, "stateTotals">[]): number | null {
+  const summed: StateTotals = {};
+  for (const row of rows) {
+    if (!row.stateTotals) continue;
+    for (const state of ALL_STATES) {
+      summed[state] = (summed[state] ?? 0) + (row.stateTotals[state] ?? 0);
+    }
+  }
+  return unroundedSupScore(summed);
 }
 
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {

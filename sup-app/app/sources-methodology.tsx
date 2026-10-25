@@ -219,7 +219,8 @@ export default function SourcesMethodologyScreen() {
             as you track. after 10 minutes your posture counts for half of it; after an hour, it's
             almost all you. this stops a single very short session from producing an extreme score
             either way — e.g. one perfect minute scores 55, while an hour of perfect posture scores
-            93. days with no tracking have no s'core.
+            93. days with no tracking have no s'core. weekly, monthly and yearly s'cores use the
+            same formula across all the time tracked in that period, so longer days count for more.
           </Text>
         </Section>
 

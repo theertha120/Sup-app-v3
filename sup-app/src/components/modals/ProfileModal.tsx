@@ -21,6 +21,7 @@ import {
   userProfileToUser,
   type ProfileUpdateInput,
 } from "../../services/user/profileService";
+import { fetchWeeklySupScore } from "../../services/social/leaderboardPeriodService";
 import { UserSupsonaAvatar } from "../supsona/SupsonaAvatar";
 
 interface ProfileModalProps {
@@ -46,6 +47,7 @@ export default function ProfileModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [profileData, setProfileData] = useState<User | null>(user);
+  const [weeklyPoints, setWeeklyPoints] = useState(0);
 
   // Sync with user when modal opens or when parent passes updated user (e.g. after supsona save)
   useEffect(() => {
@@ -67,6 +69,10 @@ export default function ProfileModal({
         setError("Failed to load profile data");
       })
       .finally(() => setIsLoading(false));
+    setWeeklyPoints(0);
+    fetchWeeklySupScore(user.id)
+      .then(setWeeklyPoints)
+      .catch((err) => console.error("[ProfileModal] Failed to fetch weekly points", err));
   }, [visible, user?.id]);
 
   const loading = externalLoading || isLoading;
@@ -247,7 +253,7 @@ export default function ProfileModal({
                       </View>
 
                       <View style={styles.statBox}>
-                        <Text style={styles.statValue}>{profileData.weeklyAvgPoints ?? 0}</Text>
+                        <Text style={styles.statValue}>{weeklyPoints}</Text>
                         <Text style={styles.statLabel}>Weekly Points</Text>
                       </View>
                     </View>

@@ -59,10 +59,10 @@ The score is always strictly between 0 and 100. A day with no tracked time has n
 Implementation: `computeSupScore()` in `src/services/posture/postureSyncService.ts`. The inputs
 are the per-state time totals summed across every completed session that day.
 
-So the streak component maxes out at a 7-day streak (7 × 3 = 21, capped to 20) and grows by 3
-points per consecutive day before that. A streak day is defined by the device's local calendar
-day (not UTC): opening the app (cold start, foregrounding, or logging in) on the very next
-calendar day extends the streak by one; skipping a day resets it to 1 on the next open.
+**Longer periods** (stats week/month/year bars and summaries, leaderboard) use the same formula on
+the period's summed per-state time — not a mean of daily scores. Each day therefore counts in
+proportion to its tracked time, and the 10-minute prior is applied once per period rather than
+once per day. Implementation: `supScoreForRows()` in the same file.
 
 ---
 
