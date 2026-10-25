@@ -145,3 +145,116 @@ test('browsing many years keeps memory bounded', async () => {
   assert.equal(Object.keys(store.state.windows).length, 24);
   assert.ok(store.state.windows['2025-01-01:2025-12-31']);
 });
+
+const { watchStatsFreshness } = load('../src/services/stats/statsFreshness.ts');
+test('focus refreshes once, polls only in foreground, checks resume and cleans up', () => {
+  let checkCount = 0;
+  let active = true;
+  let tick;
+  let appState;
+  let delay;
+  const cleanup = [];
+  const stop = watchStatsFreshness({
+    check: () => { checkCount++; }, isActive: () => active,
+    watch: () => () => cleanup.push('realtime'),
+    subscribe: (callback) => { appState = callback; return () => cleanup.push('appstate'); },
+    intervalMs: STATS_STALE_MS,
+    schedule: (callback, ms) => { tick = callback; delay = ms; return 42; },
+    cancel: (id) => { assert.equal(id, 42); cleanup.push('timer'); },
+  });
+  assert.equal(checkCount, 1);
+  assert.equal(delay, 60000);
+  tick();
+  assert.equal(checkCount, 2);
+  active = false;
+  tick();
+  appState('background');
+  assert.equal(checkCount, 2);
+  active = true;
+  appState('active');
+  assert.equal(checkCount, 3);
+  stop();
+  assert.deepEqual(cleanup.sort(), ['appstate', 'realtime', 'timer']);
+});
+
+test('automatic checks respect cache age; explicit refresh bypasses it', async () => {
+  const { store, requests, advance } = fixture();
+  await store.ensureWindow(window);
+  await store.refresh(false);
+  assert.equal(requests.length, 1);
+  advance(STATS_STALE_MS);
+  await store.refresh(false);
+  assert.equal(requests.length, 2);
+  await store.refresh();
+  assert.equal(requests.length, 3);
+});
+
+test('freshness refreshes visible windows rather than previously browsed history', async () => {
+  const { store, requests } = fixture();
+  const older = { start: '2020-01-01', end: '2020-12-31' };
+  await store.ensureWindow(older);
+  await store.ensureWindow(window);
+  const stop = store.observe('score-card', [window]);
+  store.observe('session-card', [window]);
+  await store.refresh();
+  assert.deepEqual(requests, [[older.start, older.end], [window.start, window.end], [window.start, window.end]]);
+  stop();
+});
+
+test('initial failures can recover and discovery does not block the visible period', async () => {
+  let failed = true;
+  const store = new StatsHistoryStore({
+    fetchWindow: async () => { if (failed) throw Error('offline'); return []; },
+    fetchEarliest: async () => { throw Error('offline'); },
+  }, () => {});
+  await store.ensureWindow(window);
+  assert.equal(store.state.windows[statsWindowKey(window)], undefined);
+  failed = false;
+  await store.refresh();
+  assert.deepEqual(store.state.windows[statsWindowKey(window)].rows, []);
+  assert.match(store.state.error, /couldn’t update/); // earliest query still failed
+});
+
+test('carousel renders neighbours without processing thousands of historical pages', () => {
+  const source = ts.createSourceFile('stats.tsx', readFileSync(new URL('../app/(tabs)/stats.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const swipe = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'SwipeCard');
+  assert.ok(swipe);
+  const prepared = new Set();
+  const fetched = [];
+  const dependencies = {
+    React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    useState: () => [400, () => {}], useId: () => 'card', useRef: (current) => ({ current }),
+    useEffect: (callback) => callback(),
+    Animated: { Value: class { setValue() {} }, View: 'AnimatedView' },
+    PanResponder: { create: () => ({ panHandlers: {} }) },
+    View: 'View', Text: 'Text', styles: {}, swipeStyles: {}, PAGE_STRIDE: 300,
+  };
+  const js = ts.transpile(swipe.getText(source), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
+  const SwipeCard = new Function(...Object.keys(dependencies), `${js}; return SwipeCard;`)(...Object.values(dependencies));
+  const tree = SwipeCard({
+    pages: { length: 10000, get: (index) => { prepared.add(index); return { startDate: 'start', endDate: 'end' }; },
+      ensure: (index) => fetched.push(index), observe: () => () => {} }, renderPage: () => null,
+  });
+  assert.deepEqual([...prepared].sort(), [399, 400, 401, 402]);
+  assert.deepEqual(fetched, [399, 400, 401]);
+  const row = tree.children[1].children[0];
+  assert.equal(row.children[0].length, 3);
+  assert.equal(row.props.style[1].marginLeft, 399 * 300);
+});
+
+test('stats query selects only chart columns and propagates database failures', async () => {
+  const calls = [];
+  let error = null;
+  const query = {};
+  for (const method of ['select', 'eq', 'gte', 'lte', 'order']) query[method] = (...args) => { calls.push([method, ...args]); return query; };
+  query.then = (resolve) => resolve({ data: [{ date: '2026-10-31', sup_score: 90, total_desk_ms: 60000, state_totals: { upright: 60000 } }], error });
+  const { fetchStatsWindow } = load('../src/services/stats/statsHistoryService.ts', {
+    '@/src/lib/supabase': { supabase: { from: () => query } },
+  });
+  const rows = await fetchStatsWindow('user-a', window.start, window.end);
+  assert.equal(rows[0].supScore, 90);
+  assert.deepEqual(calls[0], ['select', 'date, sup_score, total_desk_ms, total_minutes, state_totals']);
+  assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(['eq', 'user_id', 'user-a'])));
+  error = new Error('offline');
+  await assert.rejects(fetchStatsWindow('user-a', window.start, window.end), /offline/);
+});

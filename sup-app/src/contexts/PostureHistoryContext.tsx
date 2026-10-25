@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useAuth } from "./AuthContext";
 import { StatsHistoryStore, type StatsWindow } from "../services/stats/statsHistoryStore";
 import { fetchEarliestStatsDate, fetchStatsWindow } from "../services/stats/statsHistoryService";
+import { supabase } from "../lib/supabase";
 
 function useHistoryValue() {
   const { userId, isAuthenticated } = useAuth();
@@ -21,8 +22,21 @@ function useHistoryValue() {
   const refresh = useCallback(() => store.refresh(), [store]);
   const ensureFresh = useCallback(() => store.refresh(false), [store]);
 
+  // Only subscribe while Stats is focused. Polling in the screen also covers
+  // installations where database realtime publication is not enabled.
+  const watch = useCallback(() => {
+    if (!userId || !isAuthenticated) return () => {};
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const channel = supabase.channel(`stats-history:${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "posture_daily", filter: `user_id=eq.${userId}` }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { void store.refresh(); }, 350);
+      }).subscribe();
+    return () => { clearTimeout(timer); void supabase.removeChannel(channel); };
+  }, [store, userId, isAuthenticated]);
+
   useEffect(() => { store.activate(); return () => store.dispose(); }, [store]);
-  return { ...store.state, ensureWindow, observe, refresh, ensureFresh };
+  return { ...store.state, ensureWindow, observe, refresh, ensureFresh, watch };
 }
 
 const PostureHistoryContext = createContext<ReturnType<typeof useHistoryValue> | undefined>(undefined);

@@ -3,6 +3,7 @@ import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import React, { useState, useRef, useEffect, useMemo, useCallback, useId } from "react";
 import {
   View,
+  AppState,
   Text,
   StyleSheet,
   ScrollView,
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Polyline, Circle, Text as SvgText } from "react-native-svg";
+import { useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
@@ -27,7 +29,8 @@ import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal, InfoModalEntry } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
-import { statsWindowKey } from "@/src/services/stats/statsHistoryStore";
+import { watchStatsFreshness } from "@/src/services/stats/statsFreshness";
+import { statsWindowKey, STATS_STALE_MS } from "@/src/services/stats/statsHistoryStore";
 import { buildStatsPage, statsPageCount, statsPageWindow, type PageData, type StatsRange } from "@/src/services/stats/statsPages";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -674,11 +677,21 @@ export default function StatsScreen() {
   const [activeMetricInfo, setActiveMetricInfo] = useState<string | null>(null);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom     = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
-  const { windows, earliest, pending, lastUpdatedAt, error, refresh, ensureWindow, observe } = usePostureHistory();
-  const [todayKey] = useState(toLocalDateKey());
+  const { windows, earliest, pending, lastUpdatedAt, error, refresh, ensureWindow, observe, ensureFresh, watch } = usePostureHistory();
+  const [todayKey, setTodayKey] = useState(toLocalDateKey());
   const isRefreshing = pending > 0;
   const emptyMessage = isAuthenticated ? (error ?? "loading…") : "sign in to see your stats";
 
+  useFocusEffect(useCallback(() => watchStatsFreshness({
+    check: () => { setTodayKey(toLocalDateKey()); void ensureFresh(); },
+    isActive: () => !AppState.currentState || AppState.currentState === "active",
+    watch,
+    subscribe: (callback) => {
+      const subscription = AppState.addEventListener("change", callback);
+      return () => subscription.remove();
+    },
+    intervalMs: STATS_STALE_MS,
+  }), [ensureFresh, watch]));
 
   const anchor = useMemo(() => new Date(`${todayKey}T12:00:00`), [todayKey]);
   const ensurePage = useCallback((index: number) => {
