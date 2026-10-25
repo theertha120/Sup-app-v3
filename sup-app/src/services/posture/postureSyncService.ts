@@ -364,8 +364,9 @@ export async function rebuildDailyFromSessions(
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      const newStreak = await getCurrentStreak(userId);
-      const supScore  = computeSupScore(avgShs, totalDeskMs, newStreak);
+      // Score comes from the day's per-state time only (docs/score-methodology.md §2);
+      // streak and avg_shs are no longer inputs.
+      const supScore = computeSupScore(stateTotals);
       await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
@@ -420,26 +421,6 @@ function computeSupScore(stateTotals: StateTotals): number | null {
 function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
   const todayLocal = toLocalDateKey();
   return { todayLocal, yesterdayLocal: addDaysToDateKey(todayLocal, -1) };
-}
-
-/**
- * Reads current_streak for sup_score. Read-only — the streak is maintained by
- * checkStreakOnAppOpen, which has always run before a session can end.
- */
-async function getCurrentStreak(userId: string): Promise<number> {
-  try {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("current_streak")
-      .eq("id", userId)
-      .single();
-
-    if (error) { console.warn("[postureSync] getCurrentStreak fetch failed", error); return 1; }
-    return Math.max(1, Number(profile?.current_streak ?? 1));
-  } catch (e) {
-    console.warn("[postureSync] getCurrentStreak threw", e);
-    return 1;
-  }
 }
 
 /**
@@ -532,6 +513,8 @@ function isStateTotals(value: unknown): value is StateTotals {
 /**
  * Fetches posture_daily rows for a given date and the day before it.
  * Returns { today, previous } — either can be null if no row exists yet.
+ * Throws on a failed query, so the caller keeps what it already shows instead
+ * of treating an outage as an empty day.
  *
  * @param userId  Auth user ID
  * @param dateKey Target date in YYYY-MM-DD format (e.g. "2026-07-07")
@@ -555,34 +538,29 @@ export async function fetchDailyPosturePair(
   }
   const prevDateKey = addDaysToDateKey(dateKey, -1);
 
-  try {
-    const { data, error } = await supabase
-      .from("posture_daily")
-      .select(DAILY_COLUMNS)
-      .eq("user_id", userId)
-      .in("date", [dateKey, prevDateKey]);
+  const { data, error } = await supabase
+    .from("posture_daily")
+    .select(DAILY_COLUMNS)
+    .eq("user_id", userId)
+    .in("date", [dateKey, prevDateKey]);
 
-    // console.log("[postureSync] fetchDailyPosturePair query", { userId, dateKey, prevDateKey, data, error });
+  // console.log("[postureSync] fetchDailyPosturePair query", { userId, dateKey, prevDateKey, data, error });
 
-    if (error) {
-      console.warn("[postureSync] fetchDailyPosturePair query failed", error);
-      return empty;
-    }
-
-    if (!data?.length) return empty;
-
-    const rows = data as unknown as Array<Record<string, unknown> & { date: string }>; //MIGHT BE PROBLEM
-    const todayRow = rows.find((r) => r.date === dateKey) ?? null;
-    const previousRow = rows.find((r) => r.date === prevDateKey) ?? null;
-
-    return {
-      today: mapRowToDailyPostureRow(todayRow),
-      previous: mapRowToDailyPostureRow(previousRow),
-    };
-  } catch (e) {
-    console.warn("[postureSync] fetchDailyPosturePair threw", e);
-    return empty;
+  if (error) {
+    console.warn("[postureSync] fetchDailyPosturePair query failed", error);
+    throw error;
   }
+
+  if (!data?.length) return empty;
+
+  const rows = data as unknown as Array<Record<string, unknown> & { date: string }>; //MIGHT BE PROBLEM
+  const todayRow = rows.find((r) => r.date === dateKey) ?? null;
+  const previousRow = rows.find((r) => r.date === prevDateKey) ?? null;
+
+  return {
+    today: mapRowToDailyPostureRow(todayRow),
+    previous: mapRowToDailyPostureRow(previousRow),
+  };
 }
 
 /**
@@ -701,6 +679,8 @@ export async function fetchPosturePageRowsForUsers(
 // possible. The stats screen derives all of its week/month/year pages from one
 // contiguous history, so fetching per page (which it used to do, serially) meant
 // dozens of requests for a user with a few months of data.
+// Throws on any failed page: a partial history would silently chart as missing
+// days, so the caller keeps its previous snapshot and shows an error instead.
 export async function fetchAllPostureRows(
   userId: string | null
 ): Promise<PosturePageRow[]> {
@@ -711,31 +691,26 @@ export async function fetchAllPostureRows(
   const all: PosturePageRow[] = [];
 
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    try {
-      const { data, error } = await supabase
-        .from("posture_daily")
-        .select(DAILY_COLUMNS)
-        .eq("user_id", userId)
-        .order("date", { ascending: true })
-        .range(offset, offset + PAGE_SIZE - 1);
+    const { data, error } = await supabase
+      .from("posture_daily")
+      .select(DAILY_COLUMNS)
+      .eq("user_id", userId)
+      .order("date", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
 
-      if (error) {
-        console.warn("[postureSync] fetchAllPostureRows query failed", error);
-        break;
-      }
-      if (!data?.length) break;
-
-      const rows = data as unknown as Array<Record<string, unknown> & { date: string }>;
-      for (const row of rows) {
-        const mapped = mapRowToDailyPostureRow(row);
-        if (mapped) all.push({ date: row.date, ...mapped });
-      }
-
-      if (rows.length < PAGE_SIZE) break; // last page
-    } catch (e) {
-      console.warn("[postureSync] fetchAllPostureRows threw", e);
-      break;
+    if (error) {
+      console.warn("[postureSync] fetchAllPostureRows query failed", error);
+      throw error;
     }
+    if (!data?.length) break;
+
+    const rows = data as unknown as Array<Record<string, unknown> & { date: string }>;
+    for (const row of rows) {
+      const mapped = mapRowToDailyPostureRow(row);
+      if (mapped) all.push({ date: row.date, ...mapped });
+    }
+
+    if (rows.length < PAGE_SIZE) break; // last page
   }
 
   return all;

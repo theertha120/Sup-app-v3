@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useAuth } from "./AuthContext";
 import { toLocalDateKey } from "../lib/dateKey";
+import { captureError } from "../lib/sentry";
 import {
   fetchAllPostureRows,
   type PosturePageRow,
@@ -92,6 +93,7 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
         setSnapshot(next);
       } catch (err) {
         console.error("[PostureHistoryContext] Failed to load posture history", err);
+        captureError(err, "posture-history", { mode });
         if (activeUserRef.current === requestUserId) {
           setError("couldn’t load your stats — tap refresh to try again.");
         }

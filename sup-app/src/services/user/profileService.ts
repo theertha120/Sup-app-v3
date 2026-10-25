@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/src/lib/supabase";
+import { captureError } from "@/src/lib/sentry";
 import type { User } from "@/constants/env";
 
 const LOCAL_SUPSONA_KEY_PREFIX = "sup_app_supsona_";
@@ -250,10 +251,13 @@ function userToUserProfile(user: User): UserProfile {
  */
 async function getCurrentUserId(): Promise<string> {
   try {
+    // getSession() reads the stored session locally; getUser() was a network
+    // round-trip on every profile fetch. RLS still checks the JWT server-side.
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) {
       throw new Error("No authenticated user");
     }
@@ -365,21 +369,23 @@ export async function fetchCurrentUserProfileWithStats(): Promise<UserProfile | 
         return null;
       }
       console.warn("[profile] Failed to fetch profile with stats", error);
+      captureError(error, "profile-with-stats");
       return null;
     } else if (data) {
-      console.log("[profile] Fetched profile with stats:", data);
+      // Dev only: console output becomes Sentry breadcrumbs, and this includes name/username.
+      if (__DEV__) console.log("[profile] Fetched profile with stats:", data);
       const profile = mapRowToUserProfile(data as ProfileRow);
-      console.log("[profile] Mapped profile with stats:", profile);
+      if (__DEV__) console.log("[profile] Mapped profile with stats:", profile);
       // If there's a locally stored supsona for this user, prefer it for avatar
       try {
         const local = await getLocalSupsona(userId);
         if (local != null) profile.avatar = local;
       } catch {}
       return profile;
-      console.log("[profile] Fetched profile with stats:", profile);
     }
   } catch (err) {
     console.warn("[profile] Supabase profile-with-stats fetch threw", err);
+    captureError(err, "profile-with-stats");
     return null;
   }
 

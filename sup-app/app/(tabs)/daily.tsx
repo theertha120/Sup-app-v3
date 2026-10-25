@@ -1,3 +1,6 @@
+// Daily tab ("today:"): today's posture snapshot (share of time per state),
+// session time and s'up s'core, with % change badges against yesterday.
+// Data is today's + yesterday's posture_daily row, refetched on every focus.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
@@ -5,41 +8,32 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Animated,
   Dimensions,
-  Modal,
-  TouchableWithoutFeedback,
   Image,
 } from "react-native";
-import Svg, { Defs, Filter, FeGaussianBlur, Ellipse } from "react-native-svg";
 import { router, useFocusEffect } from "expo-router";
 import { useFonts } from "expo-font";
-import React, { useRef, useCallback, useState, useEffect } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useCallback, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useStepCount } from "../../src/hooks/useStepCount";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { useToast } from "@/src/contexts/ToastContext";
-import { type User } from "../../constants/env";
-import {
-  fetchCurrentUserProfileWithStats,
-  subscribeToProfileUpdates,
-  userProfileToUser,
-  updateCurrentUserProfile,
-} from "../../src/services/user/profileService";
 import {
   fetchDailyPosturePair,
   type DailyPosturePair,
-  type DailyPostureRow,
 } from "../../src/services/posture/postureSyncService";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
 import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
+import { formatSessionMins } from "@/src/lib/formatDuration";
+import { captureError } from "@/src/lib/sentry";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
+
+const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
 
 const SEGMENT_COLORS: Record<string, string> = {
@@ -51,6 +45,7 @@ const SEGMENT_COLORS: Record<string, string> = {
   tilted_right:  "#F5A623",
 };
 
+/** Stacked bar: one segment per posture state, each as wide as its % of the day. */
 function ScoreBar({ postureAverages }: { postureAverages: Record<string, number> }) {
   const segments = Object.entries(postureAverages).map(([key, pct]) => ({
       pct,
@@ -59,7 +54,7 @@ function ScoreBar({ postureAverages }: { postureAverages: Record<string, number>
   );
 
   return (
-    <View style={[scoreBarStyles.track, scoreBarStyles.shadow]}>
+    <View style={scoreBarStyles.track}>
       {segments.map(({ pct, color }, i) =>
         pct > 0 ? (
           <View
@@ -73,19 +68,12 @@ function ScoreBar({ postureAverages }: { postureAverages: Record<string, number>
 }
 
 const scoreBarStyles = StyleSheet.create({
+  // Matches stats.tsx's posture breakdown bar (bdStyles.track)
   track: {
     flexDirection: "row",
-    height: 18,
-    borderRadius: 9,
+    height: 14,
+    borderRadius: 7,
     overflow: "hidden",
-    marginVertical: 12,
-  },
-  shadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   segment: {
     height: "100%",
@@ -115,6 +103,7 @@ const badgeStyles = StyleSheet.create({
     zIndex: 1,
   },
   text: {
+    fontFamily: "Agrandir-Regular",
     color: "white",
     fontSize: 11,
     fontWeight: "700",
@@ -150,69 +139,67 @@ function PostureBreakdown({ stats }: { stats: { label: string; value: string; co
   );
 }
 
+// Matches stats.tsx's posture breakdown list (bdStyles)
 const breakdownStyles = StyleSheet.create({
   container: {
     width: "100%",
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "rgba(63, 36, 131, 0.06)",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 10,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 7,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(63, 36, 131, 0.08)",
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   dot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
   label: {
     fontFamily: "Agrandir-Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: PRIMARY_TEXT,
     opacity: 0.75,
   },
   value: {
     fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 13,
+    fontSize: 12,
     color: PRIMARY_TEXT,
   },
 });
 
 export default function DailyScreen() {
   const { isAuthenticated, userId } = useAuth();
-  const { showToast } = useToast();
   const { tutorialStep, setTutorialStep } = useTutorial();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [streakDays, setStreakDays] = useState<number | null>(null);
-  const [weeklyAvgPoints, setWeeklyAvgPoints] = useState<number | null>(null);
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  // Clears the floating navigation bar: 72 high, 25 above the safe area (same as stats.tsx).
+  const scrollPaddingBottom = 72 + 25 + bottomInset + 16;
 
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
-  const [isLoadingDaily, setIsLoadingDaily] = useState(true);
 
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
-  const loadDailyPosture = useCallback(async (background = false) => {
+  // Stale-while-revalidate: paint the cached pair (if under a minute old), then
+  // replace it with a fresh fetch and re-cache.
+  const loadDailyPosture = useCallback(async () => {
     if (!userId) return;
-    if (!background) setIsLoadingDaily(true);
     // Worked out on every load (not once at app start) so the screen rolls
     // over to the new day if the app stays open past midnight.
     const TODAY_KEY = toLocalDateKey();
@@ -221,7 +208,6 @@ export default function DailyScreen() {
     const cached = await getCachedDailyPair(userId, TODAY_KEY);
     if (cached) {
       setDailyPair(cached);
-      setIsLoadingDaily(false);
     }
  
     // fetch fresh in background regardless
@@ -230,78 +216,28 @@ export default function DailyScreen() {
         setDailyPair(fresh);
         setCachedDailyPair(userId, TODAY_KEY, fresh);
       })
-      .catch((err) => console.error("[DailyScreen] fetchDailyPosturePair failed", err))
-      .finally(() => setIsLoadingDaily(false));
-  }, [userId]);
- 
-  const loadProfile = useCallback(() => {
-    return fetchCurrentUserProfileWithStats()
-      .then((profile) => {
-        setCurrentUser(profile ? userProfileToUser(profile) : null);
-        setStreakDays(profile?.currentStreak ?? null);
-        setWeeklyAvgPoints(profile?.weeklyAvgPoints ?? null);
-      })
+      // On failure, keep whatever is on screen (cached pair) rather than zeroing the day.
       .catch((err) => {
-        console.error("[DailyScreen] Failed to load user profile", err);
-      })
-      .finally(() => setIsLoadingProfile(false));
-  }, []);
- 
-  // initial load: run all fetches in parallel
+        console.error("[DailyScreen] fetchDailyPosturePair failed", err);
+        captureError(err, "daily-posture-pair", { dateKey: TODAY_KEY, hadCache: cached != null });
+      });
+  }, [userId]);
+
+  // Reset on sign-out only; loading is done by the focus effect below, which
+  // also fires on first mount (calling it here too fetched the day twice).
   useEffect(() => {
     if (!isAuthenticated) {
-      setCurrentUser(null);
-      setIsLoadingProfile(true);
       setDailyPair({ today: null, previous: null });
-      return;
     }
- 
-    Promise.all([
-      loadProfile(),
-      loadDailyPosture(),
-    ]);
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
-      if (!userId) return;
-      if (updatedProfile.id !== userId) return;
-      setCurrentUser(userProfileToUser(updatedProfile));
-    });
-    return unsubscribe;
-  }, []);
-
+  // Refetch every time the tab is focused, so a just-finished session shows up.
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;
-      loadProfile();
-      loadDailyPosture(true);
-    }, [isAuthenticated, loadProfile, loadDailyPosture])
+      loadDailyPosture();
+    }, [isAuthenticated, loadDailyPosture])
   );
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
-  );
-
-  const handleUsernameChange = async (newName: string) => {
-    try {
-      const updatedProfile = await updateCurrentUserProfile({ username: newName });
-      if (updatedProfile) {
-        setCurrentUser(userProfileToUser(updatedProfile));
-      }
-      showToast("Username updated", "success");
-    } catch (err) {
-      console.error("[DailyScreen] Failed to update username", err);
-      showToast("Couldn't update username, try again", "error");
-    }
-  };
 
   const { today, previous } = dailyPair;
 
@@ -314,17 +250,14 @@ export default function DailyScreen() {
   const prevSupScore = previous?.supScore ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
 
-  console.log("[DailyScreen] dailyPair", dailyPair);
-
-  const sessionHours = Math.floor(totalDeskMs / 3_600_000);
-  const sessionMinutes = Math.floor((totalDeskMs % 3_600_000) / 60_000);
-  const prevSessionMins = prevTotalDeskMs / 60000;
 
   // % changes per metric (computed here so they use live step data)
-  const scoreChange   = Math.round(((supScore - prevSupScore) / prevSupScore) * 100);
-  const sessionChange = Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100);
+  // null when yesterday's value is 0 — dividing by it rendered "↑Infinity%" / "↓NaN%".
+  const scoreChange   = prevSupScore > 0 ? Math.round(((supScore - prevSupScore) / prevSupScore) * 100) : null;
+  const sessionChange = prevTotalDeskMs > 0 ? Math.round(((totalDeskMs - prevTotalDeskMs) / prevTotalDeskMs) * 100) : null;
   const showBadges = today != null && previous != null;
 
+  // Today's ms per posture state (transition excluded), filled with 0 for missing states.
   const STATE_TOTALS = {
     upright: stateTotals.upright ?? 0,
     forward_lean: stateTotals.forward_lean ?? 0,
@@ -353,12 +286,12 @@ export default function DailyScreen() {
   }
 
   const POSTURE_STATS = [
-    { label: "Upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: "#6DC96D" },
-    { label: "Forward Lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: "#F5C842" },
-    { label: "Slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: "#F5A623" },
-    { label: "Severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: "#E8706A" },
-    { label: "Tilted Left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: "#F5A623" },
-    { label: "Tilted Right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: "#F5A623" },
+    { label: "upright",      value: `${POSTURE_AVERAGES.upright.toFixed(1)}%`,      color: SEGMENT_COLORS.upright },
+    { label: "forward lean", value: `${POSTURE_AVERAGES.forward_lean.toFixed(1)}%`, color: SEGMENT_COLORS.forward_lean },
+    { label: "slouched",     value: `${POSTURE_AVERAGES.slouched.toFixed(1)}%`,     color: SEGMENT_COLORS.slouched },
+    { label: "severe",       value: `${POSTURE_AVERAGES.severe.toFixed(1)}%`,       color: SEGMENT_COLORS.severe },
+    { label: "tilted left",  value: `${POSTURE_AVERAGES.tilted_left.toFixed(1)}%`,  color: SEGMENT_COLORS.tilted_left },
+    { label: "tilted right", value: `${POSTURE_AVERAGES.tilted_right.toFixed(1)}%`, color: SEGMENT_COLORS.tilted_right },
   ];
 
   const METRIC_INFO: Record<string, { title: string; body: string }> = {
@@ -380,7 +313,7 @@ export default function DailyScreen() {
   if (!fontsLoaded) return null;
 
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
       <InfoModal
@@ -390,7 +323,11 @@ export default function DailyScreen() {
         accentColor={PRIMARY_TEXT}
       />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
+      >
         {/* Top bar */}
         <HeaderBar />
 
@@ -432,7 +369,7 @@ export default function DailyScreen() {
           ]}
         >
           <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
-          <Text style={styles.statLabel}>s'napshot</Text>
+          <Text style={styles.cardTitle}>s'napshot</Text>
           <ScoreBar postureAverages={POSTURE_AVERAGES} />
           <PostureBreakdown stats={POSTURE_STATS} />
         </View>
@@ -470,10 +407,10 @@ export default function DailyScreen() {
             ]}
           >
             <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
-            {showBadges && <ChangeBadge value={sessionChange} />}
+            {showBadges && sessionChange != null && <ChangeBadge value={sessionChange} />}
             <Text style={styles.statLabel}>s'ession</Text>
-            <Text style={styles.statValue}>
-              {sessionHours}h {sessionMinutes}m
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {formatSessionMins(totalDeskMs / 60_000)}
             </Text>
           </View>
 
@@ -488,49 +425,20 @@ export default function DailyScreen() {
             ]}
           >
             <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
-            {showBadges && <ChangeBadge value={scoreChange} />}
+            {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
             <Text style={styles.statLabel}>s'core</Text>
-            <Text style={styles.statValue}>{supScore}</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
           </View>
         </View>
 
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 56,
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-  },
-  logo: {
-    color: PRIMARY_TEXT,
-    fontFamily: "Agrandir-GrandHeavy",
-    fontSize: 50,
-  },
-  logoApostrophe: {
-    fontFamily: "Arial",
-  },
-  headerButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderRadius: 20,
   },
 
   sectionRow: {
@@ -561,8 +469,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginBottom: 14,
+    marginHorizontal: 20,
+    marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -595,9 +503,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     marginHorizontal: 20,
     marginBottom: 16,
-    padding: 20,
+    padding: 18,
+    paddingTop: 16,
     borderRadius: 28,
     position: "relative",
+  },
+  // Matches stats.tsx's card title
+  cardTitle: {
+    fontFamily: "Agrandir-GrandHeavy",
+    fontSize: 14,
+    color: PRIMARY_TEXT,
+    opacity: 0.75,
+    marginBottom: 12,
   },
   shadow: {
     shadowColor: "#1D014A",
@@ -616,14 +533,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 14,
     elevation: 10,
-  },
-  snapshotMessage: {
-    fontFamily: "Agrandir-Regular",
-    fontSize: 14,
-    color: PRIMARY_TEXT,
-    textAlign: "center",
-    lineHeight: 20,
-    opacity: 0.9,
   },
 
   grid: {
@@ -654,12 +563,4 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
 
-  footer: {
-    fontFamily: "Agrandir-Regular",
-    textAlign: "center",
-    color: PRIMARY_TEXT,
-    opacity: 0.7,
-    fontSize: 12,
-    padding: 24,
-  },
 });
