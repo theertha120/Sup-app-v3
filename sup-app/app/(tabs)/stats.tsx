@@ -24,9 +24,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import RefreshButton from "@/src/components/ui/RefreshButton";
-import type {
-  PosturePageRow,
-  StateTotals,
+import {
+  supScoreForRows,
+  type PosturePageRow,
+  type StateTotals,
 } from "../../src/services/posture/postureSyncService";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
@@ -69,7 +70,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   trend: {
     title: "s'core trend",
-    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or the average of the week's, or month's) score out of 100; tap a bar to see that period's exact score.",
+    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or the whole week's, or month's) score out of 100, weighted by how long you tracked; tap a bar to see that period's exact score.",
   },
   session: {
     title: "s'ession time",
@@ -115,6 +116,7 @@ export interface PageData {
   sessionMins: number[];
   hasData:     boolean[];
   stateTotals: Record<string, number>;
+  periodScore: number | null; // time-weighted s'core for the whole page
   startDate:   string;
   endDate:     string;
   pointDates:  string[];
@@ -189,11 +191,10 @@ function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | un
   }
 }
 
-// Rounded mean ignoring NaN (days with no score); 0 if none are valid.
-function avgOf(values: number[]): number {
-  const valid = values.filter((v) => !isNaN(v));
-  if (!valid.length) return 0;
-  return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
+// Rounded time-weighted s'core across a set of days (docs/score-methodology.md §2); null if none tracked.
+function periodScoreOf(rows: (PosturePageRow | undefined)[]): number | null {
+  const score = supScoreForRows(rows.filter((r): r is PosturePageRow => r !== undefined));
+  return score === null ? null : Math.round(score);
 }
 
 // A day's tracked minutes; prefers exact total_desk_ms, falls back to rounded total_minutes.
@@ -249,6 +250,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
         sessionMins: dayRows.map((r) => sessionMinsOf(r)),
         hasData:     dayRows.map((r) => r !== undefined),
         stateTotals,
+        periodScore: periodScoreOf(dayRows),
         startDate:   fmt(start),
         endDate:     fmt(end),
         pointDates:  days.map((d) => fmtFull(d)),
@@ -276,7 +278,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
           return day >= dStart && day <= dEnd;
         });
         return {
-          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
+          score:       periodScoreOf(bucketRows) ?? 0,
           sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
           hasData:     bucketRows.length > 0,
         };
@@ -289,6 +291,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
         sessionMins: weekly.map((w) => w.sessionMins),
         hasData:     weekly.map((w) => w.hasData),
         stateTotals,
+        periodScore: periodScoreOf(rows),
         startDate:   fmt(start),
         endDate:     fmt(end),
         pointDates:  [
@@ -303,11 +306,13 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       const yr = now.getFullYear() - p;
 
       const M = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+      const yearRows: PosturePageRow[] = [];
       const monthly = Array.from({ length: 12 }, (_, m) => {
         const bucketRows = monthRows(new Date(yr, m, 1));
         bucketRows.forEach((r) => accumulateStateTotals(stateTotals, r));
+        yearRows.push(...bucketRows);
         return {
-          score:       avgOf(bucketRows.map((r) => r.supScore ?? NaN)),
+          score:       periodScoreOf(bucketRows) ?? 0,
           sessionMins: bucketRows.reduce((sum, r) => sum + sessionMinsOf(r), 0),
           hasData:     bucketRows.length > 0,
         };
@@ -319,6 +324,7 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
         sessionMins: monthly.map((m) => m.sessionMins),
         hasData:     monthly.map((m) => m.hasData),
         stateTotals,
+        periodScore: periodScoreOf(yearRows),
         startDate:   `1 jan ${yr}`,
         endDate:     `31 dec ${yr}`,
         pointDates:  M.map((m) => `${m} ${yr}`),
@@ -627,15 +633,13 @@ function totalLabel(range: Range): string {
 
 // Bar chart
 
-// Session time is the page's total; score averages only bars with data, since
-// a 0 there means "no score", not a bad one.
+// Session time is the page's total; score is the page's time-weighted s'core,
+// null when nothing was tracked (a 0 bar means "no score", not a bad one).
 function summaryValue(page: PageData, type: string): number | null {
   if (type === "session") {
     return Math.round(page.sessionMins.reduce((a, b) => a + b, 0));
   }
-  const values = page.scores.filter((_, i) => page.hasData[i]);
-  if (!values.length) return null;
-  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  return page.periodScore;
 }
 
 // Memoised so opening a popup on one chart doesn't re-render the others.

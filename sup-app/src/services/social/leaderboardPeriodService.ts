@@ -1,5 +1,6 @@
 import {
   fetchPosturePageRowsForUsers,
+  supScoreForRows,
   type PosturePageRow,
 } from "../posture/postureSyncService";
 import type { User } from "../../../constants/env";
@@ -116,10 +117,10 @@ export function rankLeaderboard(
     if (!rows.length) {
       return { user, avgSupScore: 0, sessionsCounted: 0 };
     }
-    const total = rows.reduce((sum, row) => sum + (row.supScore ?? 0), 0);
+    // Time-weighted across the period, not a mean of daily scores (docs/score-methodology.md §2).
     return {
       user,
-      avgSupScore: round1(total / rows.length),
+      avgSupScore: round1(supScoreForRows(rows) ?? 0),
       sessionsCounted: rows.length,
     };
   });
@@ -134,8 +135,19 @@ export function rankLeaderboard(
 }
 
 /**
+ * A user's time-weighted s'core over the last 7 days incl. today, rounded; 0 if
+ * nothing tracked. Shown as "weekly points" in the profile dropdown and modal
+ * (replaces the never-updated profiles.weekly_avg_points column).
+ */
+export async function fetchWeeklySupScore(userId: string): Promise<number> {
+  const { startDateKey, endDateKey } = getDateRangeForPeriod("week");
+  const rowsByUser = await fetchPosturePageRowsForUsers([userId], startDateKey, endDateKey);
+  return Math.round(supScoreForRows(rowsByUser.get(userId) ?? []) ?? 0);
+}
+
+/**
  * Given a roster of users, fetches their posture_daily rows for the period and
- * returns each user's average supScore (1dp), sorted highest first, with ranks
+ * returns each user's time-weighted period supScore (1dp), sorted highest first, with ranks
  * that correctly account for ties.
  *
  * Prefer `fetchPostureRowsForLeaderboard` + `rankLeaderboard` when you render

@@ -22,6 +22,7 @@ import {
   updateCurrentUserProfile,
   isUsernameTaken,
 } from "../../../src/services/user/profileService";
+import { fetchWeeklySupScore } from "../../../src/services/social/leaderboardPeriodService";
 import { useToast } from "../../../src/contexts/ToastContext";
 import { useTutorial } from "../../../src/contexts/TutorialContext";
 import { colours } from "../../../theme/colours";
@@ -135,10 +136,15 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         if (!profile) return;
         setUsername(displayName(profile, "you"));
         setStreakDays(profile.currentStreak ?? 0);
-        setWeeklyPoints(profile.weeklyAvgPoints ?? 0);
       })
       .catch((err: any) => {
         console.error("[HeaderBar] Failed to load profile", err);
+      });
+    if (!userId) return;
+    fetchWeeklySupScore(userId)
+      .then(setWeeklyPoints)
+      .catch((err: any) => {
+        console.error("[HeaderBar] Failed to load weekly points", err);
       });
   };
  
@@ -151,7 +157,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
       return;
     }
     loadProfile();
-  }, [isAuthenticated, streakVersion]);
+  }, [isAuthenticated, userId, streakVersion]);
  
   // Keep the shown name in sync with profile edits made elsewhere.
   useEffect(() => {
