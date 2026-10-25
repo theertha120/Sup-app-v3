@@ -1,15 +1,14 @@
+import { LeaderboardText as Text, LeaderboardFontsContext } from "@/src/components/ui/LeaderboardText";
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
-  Animated,
   Image,
 } from "react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HeaderBar from "@/src/components/ui/HeaderBar";
@@ -55,7 +54,6 @@ export default function LeaderboardScreen() {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, [tutorialStep]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
 
@@ -76,27 +74,15 @@ export default function LeaderboardScreen() {
     refresh,
   } = useLeaderboard(scope, SUMMARY_PERIOD, 5);
 
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
-  );
-
   const top3 = entries.slice(0, 3);
   const nextTwo = entries.slice(3, 5);
   const showOwnRankCard = !!ownEntry && !entries.slice(0, 5).some((entry) => entry.user.id === ownEntry.user.id);
   const showLeaderboard = !isLoading && entries.length > 0
     && (scope !== "friends" || (friendCount ?? 0) > 0);
 
-  if (!fontsLoaded) return null;
-
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <LeaderboardFontsContext.Provider value={fontsLoaded}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
       <ScrollView
@@ -235,7 +221,8 @@ export default function LeaderboardScreen() {
           </PressFeedback>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
+    </LeaderboardFontsContext.Provider>
   );
 }
 

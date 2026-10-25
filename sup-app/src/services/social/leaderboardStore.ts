@@ -2,14 +2,14 @@ import { leaderboardQueryKey, LEADERBOARD_PAGE_SIZE, LEADERBOARD_STALE_MS, type 
 
 export type LeaderboardView = LeaderboardPage & { isLoading: boolean; isRefreshing: boolean; isLoadingMore: boolean; error: string | null; lastUpdatedAt: number | null };
 export const EMPTY_LEADERBOARD: LeaderboardView = { entries: [], ownEntry: null, total: 0, friendCount: 0, isLoading: false, isRefreshing: false, isLoadingMore: false, error: null, lastUpdatedAt: null };
-type Source = (query: LeaderboardQuery, offset: number, limit: number, force: boolean) => Promise<LeaderboardPage>;
+type Source = (query: LeaderboardQuery, offset: number, limit: number, force: boolean, signal: AbortSignal) => Promise<LeaderboardPage>;
 
 /** Each scope/period loads independently; a failed page never becomes a partial ranking. */
 export class LeaderboardStore {
   private views = new Map<string, LeaderboardView>();
   private pending = new Map<string, Promise<void>>();
   private disposed = false;
-  constructor(private source: Source, private changed: () => void, private now = Date.now) {}
+  constructor(private source: Source, private changed: () => void, private now = Date.now, private timeoutMs = 15_000) {}
   activate() { this.disposed = false; }
   dispose() { this.disposed = true; }
   get(query: LeaderboardQuery) { return this.views.get(leaderboardQueryKey(query)) ?? EMPTY_LEADERBOARD; }
@@ -42,16 +42,27 @@ export class LeaderboardStore {
     const offset = replace ? 0 : current.entries.length;
     const limit = Math.max(1, Math.min(LEADERBOARD_PAGE_SIZE, replace ? count : count - offset));
     this.update(query, { isLoading: !loaded, isRefreshing: loaded && replace, isLoadingMore: loaded && !replace, error: null });
-    const request = Promise.resolve().then(async () => {
-      const page = await this.source(query, offset, limit, replace && loaded);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Leaderboard request timed out"));
+      }, this.timeoutMs);
+    });
+    const operation = Promise.resolve().then(async () => {
+      const page = await this.source(query, offset, limit, replace && loaded, controller.signal);
+      if (controller.signal.aborted) return;
       if (page.entries.length === 0 && offset < page.total) throw new Error("Incomplete leaderboard page");
       // A changing roster can overlap an offset page. Refresh rather than showing duplicate ranks.
       const existingIds = new Set(current.entries.map((entry) => entry.user.id));
       if (!replace && page.entries.some((entry) => existingIds.has(entry.user.id))) throw new Error("Leaderboard changed; refresh to reload");
       this.update(query, { ...page, entries: replace ? page.entries : [...current.entries, ...page.entries], lastUpdatedAt: this.now() });
-    }).catch(() => {
+    });
+    const request = Promise.race([operation, deadline]).catch(() => {
       this.update(query, { error: "couldn’t update the leaderboard — tap refresh to try again." });
     }).finally(() => {
+      clearTimeout(timer);
       this.pending.delete(key);
       this.update(query, { isLoading: false, isLoadingMore: false, isRefreshing: false });
     });

@@ -1,13 +1,12 @@
+import { LeaderboardText as Text, LeaderboardFontsContext } from "@/src/components/ui/LeaderboardText";
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
-  Animated,
 } from "react-native";
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 import HeaderBar from "../src/components/ui/HeaderBar";
@@ -39,8 +38,6 @@ export default function FullLeaderboardScreen() {
       ? (params.period as LeaderboardPeriod)
       : "week";
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../assets/fonts/Agrandir-Regular.otf"),
     "Agrandir-GrandHeavy": require("../assets/fonts/Agrandir-GrandHeavy.otf"),
@@ -64,17 +61,6 @@ export default function FullLeaderboardScreen() {
     loadMore,
   } = useLeaderboard(scope, period);
 
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }, [fadeAnim])
-  );
-
   const renderItem = useCallback(({ item }: { item: LeaderboardEntry }) => (
     <LeaderboardRow rank={item.rank} entry={item} isCurrentUser={item.user.id === userId} />
   ), [userId]);
@@ -82,10 +68,10 @@ export default function FullLeaderboardScreen() {
   const emptyMessage = isLoading ? "Loading leaderboard…" : error
     ?? (!showFriends ? "you haven't added any friends yet — add some from the profile menu to see them here."
       : "No posture data for this period yet.");
-  if (!fontsLoaded) return null;
 
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <LeaderboardFontsContext.Provider value={fontsLoaded}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
       <FlatList
@@ -167,7 +153,8 @@ export default function FullLeaderboardScreen() {
           </PressFeedback>}
         </View>}
       />
-    </Animated.View>
+    </View>
+    </LeaderboardFontsContext.Provider>
   );
 }
 

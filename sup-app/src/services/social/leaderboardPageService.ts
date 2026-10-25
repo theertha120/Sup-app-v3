@@ -17,10 +17,11 @@ type RankedRow = Profile & { avg_sup_score: number; sessions_counted: number; ra
 
 type QueryResult<T> = { data: T[] | null; error: unknown };
 /** Continue to an empty page, including when the server caps responses below our page size. */
-export async function readLeaderboardPages<T>(fetch: (offset: number, size: number) => PromiseLike<QueryResult<T>>): Promise<T[]> {
+export async function readLeaderboardPages<T>(fetch: (offset: number, size: number) => PromiseLike<QueryResult<T>>, signal?: AbortSignal): Promise<T[]> {
   const rows: T[] = [];
   for (;;) {
     const { data, error } = await fetch(rows.length, 200);
+    if (signal?.aborted) throw new Error("Leaderboard request cancelled");
     if (error) throw error;
     if (!data?.length) return rows;
     rows.push(...data);
@@ -55,14 +56,17 @@ export function rankCompactLeaderboard(profiles: Profile[], scores: Score[], fri
 export function createLeaderboardSource(userId: string) {
   let rpcMissingAt: number | null = null;
   // Coalesce everyone/friends fallback reads for the same date window.
-  const fallback = new Map<string, { at: number; pending: boolean; request: Promise<[Profile[], Score[], Friendship[]]>; ranked: Partial<Record<LeaderboardScope, LeaderboardPage>> }>();
-  return async (query: LeaderboardQuery, offset: number, limit: number, force = false): Promise<LeaderboardPage> => {
+  const fallback = new Map<string, { at: number; pending: boolean; request: Promise<[Profile[], Score[], Friendship[]]>; signal?: AbortSignal; ranked: Partial<Record<LeaderboardScope, LeaderboardPage>> }>();
+  return async (query: LeaderboardQuery, offset: number, limit: number, force = false, signal?: AbortSignal): Promise<LeaderboardPage> => {
+    const cancel = <T extends { abortSignal: (signal: AbortSignal) => T }>(request: T) => signal ? request.abortSignal(signal) : request;
     const start = query.period === "day" ? query.dateKey : addDaysToDateKey(query.dateKey, -6);
     if (rpcMissingAt === null || Date.now() - rpcMissingAt >= LEADERBOARD_STALE_MS) {
-      const { data, error } = await supabase.rpc("get_leaderboard_page", {
+      const request = supabase.rpc("get_leaderboard_page", {
         p_start_date: start, p_end_date: query.dateKey, p_scope: query.scope,
         p_offset: offset, p_limit: Math.min(limit, LEADERBOARD_PAGE_SIZE),
       });
+      const { data, error } = await cancel(request);
+      if (signal?.aborted) throw new Error("Leaderboard request cancelled");
       if (!error) {
         const result = data as { entries: RankedRow[]; own_entry: RankedRow | null; total: number; friend_count: number };
         if (!result || !Array.isArray(result.entries)) throw new Error("Invalid leaderboard response");
@@ -75,16 +79,16 @@ export function createLeaderboardSource(userId: string) {
     }
     const key = `${start}:${query.dateKey}`;
     let cached = fallback.get(key);
-    if (!cached || (!cached.pending && (Date.now() - cached.at >= LEADERBOARD_STALE_MS || force))) {
+    if (!cached || cached.signal?.aborted || (!cached.pending && (Date.now() - cached.at >= LEADERBOARD_STALE_MS || force))) {
       const request = Promise.all([
-        readLeaderboardPages<Profile>((offset, size) => supabase.from("profiles").select("id, name, username, avatar_url")
-          .order("id").range(offset, offset + size - 1)),
-        readLeaderboardPages<Score>((offset, size) => supabase.from("posture_daily").select("user_id, date, sup_score")
-          .gte("date", start).lte("date", query.dateKey).order("user_id").order("date").range(offset, offset + size - 1)),
-        readLeaderboardPages<Friendship>((offset, size) => supabase.from("friend_requests").select("from_user_id, to_user_id")
-          .eq("status", "accepted").or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`).order("id").range(offset, offset + size - 1)),
+        readLeaderboardPages<Profile>((offset, size) => cancel(supabase.from("profiles").select("id, name, username, avatar_url")
+          .order("id").range(offset, offset + size - 1)), signal),
+        readLeaderboardPages<Score>((offset, size) => cancel(supabase.from("posture_daily").select("user_id, date, sup_score")
+          .gte("date", start).lte("date", query.dateKey).order("user_id").order("date").range(offset, offset + size - 1)), signal),
+        readLeaderboardPages<Friendship>((offset, size) => cancel(supabase.from("friend_requests").select("from_user_id, to_user_id")
+          .eq("status", "accepted").or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`).order("id").range(offset, offset + size - 1)), signal),
       ]);
-      cached = { at: Date.now(), pending: true, request, ranked: {} };
+      cached = { at: Date.now(), pending: true, request, signal, ranked: {} };
       if (fallback.size >= 4) fallback.delete(fallback.keys().next().value!);
       fallback.set(key, cached);
       const next = cached;

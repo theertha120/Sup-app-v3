@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 function load(path, dependencies = {}) {
-  const js = ts.transpile(readFileSync(new URL(path, import.meta.url), 'utf8'), { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 });
+  const js = ts.transpile(readFileSync(new URL(path, import.meta.url), 'utf8'), { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React });
   const module = { exports: {} };
   new Function('require', 'module', 'exports', js)((name) => {
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
@@ -228,19 +228,22 @@ test('full leaderboard passes rows to a virtual list without rendering them all'
     useState: (initial) => [initial, () => {}], useRef: (current) => ({ current }), useEffect: (fn) => fn(), useCallback: (fn) => fn,
     useAuth: () => ({ userId: 'u9999' }), useLocalSearchParams: () => ({}),
     require: () => 1,
-    useFonts: () => [true], useFocusEffect: (fn) => fn(),
+    useFonts: () => [false, new Error('font unavailable')], useFocusEffect: (fn) => fn(),
     useLeaderboard: () => ({ entries, total: 12000, isLoading: false, isLoadingMore: false, isRefreshing: false,
       friendCount: 0, error: null, refresh: () => {}, loadMore: () => { more++; } }),
     Animated: { Value: class { setValue() {} }, timing: () => ({ start() {} }), View: 'AnimatedView' },
     View: 'View', Text: 'Text', FlatList: 'FlatList', PressFeedback: 'PressFeedback', Ionicons: 'Ionicons',
     HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton', BackgroundBlobs: 'BackgroundBlobs',
-    LeaderboardRow: 'LeaderboardRow', styles: {}, PRIMARY_TEXT: '#000',
+    LeaderboardFontsContext: { Provider: 'Fonts' }, LeaderboardRow: 'LeaderboardRow', styles: {}, PRIMARY_TEXT: '#000',
     PERIODS: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }],
   };
   const js = ts.transpile(screen.getText(source).replace("export default ", ""), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
   const Screen = new Function(...Object.keys(dependencies), `${js}; return FullLeaderboardScreen;`)(...Object.values(dependencies));
   const tree = Screen();
-  const list = tree.children.find((child) => child.type === 'FlatList');
+  assert.equal(tree.type, 'Fonts');
+  assert.equal(tree.props.value, false);
+  assert.equal(tree.children[0].props.style.opacity, undefined);
+  const list = tree.children[0].children.find((child) => child.type === 'FlatList');
   assert.ok(list);
   assert.equal(list.props.data, entries);
   assert.equal(list.props.initialNumToRender, 10);
@@ -285,4 +288,105 @@ test('a successful empty leaderboard is cached without repeated loading', async 
   assert.equal(calls.length, 1);
   assert.equal(store.get(query).isLoading, false);
   assert.equal(store.get(query).lastUpdatedAt, 1000);
+});
+
+test('Community mounts a visible header and loading state even before fonts load', () => {
+  const source = ts.createSourceFile('leaderboard.tsx', readFileSync(new URL('../app/(tabs)/leaderboard.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const screen = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'LeaderboardScreen');
+  const dependencies = {
+    React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    useState: (initial) => [initial, () => {}], useRef: (current) => ({ current }), useEffect: () => {},
+    useAuth: () => ({ userId: 'me' }), useRouter: () => ({}), useTutorial: () => ({ tutorialStep: null }),
+    useSafeAreaInsets: () => ({ bottom: 0 }), require: () => 1, useFonts: () => [false],
+    useLeaderboard: () => ({ entries: [], ownEntry: null, friendCount: 0, error: null, isLoading: true }),
+    LeaderboardFontsContext: { Provider: 'Fonts' }, View: 'View', ScrollView: 'ScrollView', Text: 'Text', PressFeedback: 'PressFeedback',
+    BackgroundBlobs: 'BackgroundBlobs', HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton',
+    styles: {}, NAV_BAR_HEIGHT: 72, NAV_BOTTOM_OFFSET: 25, SUMMARY_PERIOD: 'day',
+  };
+  const js = ts.transpile(screen.getText(source).replace('export default ', ''), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
+  const Screen = new Function(...Object.keys(dependencies), `${js}; return LeaderboardScreen;`)(...Object.values(dependencies));
+  const tree = Screen();
+  assert.equal(tree.type, 'Fonts');
+  assert.equal(tree.props.value, false);
+  assert.equal(tree.children[0].props.style.opacity, undefined);
+  const content = tree.children[0].children.find((node) => node?.type === 'ScrollView');
+  assert.ok(content.children.some((node) => node?.type === 'HeaderBar'));
+  assert.ok(content.children.some((node) => node?.type === 'Text' && node.children.includes('Loading leaderboard…')));
+});
+
+test('hung leaderboard requests release the loading lock and ignore late responses', async () => {
+  let late;
+  let signal;
+  let calls = 0;
+  const store = new LeaderboardStore((_query, _offset, _limit, _force, requestSignal) => {
+    signal = requestSignal;
+    return ++calls === 1 ? new Promise((resolve) => { late = resolve; })
+      : Promise.resolve({ entries: [entry(1)], ownEntry: null, total: 1, friendCount: 0 });
+  }, () => {}, Date.now, 5);
+  await store.ensure(query, 5);
+  assert.equal(signal.aborted, true);
+  assert.equal(store.get(query).isLoading, false);
+  assert.ok(store.get(query).error);
+  await store.ensure(query, 5);
+  assert.equal(store.get(query).entries[0].user.id, 'u1');
+  late({ entries: [entry(0)], ownEntry: null, total: 1, friendCount: 0 });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(store.get(query).entries[0].user.id, 'u1');
+});
+
+test('timed-out next pages keep existing rows available', async () => {
+  const store = new LeaderboardStore(async (_query, offset) => offset ? new Promise(() => {})
+    : { entries: [entry(0)], ownEntry: null, total: 2, friendCount: 0 }, () => {}, Date.now, 5);
+  await store.ensure(query, 1);
+  await store.loadMore(query);
+  assert.equal(store.get(query).entries.length, 1);
+  assert.equal(store.get(query).isLoadingMore, false);
+  assert.ok(store.get(query).error);
+});
+
+test('cancellation is forwarded to RPC and aborted fallback snapshots can be replaced', async () => {
+  let hang = true;
+  let seenSignal;
+  const database = {
+    rpc: () => ({ abortSignal(signal) { seenSignal = signal; return this; }, then(resolve) { resolve({ error: { code: 'PGRST202' } }); } }),
+    from: () => {
+      const builder = {};
+      for (const method of ['select', 'eq', 'or', 'gte', 'lte', 'order', 'range']) builder[method] = () => builder;
+      builder.abortSignal = () => builder;
+      builder.then = (resolve) => { if (!hang) resolve({ data: [], error: null }); };
+      return builder;
+    },
+  };
+  const source = service(database).createLeaderboardSource('me');
+  const store = new LeaderboardStore(source, () => {}, Date.now, 5);
+  await store.ensure(query, 5);
+  assert.equal(seenSignal.aborted, true);
+  hang = false;
+  await store.ensure(query, 5);
+  assert.equal(store.get(query).error, null);
+  assert.equal(store.get(query).total, 0);
+  assert.equal(store.get(query).isLoading, false);
+});
+
+test('leaderboard labels remain readable when custom fonts are unavailable', () => {
+  const { LeaderboardText } = load('../src/components/ui/LeaderboardText.tsx', {
+    react: { default: { createElement: (type, props) => ({ type, props }) }, createContext: () => ({}), useContext: () => false },
+    'react-native': { Platform: { OS: 'ios' }, StyleSheet: { flatten: (style) => style }, Text: 'NativeText' },
+  });
+  const text = LeaderboardText({ children: 'Leaderboard', style: { fontFamily: 'Agrandir-GrandHeavy' } });
+  assert.equal(text.props.style[1].fontFamily, 'System');
+  assert.equal(text.props.style[1].fontWeight, '700');
+});
+
+test('leaderboard tab visibility does not rely on an opacity transition', () => {
+  const source = ts.createSourceFile('_layout.tsx', readFileSync(new URL('../app/(tabs)/_layout.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const layout = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'TabsLayout');
+  const dependencies = { React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    Tabs: { Screen: 'Screen' }, Platform: { select: (options) => options.ios }, colours: {} };
+  const js = ts.transpile(layout.getText(source).replace('export default ', ''), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
+  const Layout = new Function(...Object.keys(dependencies), `${js}; return TabsLayout;`)(...Object.values(dependencies));
+  const tree = Layout();
+  assert.equal(tree.children.find((node) => node.props.name === 'leaderboard').props.options.animation, 'none');
+  assert.equal(tree.children.find((node) => node.props.name === 'desk').props.options.animation, undefined);
 });

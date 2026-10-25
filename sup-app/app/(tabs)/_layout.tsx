@@ -61,6 +61,8 @@ export default function TabsLayout() {
         name="leaderboard"
         options={{
           title: "Leaderboard",
+          // Rankings must not depend on completion of a tab opacity transition.
+          animation: "none",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trophy-outline" size={size} color={color} />
           ),
