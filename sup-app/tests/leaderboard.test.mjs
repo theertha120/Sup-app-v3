@@ -98,3 +98,11 @@ test('old account results cannot fill a disposed cache', async () => {
   await request;
   assert.equal(store.get(query).entries.length, 0);
 });
+
+test('roster requests no longer make an auth call or wait for local avatars', async () => {
+  const { fetchLeaderboardByStreak } = load('../src/services/social/leaderboardService.ts', {
+    '@/src/lib/supabase': { supabase: { from: () => ({ select: () => ({ order: async () => ({ data: [{ id: 'me', name: 'Me', avatar_url: 'public-avatar' }], error: null }) }) }) } },
+  });
+  const users = await fetchLeaderboardByStreak();
+  assert.equal(users[0].avatar, 'public-avatar');
+});
