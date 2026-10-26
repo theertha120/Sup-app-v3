@@ -150,19 +150,19 @@ const ACTIVE_TIME_PRESET_RANGES: Record<
 };
  
 function isWithinActivePresets(
-  activeTimePresets: ActiveTimePreset[],
-  timezoneOffsetMinutes: number = 0
+  activeTimePresets: ActiveTimePreset[]
 ): boolean {
   if (!activeTimePresets || activeTimePresets.length === 0) {
     console.log("No active time presets configured");
     return false;
   }
- 
-  // Derive current local time as "HH:MM" string
+
+  // Current time as "HH:MM" on the phone's own clock. This runs on the
+  // device, so its local time is the user's time — no need for the stored
+  // timezone_offset_minutes, which is null until the app first saves it.
   const now = new Date();
-  const localTime = new Date(now.getTime() + timezoneOffsetMinutes * 60000);
-  const hours = String(localTime.getUTCHours()).padStart(2, "0");
-  const minutes = String(localTime.getUTCMinutes()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
   const currentTime = `${hours}:${minutes}`;
   console.log("Current local time:", currentTime); // check if this gives HH:MM format
  
@@ -506,12 +506,7 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     console.log("profile.primary_goals:", profile.primary_goals);
 
     // RULE GROUP 1: CHECK ACTIVE HOURS
-    if (
-      !isWithinActivePresets(
-        profile.active_time_presets,
-        profile.timezone_offset_minutes
-      )
-    ) {
+    if (!isWithinActivePresets(profile.active_time_presets)) {
       console.log("Outside active hours");
       return null;
     }

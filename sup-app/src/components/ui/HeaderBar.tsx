@@ -128,6 +128,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
   const [friendsModalVisible, setFriendsModalVisible] = useState(false);
 
   const [nameAlert, setNameAlert] = useState(false);
+  const [logoutAlert, setLogoutAlert] = useState(false);
  
   // Load profile data
   const loadProfile = () => {
@@ -217,7 +218,11 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
  
   const handleLogOut = () => {
     closeDropdown();
-    logout();
+    setLogoutAlert(true);
+  };
+
+  const confirmLogOut = async () => {
+    await logout();
     router.replace("/home");
   };
  
@@ -244,7 +249,8 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         {/* Wordmark */}
         <Image
           source={require("../../../assets/images/sup-logo-purple.png")}
-          style={{ height: logoSize, width: logoSize * LOGO_ASPECT_RATIO }}
+          // tintColor recolours the logo's solid shape; the app's dark purple.
+          style={{ height: logoSize, width: logoSize * LOGO_ASPECT_RATIO, tintColor: "#5222AE" }}
           resizeMode="contain"
           accessibilityRole="image"
           accessibilityLabel="s'up"
@@ -445,6 +451,17 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         visible={nameAlert}
         title="username can't be empty"
         onRequestClose={() => setNameAlert(false)}
+      />
+
+      <BrandAlert
+        visible={logoutAlert}
+        title="log out?"
+        message="are you sure you want to log out?"
+        buttons={[
+          { text: "cancel", style: "cancel" },
+          { text: "log out", style: "destructive", onPress: confirmLogOut },
+        ]}
+        onRequestClose={() => setLogoutAlert(false)}
       />
     </>
   );

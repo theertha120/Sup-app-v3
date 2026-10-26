@@ -208,11 +208,13 @@ export async function isUsernameTaken(username: string): Promise<boolean> {
 
     if (error) {
       console.warn("[profile] isUsernameTaken query failed", error);
+      captureError(error, "username-check");
       return false;
     }
     return !!data;
   } catch (err) {
     console.warn("[profile] isUsernameTaken threw", err);
+    captureError(err, "username-check");
     return false;
   }
 }

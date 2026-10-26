@@ -2,7 +2,7 @@
   "expo": {
     "name": "sup-app",
     "slug": "sup-app",
-    "version": "1.0.0",
+    "version": "2.0.3",
     "orientation": "portrait",
     "scheme": "supapp",
     "userInterfaceStyle": "automatic",

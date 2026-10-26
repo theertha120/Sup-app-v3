@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 import { supabase } from "../src/lib/supabase";
+import { captureError } from "../src/lib/sentry";
 
 export default function Index() {
   const [destination, setDestination] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export default function Index() {
           // Couldn't read the profile (e.g. offline) — don't push a signed-in
           // user into onboarding over a network blip.
           console.warn("[index] profile check failed → home:", error.message);
+          captureError(error, "startup-profile-check");
           setDestination("/(tabs)/home");
           return;
         }
@@ -43,6 +45,8 @@ export default function Index() {
           // Onboarding should only start from the "Create account" button, so
           // sign out and show the normal logged-out home screen instead.
           console.warn("[index] signed in with no profile row → sign out, home");
+          // Usually means a signup's profile save failed — worth knowing about.
+          captureError(new Error("Signed in with no profile row"), "startup-missing-profile");
           await supabase.auth.signOut({ scope: "local" });
           setDestination("/(tabs)/home");
           return;
@@ -59,6 +63,7 @@ export default function Index() {
         }
       } catch (e) {
         console.warn("[index] check failed:", e);
+        captureError(e, "startup-check");
         setDestination("/(tabs)/home");
       }
     };

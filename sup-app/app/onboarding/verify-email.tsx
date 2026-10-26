@@ -1,6 +1,6 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text, TextInput, Image } from "react-native";
+import { StyleSheet, View, Text, TextInput } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -9,6 +9,7 @@ import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { createDefaultBehaviorProfile } from "@/src/services/user/behaviorProfileService";
 import { randomAvatarUrl } from "@/src/components/supsona/supsona";
 import { useFonts } from "expo-font";
+import { captureError } from "@/src/lib/sentry";
 
 const CODE_LENGTH = 6;
 
@@ -20,6 +21,8 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  // Code verified but the profile didn't save — the button retries the save.
+  const [saveFailed, setSaveFailed] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const [fontsLoaded] = useFonts({
@@ -50,15 +53,43 @@ export default function VerifyEmailScreen() {
     // of this screen and came round again), signUp only re-sent the code and
     // kept the FIRST password. Re-apply the one they just typed so it's the
     // one that works at login. "same_password" just means it already matched.
-    const { error: pwError } = await supabase.auth.updateUser({ password: pendingSignup.password });
-    if (pwError && pwError.code !== "same_password") {
-      console.warn("[verify-email] failed to apply password", pwError);
+    try {
+      const { error: pwError } = await supabase.auth.updateUser({ password: pendingSignup.password });
+      if (pwError && pwError.code !== "same_password") {
+        console.warn("[verify-email] failed to apply password", pwError);
+        captureError(pwError, "signup-apply-password");
+      }
+    } catch (err) {
+      // Not fatal — the account exists; carry on to saving the profile.
+      console.warn("[verify-email] failed to apply password", err);
+      captureError(err, "signup-apply-password");
     }
     setPendingSignup({ ...pendingSignup, password: "" });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("profiles").insert({
+    await saveProfile();
+  };
+
+  // The code is used up once verified, so a failed save retries only this
+  // part. Without a profile row, index.tsx signs the user out on next launch.
+  const saveProfile = async () => {
+    setVerifying(true);
+    setError("");
+
+    const fail = (err: unknown) => {
+      console.warn("[verify-email] failed to save profile", err);
+      captureError(err, "signup-profile-save");
+      setVerifying(false);
+      setSaveFailed(true);
+      setError("couldn't save your profile, check your connection and try again");
+    };
+
+    // A thrown error (not just a returned one) would otherwise leave the
+    // button stuck on "verifying...".
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return fail("no signed-in user");
+
+      const { error: profileError } = await supabase.from("profiles").insert({
         id: user.id,
         name: pendingSignup.firstName,
         last_name: pendingSignup.lastName,
@@ -67,16 +98,19 @@ export default function VerifyEmailScreen() {
         current_streak: 0,
         weekly_avg_points: 0,
         how_heard: answers.howHeard,
-        q1: answers.q1,
-        q2: answers.q2,
-        q3: answers.q3,
-        q4: answers.q4,
-        q5: answers.q5,
-        q6: answers.q6,
+        // Onboarding quiz answers — disabled with the quiz pages.
+        // q1: answers.q1,
+        // q2: answers.q2,
+        // q3: answers.q3,
+        // q4: answers.q4,
+        // q5: answers.q5,
+        // q6: answers.q6,
       });
+      // 23505 = the row already exists, i.e. an earlier attempt saved it.
+      if (profileError && profileError.code !== "23505") return fail(profileError);
 
       const def = createDefaultBehaviorProfile();
-      await supabase.from("user_profile").upsert({
+      const { error: behaviorError } = await supabase.from("user_profile").upsert({
         id: user.id,
         primary_goals: def.primaryGoals,
         preferred_tones: def.preferredTones,
@@ -85,9 +119,13 @@ export default function VerifyEmailScreen() {
         active_time_end: def.activeTimeEnd,
         weekly_goals: def.weeklyGoals,
       });
+      if (behaviorError) return fail(behaviorError);
+    } catch (err) {
+      return fail(err);
     }
 
     setVerifying(false);
+    setSaveFailed(false);
     router.push("/onboarding/final" as any);
   };
 
@@ -129,13 +167,23 @@ export default function VerifyEmailScreen() {
           style={styles.codeInput}
         />
 
-        <PressFeedback
-          style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
-          onPress={() => handleVerify(code)}
-          disabled={code.length !== CODE_LENGTH || verifying}
-        >
-          <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
-        </PressFeedback>
+        {saveFailed ? (
+          <PressFeedback
+            style={[styles.verifyBtn, verifying && styles.verifyBtnDisabled]}
+            onPress={saveProfile}
+            disabled={verifying}
+          >
+            <Text style={styles.verifyBtnText}>{verifying ? "saving..." : "try again"}</Text>
+          </PressFeedback>
+        ) : (
+          <PressFeedback
+            style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
+            onPress={() => handleVerify(code)}
+            disabled={code.length !== CODE_LENGTH || verifying}
+          >
+            <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
+          </PressFeedback>
+        )}
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
@@ -148,14 +196,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 60,
     paddingHorizontal: 24,
-  },
-  backBtn: {
-    marginBottom: 12,
-  },
-  backImage: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
   },
   content: {
     flex: 1,

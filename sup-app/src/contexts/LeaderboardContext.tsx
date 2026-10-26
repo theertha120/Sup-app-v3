@@ -50,6 +50,12 @@ export function LeaderboardProvider({ children }: { children: ReactNode }) {
   return <LeaderboardContext.Provider value={value}>{children}</LeaderboardContext.Provider>;
 }
 
+/** Marks every cached board stale and refetches the ones on screen. */
+export function useInvalidateLeaderboards() {
+  const store = useContext(LeaderboardContext)?.store;
+  return useCallback(() => store?.invalidate(), [store]);
+}
+
 export function useLeaderboard(scope: LeaderboardScope, period: LeaderboardPeriod, size = LEADERBOARD_PAGE_SIZE) {
   const account = useContext(LeaderboardContext);
   if (!account) throw new Error("useLeaderboard must be used within a LeaderboardProvider");

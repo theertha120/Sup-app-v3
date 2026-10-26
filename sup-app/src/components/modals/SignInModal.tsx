@@ -25,6 +25,7 @@ export default function SignInModal() {
     registrationMode,
     startRegistration,
     login,
+    checkEmailRegistered,
     requestPasswordReset,
     verifyPasswordResetOtp,
     updatePassword,
@@ -103,11 +104,20 @@ export default function SignInModal() {
       return;
     }
     setResetLoading(true);
+    const check = await checkEmailRegistered(resetEmail.trim());
+    if (!check.success || !check.exists) {
+      setResetLoading(false);
+      setResetError(check.success ? "there's no account with this email, check the spelling or create an account" : check.error);
+      return;
+    }
     const res = await requestPasswordReset(resetEmail.trim());
     setResetLoading(false);
     if (!res.success) {
       if (/email rate limit exceeded/i.test(res.error ?? "")) {
         setResetError("We've hit the email sending limit for now, please try again in about an hour");
+      } else if (/only request this after/i.test(res.error ?? "")) {
+        // Supabase allows one reset code per email per minute.
+        setResetError("a code was just sent to this email, please wait a minute and try again");
       } else {
         setResetError(res.error || "Failed to send reset code");
       }
@@ -256,7 +266,8 @@ export default function SignInModal() {
           {step === "forgot-code" && (
             <>
               <Text style={styles.title}>Check your email</Text>
-              <Text style={styles.subtitle}>Enter the code we sent to {resetEmail}</Text>
+              <Text style={[styles.subtitle, { marginBottom: 16 }]}>Enter the code we sent to {resetEmail}</Text>
+              <Text style={styles.warningText}>💡 ensure that you check your spam/junk folder for the code!</Text>
 
               <View style={styles.form}>
                 <Text style={styles.label}>Code</Text>
@@ -411,6 +422,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
     fontFamily: "Agrandir-Regular",
+  },
+  warningText: {
+    fontSize: 16,
+    fontFamily: "Agrandir-Regular",
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 18,
   },
   errorText: {
     color: "#FF4D4F",

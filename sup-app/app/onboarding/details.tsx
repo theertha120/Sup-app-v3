@@ -7,6 +7,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { isUsernameTaken } from "@/src/services/user/profileService";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
+import { captureError } from "@/src/lib/sentry";
 
 export default function DetailsScreen() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function DetailsScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   if (!fontsLoaded) return null;
 
@@ -40,9 +42,14 @@ export default function DetailsScreen() {
     !!confirmPassword.trim();
 
   const handleNext = async () => {
+    if (submitting) return;
     if (!firstName.trim() || !lastName.trim() || !username.trim() || !password.trim() || !confirmPassword.trim()) return;
     if (!emailValid) {
       setError("please enter a valid email");
+      return;
+    }
+    if (password.length < 6) {
+      setError("password must be at least 6 characters");
       return;
     }
     if (password !== confirmPassword) {
@@ -51,6 +58,21 @@ export default function DetailsScreen() {
     }
     setError("");
 
+    // The checks and sign-up below are slow network calls; block repeat taps
+    // so a second tap can't send a second sign-up.
+    setSubmitting(true);
+    try {
+      await submit();
+    } catch (err) {
+      console.warn("[onboarding/details] submit failed", err);
+      captureError(err, "signup-details-submit");
+      setError("something went wrong, please try again");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submit = async () => {
     // Checked before registering, so a taken handle does not leave a stranded
     // auth user behind.
     if (await isUsernameTaken(username.trim())) {
@@ -170,10 +192,11 @@ export default function DetailsScreen() {
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <PressFeedback
-            style={[styles.nextBtn, !isValid && styles.nextBtnDisabled]}
+            style={[styles.nextBtn, (!isValid || submitting) && styles.nextBtnDisabled]}
             onPress={handleNext}
+            disabled={submitting}
           >
-            <Text style={styles.nextBtnText}>next</Text>
+            <Text style={styles.nextBtnText}>{submitting ? "creating account..." : "next"}</Text>
           </PressFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
