@@ -202,7 +202,7 @@ function renderFull(view, fonts = true) {
     Animated: { Value: class { setValue() {} }, timing: () => ({ start() {} }), View: 'AnimatedView' },
     View: 'View', Text: 'Text', FlatList: 'FlatList', PressFeedback: 'PressFeedback', Ionicons: 'Ionicons',
     HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton', BackgroundBlobs: 'BackgroundBlobs', LeaderboardRow: 'LeaderboardRow',
-    styles: {}, PRIMARY_TEXT: '#000', PERIODS: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }],
+    CommunityFonts: { Provider: 'Fonts' }, styles: {}, PRIMARY_TEXT: '#000', PERIODS: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }],
   };
   const js = ts.transpile(screen.getText(source).replace('export default ', ''), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
   return new Function(...Object.keys(deps), `${js}; return FullLeaderboardScreen();`)(...Object.values(deps));
@@ -224,4 +224,32 @@ test('the full leaderboard virtualizes a long list and fetches near the end', ()
   assert.equal(list.props.renderItem({ item: entries[9999] }).props.isCurrentUser, true);
   list.props.onEndReached();
   assert.equal(more, 1);
+});
+
+test('full rankings and header stay visible when font loading fails', () => {
+  const tree = renderFull({ entries: [], total: 0, friendCount: 0, error: null, isLoading: true }, false);
+  assert.ok(tree);
+  assert.equal(tree.props.value, false);
+  assert.equal(tree.children[0].props.style.opacity, undefined);
+  assert.ok(findNode(findNode(tree, 'FlatList').props.ListHeaderComponent, 'HeaderBar'));
+});
+
+test('Community renders a loading message and header without waiting for fonts', () => {
+  const file = ts.createSourceFile('community.tsx', readFileSync(new URL('../app/(tabs)/leaderboard.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const fn = file.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'LeaderboardScreen');
+  const deps = {
+    React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    useState: (value) => [value, () => {}], useRef: (current) => ({ current }), useEffect: () => {},
+    useAuth: () => ({ userId: 'me' }), useRouter: () => ({}), useTutorial: () => ({ tutorialStep: null }),
+    useSafeAreaInsets: () => ({ bottom: 0 }), useFonts: () => [false], require: () => 1,
+    useLeaderboard: () => ({ entries: [], ownEntry: null, friendCount: 0, isLoading: true, error: null }),
+    View: 'View', Text: 'Text', ScrollView: 'ScrollView', PressFeedback: 'PressFeedback',
+    HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton', BackgroundBlobs: 'BackgroundBlobs',
+    CommunityFonts: { Provider: 'Fonts' }, styles: {}, NAV_BAR_HEIGHT: 72, NAV_BOTTOM_OFFSET: 25, SUMMARY_PERIOD: 'day',
+  };
+  const js = ts.transpile(fn.getText(file).replace('export default ', ''), { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React });
+  const tree = new Function(...Object.keys(deps), `${js}; return LeaderboardScreen();`)(...Object.values(deps));
+  assert.equal(tree.children[0].props.style.opacity, undefined);
+  assert.ok(findNode(tree, 'HeaderBar'));
+  assert.ok(findNode(tree, 'Text'));
 });
