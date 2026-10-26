@@ -4,6 +4,11 @@ Community opens a daily view with five entries and the viewer's own rank.
 The full leaderboard requests 50 entries per page. View caches are account-local
 and shared between both screens. The leaderboard provider does not fetch at login.
 Local avatar reads and profile updates are independent of ranking requests.
+Views revalidate after one minute when focused, on app resume, and after relevant
+realtime events. Realtime is subscribed only while Community is focused; polling
+covers deployments without publication enabled. Accepted friends also invalidate
+the local cache immediately. Changes arriving during a read queue a newer read.
+Backgrounded views do not poll. Existing results stay visible while refreshing.
 
 ## Server query rollout
 
@@ -29,8 +34,11 @@ It cannot reduce transfer to five/50 ranked rows without server aggregation.
 Permission and network failures remain visible; they do not trigger extra scans.
 
 The migration must be checked against the deployed schema and RLS in staging.
-No remote database was changed by implementing these app changes. Local tests
-inject responses and verify main's score calculation, but do not execute SQL.
+No remote database was changed by implementing these app changes. The JavaScript suite injects responses and verifies main's score calculation.
+The migration was additionally exercised in an isolated PostgreSQL runtime with
+both text and UUID identities: weighted scores, ties, paging, own rank, friends,
+input limits, authentication and invoker RLS all passed. This does not validate
+the live database schema, policies or query performance.
 
 ## Verification
 

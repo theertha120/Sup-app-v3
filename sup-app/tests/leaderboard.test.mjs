@@ -253,3 +253,85 @@ test('Community renders a loading message and header without waiting for fonts',
   assert.ok(findNode(tree, 'HeaderBar'));
   assert.ok(findNode(tree, 'Text'));
 });
+
+test('focus checks reuse fresh data and stale checks reload a bounded first page', async () => {
+  let now = 1000;
+  const calls = [];
+  const store = new LeaderboardStore(async (_query, offset, limit, force) => {
+    calls.push([offset, limit, force]);
+    return { entries: Array.from({ length: limit }, (_, i) => entry(offset + i)), ownEntry: null, total: 500, friendCount: 0 };
+  }, () => {}, () => now);
+  await store.ensure(query, 50);
+  await store.ensure(query, 50);
+  assert.equal(calls.length, 1);
+  now = 11000;
+  await store.more(query);
+  assert.equal(store.get(query).updatedAt, 1000); // appended rows must not hide stale first-page data
+  now = 62000;
+  await store.ensure(query, 50);
+  assert.deepEqual(calls.at(-1), [0, 50, true]);
+});
+
+test('updates received during a request queue a fresh read rather than publishing the old result', async () => {
+  let resolve;
+  let calls = 0;
+  const page = (i) => ({ entries: [entry(i)], ownEntry: null, total: 1, friendCount: 0 });
+  const store = new LeaderboardStore(() => ++calls === 1 ? new Promise((done) => { resolve = done; }) : Promise.resolve(page(1)), () => {});
+  const stop = store.observe(query, 5);
+  const request = store.ensure(query, 5);
+  await Promise.resolve();
+  store.invalidate();
+  resolve(page(0));
+  await request;
+  assert.equal(calls, 2);
+  assert.equal(store.get(query).entries[0].user.id, 'u1');
+  stop();
+});
+
+test('offscreen changes invalidate the cache without fetching until return', async () => {
+  const { store, calls } = fixture();
+  await store.ensure(query, 5);
+  store.invalidate();
+  assert.equal(calls.length, 1);
+  await store.ensure(query, 5);
+  assert.equal(calls.length, 2);
+});
+
+test('freshness checks poll in foreground, debounce saves, resume and clean up', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const { startCommunityFreshness } = load('../src/services/social/communityFreshness.ts');
+  let checks = 0, invalidations = 0, active = true, changed, resume;
+  const cleanup = [];
+  const stop = startCommunityFreshness({
+    check: () => checks++, invalidate: () => invalidations++, isActive: () => active, pollMs: 60000,
+    connect: (callback) => { changed = callback; return () => cleanup.push('realtime'); },
+    onResume: (callback) => { resume = callback; return () => cleanup.push('resume'); },
+  });
+  assert.equal(checks, 1);
+  changed(); changed();
+  t.mock.timers.tick(349); assert.equal(invalidations, 0);
+  t.mock.timers.tick(1); assert.equal(invalidations, 1);
+  active = false; changed(); t.mock.timers.tick(60000);
+  assert.equal(checks, 1); assert.equal(invalidations, 1);
+  active = true; resume(); assert.equal(invalidations, 2);
+  t.mock.timers.tick(60000); assert.equal(checks, 2);
+  stop();
+  t.mock.timers.tick(60000); assert.equal(checks, 2);
+  assert.deepEqual(cleanup.sort(), ['realtime', 'resume']);
+});
+
+test('accepting a friend notifies Community only after a successful save', async () => {
+  let error = null;
+  const builder = { select: () => builder, eq: () => builder,
+    maybeSingle: async () => ({ data: { id: 'request', to_user_id: 'me', status: 'pending' }, error: null }),
+    update: () => builder, then: (resolve) => resolve({ error }) };
+  const friends = load('../src/services/social/friendService.ts', { '@/src/lib/supabase': { supabase: { from: () => builder } }, '@/src/utils/displayName': names });
+  const changes = [];
+  const stop = friends.subscribeToFriendChanges((id) => changes.push(id));
+  assert.equal((await friends.acceptFriendRequest('request', 'me')).ok, true);
+  assert.deepEqual(changes, ['me']);
+  error = Error('offline');
+  assert.equal((await friends.acceptFriendRequest('request', 'me')).ok, false);
+  assert.deepEqual(changes, ['me']);
+  stop();
+});

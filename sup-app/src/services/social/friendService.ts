@@ -2,6 +2,17 @@ import { supabase } from "@/src/lib/supabase";
 import { displayName, normalizeUsername } from "@/src/utils/displayName";
 import type { User } from "@/constants/env";
 
+const friendListeners = new Set<(userId: string) => void>();
+export function subscribeToFriendChanges(listener: (userId: string) => void) {
+  friendListeners.add(listener);
+  return () => { friendListeners.delete(listener); };
+}
+function notifyFriendChange(userId: string) {
+  for (const listener of friendListeners) {
+    try { listener(userId); } catch (error) { console.warn("[friend] change listener failed", error); }
+  }
+}
+
 export type FriendRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
 
 export interface FriendRequest {
@@ -264,6 +275,7 @@ export async function acceptFriendRequest(
       .eq("id", requestId);
 
     if (error) throw error;
+    notifyFriendChange(actingUserId);
     return { ok: true };
   } catch (err: any) {
     console.warn("[friend] acceptFriendRequest failed", err);

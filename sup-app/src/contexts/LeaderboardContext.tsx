@@ -1,10 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useId, type ReactNode } from "react";
+import { AppState } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "./AuthContext";
 import { captureError } from "../lib/sentry";
 import { toLocalDateKey } from "../lib/dateKey";
 import { createLeaderboardSource } from "../services/social/leaderboardPageService";
-import { EMPTY_BOARD, LeaderboardStore } from "../services/social/leaderboardStore";
+import { supabase } from "../lib/supabase";
+import { subscribeToFriendChanges } from "../services/social/friendService";
+import { startCommunityFreshness } from "../services/social/communityFreshness";
+import { COMMUNITY_STALE_MS, EMPTY_BOARD, LeaderboardStore } from "../services/social/leaderboardStore";
 import { LEADERBOARD_PAGE_SIZE, type LeaderboardScope } from "../services/social/leaderboardData";
 import { getLocalSupsona, subscribeToProfileUpdates } from "../services/user/profileService";
 import type { LeaderboardEntry, LeaderboardPeriod } from "../services/social/leaderboardPeriodService";
@@ -28,11 +32,15 @@ function useAccountBoard() {
     const unsubscribe = subscribeToProfileUpdates((profile) => {
       if (profile.id !== userId) return;
       profileChanged = true;
+      store?.invalidate();
       setAvatar({ userId, value: profile.avatar ?? undefined, override: true });
     });
-    return () => { active = false; unsubscribe(); };
-  }, [userId, isAuthenticated]);
-  return { store, avatar: avatar?.userId === userId ? avatar : null };
+    const unsubscribeFriends = subscribeToFriendChanges((changedUserId) => {
+      if (changedUserId === userId) store?.invalidate();
+    });
+    return () => { active = false; unsubscribe(); unsubscribeFriends(); };
+  }, [userId, isAuthenticated, store]);
+  return { store, userId, avatar: avatar?.userId === userId ? avatar : null };
 }
 const LeaderboardContext = createContext<ReturnType<typeof useAccountBoard> | undefined>(undefined);
 
@@ -45,13 +53,46 @@ export function LeaderboardProvider({ children }: { children: ReactNode }) {
 export function useLeaderboard(scope: LeaderboardScope, period: LeaderboardPeriod, size = LEADERBOARD_PAGE_SIZE) {
   const account = useContext(LeaderboardContext);
   if (!account) throw new Error("useLeaderboard must be used within a LeaderboardProvider");
-  const { store, avatar } = account;
+  const { store, userId, avatar } = account;
+  const observerId = useId();
   const [dateKey, setDateKey] = useState(toLocalDateKey());
   useFocusEffect(useCallback(() => {
-    const today = toLocalDateKey();
-    setDateKey(today);
-    void store?.ensure({ scope, period, dateKey: today }, size);
-  }, [store, scope, period, size]));
+    if (!store || !userId) return;
+    let stopObserving = () => {};
+    let observedDay: string | null = null;
+    const check = (read = true) => {
+      const today = toLocalDateKey();
+      setDateKey(today);
+      const query = { scope, period, dateKey: today };
+      if (observedDay !== today) {
+        stopObserving();
+        stopObserving = store.observe(query, size);
+        observedDay = today;
+      }
+      if (read) void store.ensure(query, size);
+    };
+    const stop = startCommunityFreshness({
+      check,
+      invalidate: () => { check(false); store.invalidate(); },
+      isActive: () => !AppState.currentState || AppState.currentState === "active",
+      pollMs: COMMUNITY_STALE_MS,
+      onResume: (callback) => {
+        const subscription = AppState.addEventListener("change", (state) => { if (state === "active") callback(); });
+        return () => subscription.remove();
+      },
+      connect: (changed) => {
+        const channel = supabase.channel(`community:${userId}:${observerId}`)
+          .on("postgres_changes", { event: "*", schema: "public", table: "posture_daily" }, changed)
+          .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, changed)
+          .on("postgres_changes", { event: "*", schema: "public", table: "friend_requests", filter: `from_user_id=eq.${userId}` }, changed)
+          .on("postgres_changes", { event: "*", schema: "public", table: "friend_requests", filter: `to_user_id=eq.${userId}` }, changed)
+          .subscribe();
+        return () => { void supabase.removeChannel(channel); };
+      },
+    });
+    return () => { stop(); stopObserving(); };
+  }, [store, userId, observerId, scope, period, size]));
+
   const query = useMemo(() => ({ scope, period, dateKey }), [scope, period, dateKey]);
   const view = store?.get(query) ?? EMPTY_BOARD;
   const refresh = useCallback(() => store?.ensure(query, size, true) ?? Promise.resolve(), [store, query, size]);
