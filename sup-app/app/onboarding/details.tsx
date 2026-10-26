@@ -7,6 +7,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { isUsernameTaken } from "@/src/services/user/profileService";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
+import { captureError } from "@/src/lib/sentry";
 
 export default function DetailsScreen() {
   const router = useRouter();
@@ -62,6 +63,10 @@ export default function DetailsScreen() {
     setSubmitting(true);
     try {
       await submit();
+    } catch (err) {
+      console.warn("[onboarding/details] submit failed", err);
+      captureError(err, "signup-details-submit");
+      setError("something went wrong, please try again");
     } finally {
       setSubmitting(false);
     }

@@ -127,19 +127,26 @@ export default function FinalScreen() {
           if (!accepted || saving) return;
           setSaving(true);
           setError("");
-          const { data: { user } } = await supabase.auth.getUser();
-          const { error: updateError } = user
-            ? await supabase.from("profiles").update({
-                gender,
-                age,
-                onboarding: true,
-                // Onboarding quiz results — disabled with the quiz pages.
-                // archetype: "",
-                // chronotype: "",
-                // interoception: "",
-                // elasticity: "",
-              }).eq("id", user.id)
-            : { error: "no signed-in user" };
+          let updateError: unknown = null;
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            ({ error: updateError } = user
+              ? await supabase.from("profiles").update({
+                  gender,
+                  age,
+                  onboarding: true,
+                  // Onboarding quiz results — disabled with the quiz pages.
+                  // archetype: "",
+                  // chronotype: "",
+                  // interoception: "",
+                  // elasticity: "",
+                }).eq("id", user.id)
+              : { error: "no signed-in user" });
+          } catch (err) {
+            // A thrown error (not just a returned one) would otherwise leave
+            // the button stuck on "saving...".
+            updateError = err;
+          }
           setSaving(false);
           if (updateError) {
             console.warn("[onboarding/final] failed to save details", updateError);
