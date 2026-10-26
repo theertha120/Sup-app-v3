@@ -4,6 +4,7 @@ import { StyleSheet, View, Text, ScrollView, NativeSyntheticEvent, NativeScrollE
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
+import { captureError } from "@/src/lib/sentry";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -142,6 +143,7 @@ export default function FinalScreen() {
           setSaving(false);
           if (updateError) {
             console.warn("[onboarding/final] failed to save details", updateError);
+            captureError(updateError, "signup-details-save");
             setError("couldn't save your details, check your connection and try again");
             return;
           }

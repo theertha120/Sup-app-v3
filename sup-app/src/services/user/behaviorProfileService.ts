@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { captureError } from "@/src/lib/sentry";
 
 export type BehaviorGoalId =
   | "study_posture"
@@ -195,6 +196,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
 
     if (error) {
       console.warn("[behavior-profile] Remote fetch failed", error);
+      captureError(error, "coaching-profile-load");
       return null;
     }
 
@@ -206,6 +208,7 @@ export async function fetchCurrentBehaviorProfile(): Promise<BehaviorProfile | n
     return null;
   } catch (error) {
     console.warn("[behavior-profile] Remote fetch failed", error);
+    captureError(error, "coaching-profile-load");
     return null;
   }
 }

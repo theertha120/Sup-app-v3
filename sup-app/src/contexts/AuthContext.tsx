@@ -37,6 +37,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Supabase error codes caused by the user's own input or normal limits
+// (wrong password/code, once-a-minute resend, …) — not bugs, so they're
+// kept out of Sentry.
+const EXPECTED_AUTH_ERRORS = new Set([
+  "invalid_credentials",
+  "otp_expired",
+  "over_email_send_rate_limit",
+  "over_request_rate_limit",
+  "same_password",
+  "weak_password",
+  "email_not_confirmed",
+  "email_address_invalid",
+  "user_already_exists",
+  "email_exists",
+]);
+
+function reportAuthError(error: unknown, context: string) {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && EXPECTED_AUTH_ERRORS.has(code)) return;
+  captureError(error, context);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -77,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
         if (user) await runStreakCheck(user.id);
-      } catch {
+      } catch (err) {
+        captureError(err, "auth-startup");
         if (!mounted) return;
         setIsAuthenticated(false);
       }
@@ -133,11 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error || !user) {
         const msg = error?.message || "Sign in failed";
         console.warn("[auth] signIn failed", error);
+        if (error) reportAuthError(error, "login");
         return { success: false, error: msg };
       }
       return { success: true };
     } catch (err) {
       console.error("[auth] login error", err);
+      captureError(err, "login");
       return { success: false, error: String(err) };
     }
   }
@@ -151,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.warn("[auth] signUp failed", error);
+        reportAuthError(error, "register");
         return { success: false, error: error.message };
       }
 
@@ -164,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err) {
       console.error("[auth] register error", err);
+      captureError(err, "register");
       return { success: false, error: String(err) };
     }
   }
@@ -182,11 +209,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error || !data.user) {
         const msg = error?.message || "Invalid or expired code";
         console.warn("[auth] verifyEmailOtp failed", error);
+        if (error) reportAuthError(error, "verify-email-otp");
         return { success: false, error: msg };
       }
       return { success: true };
     } catch (err) {
       console.error("[auth] verifyEmailOtp error", err);
+      captureError(err, "verify-email-otp");
       return { success: false, error: String(err) };
     }
   }
@@ -213,11 +242,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) {
         console.warn("[auth] requestPasswordReset failed", error);
+        reportAuthError(error, "password-reset-request");
         return { success: false, error: error.message };
       }
       return { success: true };
     } catch (err) {
       console.error("[auth] requestPasswordReset error", err);
+      captureError(err, "password-reset-request");
       return { success: false, error: String(err) };
     }
   }
@@ -236,11 +267,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error || !data.user) {
         const msg = error?.message || "Invalid or expired code";
         console.warn("[auth] verifyPasswordResetOtp failed", error);
+        if (error) reportAuthError(error, "password-reset-verify");
         return { success: false, error: msg };
       }
       return { success: true };
     } catch (err) {
       console.error("[auth] verifyPasswordResetOtp error", err);
+      captureError(err, "password-reset-verify");
       return { success: false, error: String(err) };
     }
   }
@@ -252,11 +285,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
         console.warn("[auth] updatePassword failed", error);
+        reportAuthError(error, "password-update");
         return { success: false, error: error.message };
       }
       return { success: true };
     } catch (err) {
       console.error("[auth] updatePassword error", err);
+      captureError(err, "password-update");
       return { success: false, error: String(err) };
     }
   }
@@ -266,6 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.clear();
     } catch (err) {
       console.warn("[auth] Failed to clear local app data", err);
+      captureError(err, "clear-local-data");
     }
   }
 
@@ -317,9 +353,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearLocalAppData();
 
       try {
-        await supabase.auth.signOut();
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          console.warn("[auth] signOut after delete failed", signOutError);
+          captureError(signOutError, "delete-account-signout");
+        }
       } catch (signOutError) {
         console.warn("[auth] signOut after delete failed", signOutError);
+        captureError(signOutError, "delete-account-signout");
       }
 
       setIsAuthenticated(false);
@@ -335,9 +376,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout(): Promise<void> {
     try {
-      await supabase.auth.signOut();
+      // signOut usually reports failure in `error` rather than throwing.
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn("[auth] signOut failed", error);
+        captureError(error, "logout");
+      }
     } catch (err) {
       console.warn("[auth] signOut failed", err);
+      captureError(err, "logout");
     } finally {
       setIsAuthenticated(false);
       setUserId(null);

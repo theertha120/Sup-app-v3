@@ -9,6 +9,7 @@ import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { createDefaultBehaviorProfile } from "@/src/services/user/behaviorProfileService";
 import { randomAvatarUrl } from "@/src/components/supsona/supsona";
 import { useFonts } from "expo-font";
+import { captureError } from "@/src/lib/sentry";
 
 const CODE_LENGTH = 6;
 
@@ -55,6 +56,7 @@ export default function VerifyEmailScreen() {
     const { error: pwError } = await supabase.auth.updateUser({ password: pendingSignup.password });
     if (pwError && pwError.code !== "same_password") {
       console.warn("[verify-email] failed to apply password", pwError);
+      captureError(pwError, "signup-apply-password");
     }
     setPendingSignup({ ...pendingSignup, password: "" });
 
@@ -69,6 +71,7 @@ export default function VerifyEmailScreen() {
 
     const fail = (err: unknown) => {
       console.warn("[verify-email] failed to save profile", err);
+      captureError(err, "signup-profile-save");
       setVerifying(false);
       setSaveFailed(true);
       setError("couldn't save your profile, check your connection and try again");

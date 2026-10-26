@@ -1,6 +1,5 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
-import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import React from "react";
 import {
   ActivityIndicator,
@@ -33,7 +32,7 @@ import {
   resolveTimeRangeFromPresets,
   saveCurrentBehaviorProfile,
 } from "@/src/services/user/behaviorProfileService";
-import { toLocalDateKey } from "@/src/lib/dateKey";
+import { captureError } from "@/src/lib/sentry";
 
 // OLD: step 4 was the daily-run time picker
 // type StepId = 0 | 1 | 2 | 3 | 4;
@@ -194,6 +193,7 @@ export default function CoachingSetupModal({
       await saveCurrentBehaviorProfile(profile);
       onComplete();
     } catch (err) {
+      captureError(err, "coaching-profile-save");
       setError(err instanceof Error ? err.message : "Could not save your setup.");
     } finally {
       setSaving(false);
