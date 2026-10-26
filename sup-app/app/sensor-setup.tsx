@@ -99,6 +99,13 @@ export default function SensorSetupScreen() {
   } = useIMUContext();
 
   const { userId } = useAuth();
+  // A distinct identity for each account visit also rejects old work after A → B → A.
+  const savedDeviceOwnerRef = useRef({ userId, active: false });
+  if (savedDeviceOwnerRef.current.userId !== userId) {
+    savedDeviceOwnerRef.current = { userId, active: false };
+  }
+  const savedDeviceOwner = savedDeviceOwnerRef.current;
+  const ownsSavedDevices = () => savedDeviceOwnerRef.current === savedDeviceOwner && savedDeviceOwner.active;
   const { tutorialStep, setTutorialStep } = useTutorial();
 
   const [fontsLoaded] = useFonts({
@@ -186,21 +193,33 @@ export default function SensorSetupScreen() {
   // ── Load saved device identity ────────────────────────────────────────────
 
   useEffect(() => {
-    if (!userId) return;
+    let cancelled = false;
+    savedDeviceOwner.active = true;
+    setSavedTop(null);
+    setSavedBottom(null);
+    const cleanup = () => {
+      cancelled = true;
+      savedDeviceOwner.active = false;
+    };
+    if (!userId) return cleanup;
     const load = async () => {
       try {
         const [topRaw, bottomRaw] = await Promise.all([
           AsyncStorage.getItem(storageKey("top",    userId)),
           AsyncStorage.getItem(storageKey("bottom", userId)),
         ]);
-        if (topRaw)    setSavedTop(JSON.parse(topRaw));
-        if (bottomRaw) setSavedBottom(JSON.parse(bottomRaw));
+        if (cancelled || savedDeviceOwnerRef.current !== savedDeviceOwner) return;
+        const top = topRaw ? JSON.parse(topRaw) : null;
+        const bottom = bottomRaw ? JSON.parse(bottomRaw) : null;
+        setSavedTop(top);
+        setSavedBottom(bottom);
       } catch (e) {
         console.warn("[Setup] Failed to load saved s'pots:", e);
       }
     };
     load();
-  }, [userId]);
+    return cleanup;
+  }, [userId, savedDeviceOwner]);
 
   // ── Display name ──────────────────────────────────────────────────────────
 
@@ -215,7 +234,7 @@ export default function SensorSetupScreen() {
   // ── Save device ───────────────────────────────────────────────────────────
 
   const saveDevice = async (slot: SensorSlot, device: Device) => {
-    if (!userId) return;
+    if (!userId || !ownsSavedDevices()) return;
     const saved: SavedDevice = {
       id:           device.id,
       hardwareName: device.name ?? device.id,
@@ -223,6 +242,7 @@ export default function SensorSetupScreen() {
     };
     try {
       await AsyncStorage.setItem(storageKey(slot, userId), JSON.stringify(saved));
+      if (!ownsSavedDevices()) return;
       if (slot === "top") setSavedTop(saved);
       else                setSavedBottom(saved);
     } catch (e) {
@@ -244,8 +264,9 @@ export default function SensorSetupScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              if (!userId) return;
+              if (!userId || !ownsSavedDevices()) return;
               await AsyncStorage.removeItem(storageKey(slot, userId));
+              if (!ownsSavedDevices()) return;
               if (slot === "top") setSavedTop(null);
               else                setSavedBottom(null);
               const sensor = slot === "top" ? topSensor : bottomSensor;
@@ -273,11 +294,12 @@ export default function SensorSetupScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              if (!userId) return;
+              if (!userId || !ownsSavedDevices()) return;
               await Promise.all([
                 AsyncStorage.removeItem(storageKey("top", userId)),
                 AsyncStorage.removeItem(storageKey("bottom", userId)),
               ]);
+              if (!ownsSavedDevices()) return;
               setSavedTop(null);
               setSavedBottom(null);
               if (topSensor.state.connected)    await disconnect("top");
