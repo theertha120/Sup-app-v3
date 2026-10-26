@@ -12,7 +12,7 @@
 import React, { useEffect, useState } from "react";
 import * as Network from "expo-network";
 import { BrandAlert } from "@/src/components/ui/BrandAlert";
-import { useLeaderboard } from "@/src/contexts/LeaderboardContext";
+import { useInvalidateLeaderboards } from "@/src/contexts/LeaderboardContext";
 import { usePostureHistory } from "@/src/contexts/PostureHistoryContext";
 
 // Only an explicit `false` counts as offline — Android reports
@@ -23,7 +23,7 @@ function isOffline(state: Network.NetworkState) {
 
 export default function OfflineGate({ children }: { children: React.ReactNode }) {
   const network = Network.useNetworkState();
-  const { refresh: refreshLeaderboard } = useLeaderboard();
+  const refreshLeaderboard = useInvalidateLeaderboards();
   const { refresh: refreshHistory } = usePostureHistory();
   const [visible, setVisible] = useState(false);
   const [stillOffline, setStillOffline] = useState(false);

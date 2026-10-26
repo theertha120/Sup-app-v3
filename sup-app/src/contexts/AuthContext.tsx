@@ -10,7 +10,6 @@ import { checkStreakOnAppOpen } from "@/src/services/posture/postureSyncService"
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  loading: boolean;
   userId: string | null;
   streakVersion: number;
   registrationMode: boolean;
@@ -25,7 +24,6 @@ interface AuthContextType {
     email: string,
     token: string
   ) => Promise<{ success: boolean; error?: string }>;
-  resendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   checkEmailRegistered: (email: string) => Promise<EmailCheckResult>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyPasswordResetOtp: (
@@ -41,7 +39,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [registrationMode, setRegistrationMode] = useState(false);
   // Bumped after each streak check so streak displays (HeaderBar) can refetch.
@@ -83,9 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         if (!mounted) return;
         setIsAuthenticated(false);
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
       }
     }
     checkAuth();
@@ -141,11 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("[auth] signIn failed", error);
         return { success: false, error: msg };
       }
-
-      // Save timezone and mark authenticated
-      await autoDetectAndSaveTimezone(user.id);
-      setUserId(user.id);
-      setIsAuthenticated(true);
       return { success: true };
     } catch (err) {
       console.error("[auth] login error", err);
@@ -195,30 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("[auth] verifyEmailOtp failed", error);
         return { success: false, error: msg };
       }
-
-      await autoDetectAndSaveTimezone(data.user.id);
-
-      setUserId(data.user.id);
-      setIsAuthenticated(true);
       return { success: true };
     } catch (err) {
       console.error("[auth] verifyEmailOtp error", err);
-      return { success: false, error: String(err) };
-    }
-  }
-
-  async function resendOtp(
-    email: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const { error } = await supabase.auth.resend({ type: "signup", email });
-      if (error) {
-        console.warn("[auth] resendOtp failed", error);
-        return { success: false, error: error.message };
-      }
-      return { success: true };
-    } catch (err) {
-      console.error("[auth] resendOtp error", err);
       return { success: false, error: String(err) };
     }
   }
@@ -270,9 +238,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("[auth] verifyPasswordResetOtp failed", error);
         return { success: false, error: msg };
       }
-
-      setUserId(data.user.id);
-      setIsAuthenticated(true);
       return { success: true };
     } catch (err) {
       console.error("[auth] verifyPasswordResetOtp error", err);
@@ -380,7 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, userId, streakVersion, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, resendOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, userId, streakVersion, registrationMode, startRegistration, stopRegistration, login, register, verifyEmailOtp, checkEmailRegistered, requestPasswordReset, verifyPasswordResetOtp, updatePassword, deleteAccount, logout }}>
       {children}
     </AuthContext.Provider>
   );
