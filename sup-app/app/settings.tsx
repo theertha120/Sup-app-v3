@@ -13,6 +13,7 @@ import React, { useState } from "react";
 import { BrandAlert, BrandAlertButton } from "../src/components/ui/BrandAlert";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 // import * as Sentry from "@sentry/react-native"; // needed only for the crash test buttons
 import { colours } from "../theme/colours";
 import { useAuth } from "../src/contexts/AuthContext";
@@ -26,6 +27,8 @@ import {
 import { useTutorial } from "@/src/contexts/TutorialContext";
 
 const PRIVACY_POLICY_URL = "https://www.termsfeed.com/live/3d4b8e6c-82de-4104-a866-e52e4377ada4";
+const SUPPORT_EMAIL = "supposture@gmail.com";
+const SUPPORT_PHONE = "89955903";
 
 export default function SettingsScreen() {
   const { logout, deleteAccount } = useAuth();
@@ -41,9 +44,22 @@ export default function SettingsScreen() {
     buttons?: BrandAlertButton[];
   } | null>(null);
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/home");
+  const handleLogout = () => {
+    setAlert({
+      title: "log out?",
+      message: "are you sure you want to log out?",
+      buttons: [
+        { text: "cancel", style: "cancel" },
+        {
+          text: "log out",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            router.replace("/home");
+          },
+        },
+      ],
+    });
   };
 
   const handleDeleteAccount = () => {
@@ -193,14 +209,18 @@ export default function SettingsScreen() {
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>App Version</Text>
           </View>
-          <Text style={styles.settingValue}>2.0.3</Text>
+          <Text style={styles.settingValue}>{Constants.expoConfig?.version}</Text>
         </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Help & Support</Text>
-            <Text style={styles.settingDescription}>supposture@gmail.com</Text>
-            <Text style={styles.settingDescription}>89955903</Text>
+            <PressFeedback feedback="link" onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
+              <Text style={[styles.settingDescription, styles.contactLink]}>{SUPPORT_EMAIL}</Text>
+            </PressFeedback>
+            <PressFeedback feedback="link" onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}>
+              <Text style={[styles.settingDescription, styles.contactLink]}>{SUPPORT_PHONE}</Text>
+            </PressFeedback>
           </View>
         </View>
 
@@ -209,9 +229,9 @@ export default function SettingsScreen() {
           onPress={() => router.push("/sources-methodology" as any)}
         >
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>sources & methodology</Text>
+            <Text style={styles.settingLabel}>Sources & Methodology</Text>
             <Text style={styles.settingDescription}>
-              how s'train and your s'up s'core are calculated, and the research behind them
+              How s'train and your s'up s'core are calculated, and the research behind them
             </Text>
           </View>
           <Text style={styles.chevron}>›</Text>
@@ -417,10 +437,9 @@ const styles = StyleSheet.create({
     color: "#CCC",
     marginLeft: 12,
   },
-  deviceStatus: {
-    fontSize: 18,
-    color: "#4CAF50",
-    marginLeft: 12,
+  contactLink: {
+    color: colours.primary,
+    paddingVertical: 2,
   },
   logoutButton: {
     backgroundColor: "#FEE",
