@@ -15,6 +15,7 @@ import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 import { PostureSegment } from "../lib/sessionHighlights";
 import { useIMUContext } from "../contexts/IMUContext";
 import { toLocalDateKey } from "../lib/dateKey";
+import { captureError, createThrottledErrorReporter } from "../lib/sentry";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ function totalMs(map: StateTimeMap): number {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 const TICK_MS = 5_000;
+const reportPeriodicSaveError = createThrottledErrorReporter();
 
 // Mounted once by SessionStatsProvider, never by individual screens.
 export function useSessionStatsTracker(currentState: DeskPostureState | undefined) {
@@ -131,6 +133,7 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
         setWeekStats(mergeMaps(...Object.values(dayMap)));
       } catch (e) {
         console.warn("[useSessionStats] Failed to load:", e);
+        captureError(e, "desk-stats-load");
       }
     };
     load();
@@ -170,7 +173,7 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
       AsyncStorage.setItem(
         STATS_KEY_PREFIX + todayDK,
         JSON.stringify(todayLive)
-      ).catch(() => {});
+      ).catch((error) => reportPeriodicSaveError(error, "desk-stats-save"));
 
       // Keep IMUContext's state totals ref in sync so endSession can write them
       setSessionStateTotals(sessionRef.current);
@@ -203,7 +206,8 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
     if (prevSessionStartRef.current !== null) {
       const todayFinal = mergeMaps(persistedTodayRef.current, sessionRef.current);
       const todayDK = toLocalDateKey();
-      AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal)).catch(() => {});
+      AsyncStorage.setItem(STATS_KEY_PREFIX + todayDK, JSON.stringify(todayFinal))
+        .catch((error) => captureError(error, "desk-stats-final-save"));
       persistedTodayRef.current = todayFinal;
       sessionRef.current = {};
       sessionTimelineRef.current = [];

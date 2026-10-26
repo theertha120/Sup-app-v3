@@ -25,6 +25,7 @@
 
 import { BleManager, Device, Characteristic, BleError } from "react-native-ble-plx";
 import { Platform, PermissionsAndroid } from "react-native";
+import { captureError } from "../lib/sentry";
 
 // ── UUIDs ─────────────────────────────────────────────────────────────────────
 const SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9a34fb";
@@ -297,6 +298,7 @@ class BLEService {
 
     } catch (e: any) {
       console.error(`[BLE] Failed to connect ${slot} s'pot:`, e.message);
+      captureError(e, "spot-connect", { slot });
       this.onStatus?.(slot, {
         connected: false, deviceId: null, deviceName: null,
       });

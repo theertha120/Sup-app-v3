@@ -26,17 +26,23 @@ function fixture() {
   let ref;
   let top = null, bottom = null;
   const stored = new Map();
+  const reports = [];
   const reads = new Map();
   let pendingWrite;
   let cleanup;
+  let failRead = false, failWrite = false;
   const storage = {
-    getItem: key => reads.get(key)?.promise ?? Promise.resolve(stored.get(key) ?? null),
-    setItem: async (key, value) => { stored.set(key, value); await pendingWrite?.promise; },
+    getItem: key => failRead ? Promise.reject(new Error('storage read failed')) : reads.get(key)?.promise ?? Promise.resolve(stored.get(key) ?? null),
+    setItem: async (key, value) => {
+      if (failWrite) throw new Error('storage write failed');
+      stored.set(key, value); await pendingWrite?.promise;
+    },
   };
   function render(userId) {
     const owner = renderOwner(initial => ref ??= { current: initial }, userId);
     const deps = {
       ...owner, userId, AsyncStorage: storage,
+      captureError: (...args) => reports.push(args),
       storageKey: (slot, id) => `${id}:${slot}`,
       setSavedTop: value => { top = value; }, setSavedBottom: value => { bottom = value; },
       makeDisplayName: slot => `${userId}_${slot}`,
@@ -45,7 +51,8 @@ function fixture() {
     return { load: compile(effect), save: compile(save) };
   }
   return {
-    stored, reads, render,
+    stored, reads, render, reports,
+    failReads: () => { failRead = true; }, failWrites: () => { failWrite = true; },
     switch(userId) { const account = render(userId); cleanup?.(); cleanup = account.load(); return account; },
     unmount() { cleanup?.(); },
     state: () => [top, bottom],
@@ -109,4 +116,18 @@ test('current account saves still update the screen normally', async () => {
   await a.save('top', device('top'));
   await a.save('bottom', device('bottom'));
   assert.deepEqual(f.state().map(d => d.id), ['top', 'bottom']);
+});
+
+test('saved-device load and save failures report their operation once without device identifiers', async () => {
+  const f = fixture();
+  f.failReads();
+  const a = f.switch('a'); await settle();
+  assert.equal(f.reports.length, 1);
+  assert.equal(f.reports[0][1], 'spot-device-load');
+  f.failWrites();
+  await a.save('top', device('private-device-id'));
+  assert.equal(f.reports.length, 2);
+  assert.equal(f.reports[1][1], 'spot-device-save');
+  assert.deepEqual(f.reports[1][2], { slot: 'top' });
+  assert.deepEqual(f.state(), [null, null]);
 });

@@ -1,4 +1,5 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
+import { captureError } from "@/src/lib/sentry";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 /**
  * sensor-setup.tsx
@@ -215,6 +216,7 @@ export default function SensorSetupScreen() {
         setSavedBottom(bottom);
       } catch (e) {
         console.warn("[Setup] Failed to load saved s'pots:", e);
+        captureError(e, "spot-device-load");
       }
     };
     load();
@@ -247,6 +249,7 @@ export default function SensorSetupScreen() {
       else                setSavedBottom(saved);
     } catch (e) {
       console.warn("[Setup] Failed to save s'pot identity:", e);
+      captureError(e, "spot-device-save", { slot });
     }
   };
 
@@ -273,6 +276,7 @@ export default function SensorSetupScreen() {
               if (sensor.state.connected) await disconnect(slot);
             } catch (e) {
               console.warn("[Setup] Failed to forget s'pot:", e);
+              captureError(e, "spot-device-forget", { slot });
             }
           },
         },
@@ -306,6 +310,7 @@ export default function SensorSetupScreen() {
               if (bottomSensor.state.connected) await disconnect("bottom");
             } catch (e) {
               console.warn("[Setup] Failed to forget s'pots:", e);
+              captureError(e, "spot-device-forget-all");
             }
           },
         },
