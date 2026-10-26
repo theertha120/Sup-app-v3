@@ -1,10 +1,9 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking, Image } from "react-native";
+import { StyleSheet, View, Text, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Linking } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
-import { useOnboarding } from "@/src/contexts/OnboardingContext";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -23,10 +22,11 @@ const AGE_PADDING = AGE_ITEM_HEIGHT * Math.floor(AGE_VISIBLE_ITEMS / 2);
 
 export default function FinalScreen() {
   const router = useRouter();
-  const { setAge: saveAgeToContext } = useOnboarding();
   const [gender, setGender] = useState("male");
   const [age, setAge] = useState(27);
   const [accepted, setAccepted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const ageScrollRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
@@ -121,27 +121,39 @@ export default function FinalScreen() {
 
       <PressFeedback
         style={[styles.nextBtn, !accepted && styles.nextBtnDisabled]}
+        disabled={saving}
         onPress={async () => {
-          if (!accepted) return;
-          saveAgeToContext(age);
+          if (!accepted || saving) return;
+          setSaving(true);
+          setError("");
           const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.from("profiles").update({
-              gender,
-              age,
-              onboarding: true,
-              archetype: "",
-              chronotype: "",
-              interoception: "",
-              elasticity: "",
-            }).eq("id", user.id);
+          const { error: updateError } = user
+            ? await supabase.from("profiles").update({
+                gender,
+                age,
+                onboarding: true,
+                // Onboarding quiz results — disabled with the quiz pages.
+                // archetype: "",
+                // chronotype: "",
+                // interoception: "",
+                // elasticity: "",
+              }).eq("id", user.id)
+            : { error: "no signed-in user" };
+          setSaving(false);
+          if (updateError) {
+            console.warn("[onboarding/final] failed to save details", updateError);
+            setError("couldn't save your details, check your connection and try again");
+            return;
           }
           router.replace("/(tabs)/home" as any);
           router.push("/tutorial/intro" as any);
         }}
       >
-        <Text style={styles.nextBtnText}>start your posture health journey</Text>
+        <Text style={styles.nextBtnText}>
+          {saving ? "saving..." : "start your posture health journey"}
+        </Text>
       </PressFeedback>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </LinearGradient>
   );
 }
@@ -152,14 +164,12 @@ const styles = StyleSheet.create({
     paddingTop: 125,
     paddingHorizontal: 24,
   },
-  backBtn: {
-    marginTop: 60,
-    marginBottom: 8,
-  },
-  backImage: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
+  errorText: {
+    color: "#c0392b",
+    fontSize: 14,
+    fontFamily: "Agrandir-Regular",
+    marginTop: 12,
+    textAlign: "center",
   },
   heading: {
     fontSize: 38,

@@ -1,6 +1,6 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text, TextInput, Image } from "react-native";
+import { StyleSheet, View, Text, TextInput } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
@@ -20,6 +20,8 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  // Code verified but the profile didn't save — the button retries the save.
+  const [saveFailed, setSaveFailed] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const [fontsLoaded] = useFonts({
@@ -56,38 +58,59 @@ export default function VerifyEmailScreen() {
     }
     setPendingSignup({ ...pendingSignup, password: "" });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("profiles").insert({
-        id: user.id,
-        name: pendingSignup.firstName,
-        last_name: pendingSignup.lastName,
-        username: pendingSignup.username,
-        avatar_url: randomAvatarUrl(),
-        current_streak: 0,
-        weekly_avg_points: 0,
-        how_heard: answers.howHeard,
-        q1: answers.q1,
-        q2: answers.q2,
-        q3: answers.q3,
-        q4: answers.q4,
-        q5: answers.q5,
-        q6: answers.q6,
-      });
+    await saveProfile();
+  };
 
-      const def = createDefaultBehaviorProfile();
-      await supabase.from("user_profile").upsert({
-        id: user.id,
-        primary_goals: def.primaryGoals,
-        preferred_tones: def.preferredTones,
-        reminder_frequency: def.reminderFrequency,
-        active_time_start: def.activeTimeStart,
-        active_time_end: def.activeTimeEnd,
-        weekly_goals: def.weeklyGoals,
-      });
-    }
+  // The code is used up once verified, so a failed save retries only this
+  // part. Without a profile row, index.tsx signs the user out on next launch.
+  const saveProfile = async () => {
+    setVerifying(true);
+    setError("");
+
+    const fail = (err: unknown) => {
+      console.warn("[verify-email] failed to save profile", err);
+      setVerifying(false);
+      setSaveFailed(true);
+      setError("couldn't save your profile, check your connection and try again");
+    };
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return fail("no signed-in user");
+
+    const { error: profileError } = await supabase.from("profiles").insert({
+      id: user.id,
+      name: pendingSignup.firstName,
+      last_name: pendingSignup.lastName,
+      username: pendingSignup.username,
+      avatar_url: randomAvatarUrl(),
+      current_streak: 0,
+      weekly_avg_points: 0,
+      how_heard: answers.howHeard,
+      // Onboarding quiz answers — disabled with the quiz pages.
+      // q1: answers.q1,
+      // q2: answers.q2,
+      // q3: answers.q3,
+      // q4: answers.q4,
+      // q5: answers.q5,
+      // q6: answers.q6,
+    });
+    // 23505 = the row already exists, i.e. an earlier attempt saved it.
+    if (profileError && profileError.code !== "23505") return fail(profileError);
+
+    const def = createDefaultBehaviorProfile();
+    const { error: behaviorError } = await supabase.from("user_profile").upsert({
+      id: user.id,
+      primary_goals: def.primaryGoals,
+      preferred_tones: def.preferredTones,
+      reminder_frequency: def.reminderFrequency,
+      active_time_start: def.activeTimeStart,
+      active_time_end: def.activeTimeEnd,
+      weekly_goals: def.weeklyGoals,
+    });
+    if (behaviorError) return fail(behaviorError);
 
     setVerifying(false);
+    setSaveFailed(false);
     router.push("/onboarding/final" as any);
   };
 
@@ -129,13 +152,23 @@ export default function VerifyEmailScreen() {
           style={styles.codeInput}
         />
 
-        <PressFeedback
-          style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
-          onPress={() => handleVerify(code)}
-          disabled={code.length !== CODE_LENGTH || verifying}
-        >
-          <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
-        </PressFeedback>
+        {saveFailed ? (
+          <PressFeedback
+            style={[styles.verifyBtn, verifying && styles.verifyBtnDisabled]}
+            onPress={saveProfile}
+            disabled={verifying}
+          >
+            <Text style={styles.verifyBtnText}>{verifying ? "saving..." : "try again"}</Text>
+          </PressFeedback>
+        ) : (
+          <PressFeedback
+            style={[styles.verifyBtn, (code.length !== CODE_LENGTH || verifying) && styles.verifyBtnDisabled]}
+            onPress={() => handleVerify(code)}
+            disabled={code.length !== CODE_LENGTH || verifying}
+          >
+            <Text style={styles.verifyBtnText}>{verifying ? "verifying..." : "verify"}</Text>
+          </PressFeedback>
+        )}
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
@@ -148,14 +181,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 60,
     paddingHorizontal: 24,
-  },
-  backBtn: {
-    marginBottom: 12,
-  },
-  backImage: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
   },
   content: {
     flex: 1,

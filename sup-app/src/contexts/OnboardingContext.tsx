@@ -24,7 +24,6 @@ interface PendingSignup {
 
 interface OnboardingContextType {
   answers: OnboardingAnswers;
-  age: number;
   pendingSignup: PendingSignup;
   setHowHeard: (v: string) => void;
   setQ1: (v: string) => void;
@@ -33,9 +32,7 @@ interface OnboardingContextType {
   setQ4: (v: string) => void;
   setQ5: (v: string) => void;
   setQ6: (v: string) => void;
-  setAge: (v: number) => void;
   setPendingSignup: (v: PendingSignup) => void;
-  reset: () => void;
 }
 
 const defaultAnswers: OnboardingAnswers = {
@@ -50,7 +47,6 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(undef
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [answers, setAnswers] = useState<OnboardingAnswers>(defaultAnswers);
-  const [age, setAge] = useState(27);
   const [pendingSignup, setPendingSignup] = useState<PendingSignup>(defaultPendingSignup);
 
   const set = (field: keyof OnboardingAnswers) => (v: string) =>
@@ -59,7 +55,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   return (
     <OnboardingContext.Provider value={{
       answers,
-      age,
       pendingSignup,
       setHowHeard: set("howHeard"),
       setQ1: set("q1"),
@@ -68,9 +63,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       setQ4: set("q4"),
       setQ5: set("q5"),
       setQ6: set("q6"),
-      setAge,
       setPendingSignup,
-      reset: () => { setAnswers(defaultAnswers); setAge(27); setPendingSignup(defaultPendingSignup); },
     }}>
       {children}
     </OnboardingContext.Provider>

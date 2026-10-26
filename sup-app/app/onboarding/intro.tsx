@@ -1,12 +1,11 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
-import React, { useRef, useCallback, useEffect } from "react";
+import React, { useRef, useCallback } from "react";
 import { Animated, StyleSheet, Text, View, Image } from "react-native";
 import { useFonts } from "expo-font";
 
 import { useFocusEffect } from "expo-router";
 import { router } from "expo-router";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
-import { supabase } from "../../src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 
 export default function IntroScreen() {
@@ -16,16 +15,7 @@ export default function IntroScreen() {
   });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) return;
-      supabase
-        .from("profiles")
-        .update({ onboarding: true })
-        .eq("id", session.user.id);
-    });
-  }, []);
+  const { stopRegistration } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -39,8 +29,6 @@ export default function IntroScreen() {
   );
 
   if (!fontsLoaded) return null;
-
-  const { stopRegistration } = useAuth();
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
