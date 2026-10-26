@@ -4,14 +4,14 @@ export type LeaderboardView = LeaderboardPage & {
   pending: boolean; error: string | null; updatedAt: number | null;
 };
 export const EMPTY_BOARD: LeaderboardView = { entries: [], ownEntry: null, total: 0, friendCount: 0, pending: false, error: null, updatedAt: null };
-export type LeaderboardSource = (query: LeaderboardQuery, offset: number, limit: number, force: boolean) => Promise<LeaderboardPage>;
+export type LeaderboardSource = (query: LeaderboardQuery, offset: number, limit: number, force: boolean, signal: AbortSignal) => Promise<LeaderboardPage>;
 
 /** One account owns this cache. Screens share requests and retain good data on failure. */
 export class LeaderboardStore {
   private views = new Map<string, LeaderboardView>();
   private requests = new Map<string, Promise<void>>();
   private active = true;
-  constructor(private source: LeaderboardSource, private changed: () => void, private now = Date.now) {}
+  constructor(private source: LeaderboardSource, private changed: () => void, private now = Date.now, private options: { timeoutMs?: number; reportError?: (error: unknown) => void } = {}) {}
   activate() { this.active = true; }
   dispose() { this.active = false; }
   get(query: LeaderboardQuery) { return this.views.get(leaderboardKey(query)) ?? EMPTY_BOARD; }
@@ -40,8 +40,14 @@ export class LeaderboardStore {
     const offset = replace ? 0 : current.entries.length;
     const limit = Math.max(1, Math.min(LEADERBOARD_PAGE_SIZE, replace ? count : count - offset));
     this.update(query, { pending: true, error: null });
-    const request = Promise.resolve().then(async () => {
-      const page = await this.source(query, offset, limit, force);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { controller.abort(); reject(new Error("Leaderboard request timed out")); }, this.options.timeoutMs ?? 15_000);
+    });
+    const operation = Promise.resolve().then(async () => {
+      const page = await this.source(query, offset, limit, force, controller.signal);
+      if (controller.signal.aborted) return;
       if (!page.entries.length && offset < page.total) throw new Error("Incomplete leaderboard page");
       const existing = new Set(replace ? [] : current.entries.map((entry) => entry.user.id));
       for (const entry of page.entries) {
@@ -49,8 +55,11 @@ export class LeaderboardStore {
         existing.add(entry.user.id);
       }
       this.update(query, { ...page, entries: replace ? page.entries : [...current.entries, ...page.entries], updatedAt: this.now() });
-    }).catch(() => this.update(query, { error: "couldn’t update the leaderboard — tap refresh to try again." }))
-      .finally(() => { this.requests.delete(key); this.update(query, { pending: false }); });
+    });
+    const request = Promise.race([operation, deadline]).catch((error) => {
+      this.update(query, { error: "couldn’t update the leaderboard — tap refresh to try again." });
+      try { this.options.reportError?.(error); } catch { /* Reporting must not block recovery. */ }
+    }).finally(() => { clearTimeout(timer); this.requests.delete(key); this.update(query, { pending: false }); });
     this.requests.set(key, request);
     await request;
   }

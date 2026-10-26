@@ -106,3 +106,87 @@ test('roster requests no longer make an auth call or wait for local avatars', as
   const users = await fetchLeaderboardByStreak();
   assert.equal(users[0].avatar, 'public-avatar');
 });
+
+function sourceFor(supabase) {
+  return load('../src/services/social/leaderboardPageService.ts', {
+    '@/src/lib/supabase': { supabase }, '../../lib/dateKey': dates, './leaderboardPeriodService': period,
+  });
+}
+function fallbackDatabase() {
+  const profiles = Array.from({ length: 1205 }, (_, i) => ({ id: `u${String(i).padStart(4, '0')}`, name: `User ${i}`, username: null, avatar_url: null }));
+  const rows = profiles.flatMap((p, i) => Array.from({ length: 7 }, (_, day) => ({ user_id: p.id, date: `2026-10-${20 + day}`, state_totals: i ? { upright: i * 60000 } : null })));
+  const tables = { profiles, posture_daily: rows, friend_requests: [{ id: 'f', from_user_id: 'u0000', to_user_id: 'u0001', status: 'accepted' }] };
+  const calls = [];
+  let rpcError = { code: 'PGRST202' };
+  return { calls, rpcError: (value) => { rpcError = value; }, database: {
+    rpc: (_name, args) => ({ abortSignal() { return this; }, then(resolve) { calls.push(['rpc', args]); resolve({ error: rpcError }); } }),
+    from: (table) => {
+      let current = tables[table];
+      let offset = 0;
+      const builder = {
+        select: (columns) => { calls.push([table, columns]); return builder; }, order: () => builder, abortSignal: () => builder,
+        eq: (key, value) => { current = current.filter((row) => row[key] === value); return builder; },
+        gte: (key, value) => { current = current.filter((row) => row[key] >= value); return builder; },
+        lte: (key, value) => { current = current.filter((row) => row[key] <= value); return builder; },
+        or: () => builder, range: (start) => { offset = start; return builder; },
+        then: (resolve) => resolve({ data: current.slice(offset, offset + 137), error: null }),
+      };
+      return builder;
+    },
+  } };
+}
+
+test('pagination finishes even when server pages are shorter than requested', async () => {
+  const { readLeaderboardPages } = sourceFor({});
+  const rows = Array.from({ length: 1100 }, (_, i) => i);
+  assert.deepEqual(await readLeaderboardPages(async (offset) => ({ data: rows.slice(offset, offset + 37), error: null })), rows);
+  await assert.rejects(readLeaderboardPages(async (offset) => offset ? { data: null, error: Error('offline') } : { data: [1], error: null }), /offline/);
+});
+
+test('compatibility reads preserve scoring and rank more than 1000 users completely', async () => {
+  const db = fallbackDatabase();
+  const source = sourceFor(db.database).createLeaderboardSource('u0000');
+  const signal = new AbortController().signal;
+  const page = await source({ ...query, period: 'week' }, 0, 5, false, signal);
+  assert.equal(page.total, 1205);
+  assert.equal(page.ownEntry.rank, 1205);
+  assert.equal(page.entries[0].avgSupScore, 99.9);
+  assert.equal(page.entries[0].sessionsCounted, 7);
+  const before = db.calls.length;
+  const friends = await source({ ...query, period: 'week', scope: 'friends' }, 0, 5, false, signal);
+  assert.equal(friends.total, 2);
+  assert.equal(db.calls.length, before);
+  assert.ok(db.calls.filter(([table]) => table === 'posture_daily').every(([, columns]) => columns === 'user_id, date, state_totals'));
+});
+
+test('server requests are bounded and permission errors are not hidden by fallback', async () => {
+  let args;
+  const database = { rpc: (name, values) => {
+    assert.equal(name, 'community_leaderboard_page'); args = values;
+    return { abortSignal() { return this; }, then(resolve) { resolve({ data: { entries: [], own: null, total: 0, friends: 0 }, error: null }); } };
+  } };
+  await sourceFor(database).createLeaderboardSource('me')(query, 0, 5, false, new AbortController().signal);
+  assert.equal(args.p_limit, 5);
+  assert.equal(args.p_start, query.dateKey);
+  const db = fallbackDatabase(); db.rpcError({ code: '42501' });
+  await assert.rejects(sourceFor(db.database).createLeaderboardSource('me')(query, 0, 5, false, new AbortController().signal), (error) => error.code === '42501');
+  assert.equal(db.calls.length, 1);
+});
+
+test('a stalled request releases its lock and a late result cannot replace the retry', async () => {
+  let resolve;
+  let calls = 0;
+  let signal;
+  const page = (i) => ({ entries: [entry(i)], ownEntry: null, total: 1, friendCount: 0 });
+  const store = new LeaderboardStore((_query, _offset, _limit, _force, current) => {
+    signal = current;
+    return ++calls === 1 ? new Promise((done) => { resolve = done; }) : Promise.resolve(page(1));
+  }, () => {}, Date.now, { timeoutMs: 5 });
+  await store.ensure(query, 5);
+  assert.equal(signal.aborted, true);
+  assert.equal(store.get(query).pending, false);
+  await store.ensure(query, 5);
+  resolve(page(0));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(store.get(query).entries[0].user.id, 'u1');
+});

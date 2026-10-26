@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "./AuthContext";
+import { captureError } from "../lib/sentry";
 import { toLocalDateKey } from "../lib/dateKey";
 import { createLeaderboardSource } from "../services/social/leaderboardPageService";
 import { EMPTY_BOARD, LeaderboardStore } from "../services/social/leaderboardStore";
@@ -14,7 +15,7 @@ function useAccountBoard() {
   const [, render] = useState(0);
   const [avatar, setAvatar] = useState<{ userId: string; value: string | undefined; override: boolean } | null>(null);
   const store = useMemo(() => userId && isAuthenticated
-    ? new LeaderboardStore(createLeaderboardSource(userId), () => render((n) => n + 1)) : null, [userId, isAuthenticated]);
+    ? new LeaderboardStore(createLeaderboardSource(userId), () => render((n) => n + 1), Date.now, { reportError: (error) => captureError(error, "community-leaderboard") }) : null, [userId, isAuthenticated]);
   useEffect(() => { store?.activate(); return () => store?.dispose(); }, [store]);
   useEffect(() => {
     if (!userId || !isAuthenticated) return;
