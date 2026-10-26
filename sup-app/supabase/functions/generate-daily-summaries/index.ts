@@ -348,10 +348,9 @@ async function processBatch(
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 //
-// Must be scheduled to run EVERY hour (on the hour). Each run picks the users
-// whose own local time is currently their chosen daily_run hour, using the
-// timezone_offset_minutes the app saves — so "08:00" means 8am wherever the
-// user is, not 8am Singapore time.
+// The active handler (Deno.serve further down) generates every user's summary
+// once a day at 8am Singapore time (DAILY_RUN_HOUR_SGT), dated by the SGT day.
+// It is not per-user local time: timezone_offset_minutes is not used for this.
 
 // OLD: per-user scheduled run — matched the cron's SGT hour against each
 // user_profile.daily_run. Disabled: the summary now runs at 8am SGT for all users.

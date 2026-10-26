@@ -122,10 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Keep user_profile.timezone_offset_minutes current — the server-side daily
-  // AI summary job uses it to work out each user's local hour and date. Saved
-  // on launch and whenever the app returns to the foreground (not just at
-  // login), so it follows users who travel or cross a daylight-saving change.
+  // Keep user_profile.timezone_offset_minutes current. Nothing reads it right
+  // now — generate-daily-summaries runs at a fixed 8am Singapore time — but it
+  // is kept so the daily insight can later move to each user's own 8am (the
+  // commented-out handler there already does this). Saved on launch and
+  // whenever the app returns to the foreground (not just at login), so it
+  // follows users who travel or cross a daylight-saving change.
   useEffect(() => {
     if (!userId) return;
     autoDetectAndSaveTimezone(userId);
