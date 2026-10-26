@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useAuth } from "./AuthContext";
 
 export type TutorialStep =
   | "goals-tip"
@@ -41,6 +42,13 @@ const TutorialContext = createContext<TutorialContextType | undefined>(undefined
 
 export function TutorialProvider({ children }: { children: ReactNode }) {
   const [tutorialStep, setTutorialStep] = useState<TutorialStep>(null);
+  const { userId } = useAuth();
+
+  // End any tutorial in progress on logout or account switch, so its tips
+  // don't stay on the logged-out screens or carry over to the next account.
+  useEffect(() => {
+    setTutorialStep(null);
+  }, [userId]);
 
   return (
     <TutorialContext.Provider value={{

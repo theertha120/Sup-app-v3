@@ -7,19 +7,16 @@ import { BrandAlert } from "@/src/components/ui/BrandAlert";
 
 interface TutorialActionsProps {
   children?: ReactNode;
-  onBeforeSkip?: () => void;
-  skipDisabled?: boolean;
   /** Only show "exit" — used by "go to" prompts, where there's nothing to skip. */
   hideSkip?: boolean;
 }
 
-export default function TutorialActions({ children, onBeforeSkip, skipDisabled = false, hideSkip = false }: TutorialActionsProps) {
+export default function TutorialActions({ children, hideSkip = false }: TutorialActionsProps) {
   const { tutorialStep, setTutorialStep, dismissTutorial } = useTutorial();
   const [confirmExit, setConfirmExit] = useState(false);
 
   const handleSkip = () => {
-    if (skipDisabled || tutorialStep === null) return;
-    onBeforeSkip?.();
+    if (tutorialStep === null) return;
 
     // Skip the whole page, including any remaining tips on that page.
     // Every page is reached via the header or navbar, so skipping shows the
@@ -74,7 +71,7 @@ export default function TutorialActions({ children, onBeforeSkip, skipDisabled =
       {children}
       <View style={[styles.row, hideSkip && styles.rowExitOnly]}>
         {!hideSkip && (
-          <PressFeedback feedback="link" accessibilityRole="button" accessibilityLabel="Skip page" onPress={handleSkip} disabled={skipDisabled} style={styles.button}>
+          <PressFeedback feedback="link" accessibilityRole="button" accessibilityLabel="Skip page" onPress={handleSkip} style={styles.button}>
             <Text style={styles.text}>skip page</Text>
           </PressFeedback>
         )}
