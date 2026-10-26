@@ -1,9 +1,9 @@
 import { LEADERBOARD_PAGE_SIZE, leaderboardKey, type LeaderboardPage, type LeaderboardQuery } from "./leaderboardData";
 
 export type LeaderboardView = LeaderboardPage & {
-  pending: boolean; error: string | null; updatedAt: number | null;
+  pending: boolean; loadingMore: boolean; error: string | null; updatedAt: number | null;
 };
-export const EMPTY_BOARD: LeaderboardView = { entries: [], ownEntry: null, total: 0, friendCount: 0, pending: false, error: null, updatedAt: null };
+export const EMPTY_BOARD: LeaderboardView = { entries: [], ownEntry: null, total: 0, friendCount: 0, pending: false, loadingMore: false, error: null, updatedAt: null };
 export type LeaderboardSource = (query: LeaderboardQuery, offset: number, limit: number, force: boolean, signal: AbortSignal) => Promise<LeaderboardPage>;
 
 /** One account owns this cache. Screens share requests and retain good data on failure. */
@@ -39,7 +39,7 @@ export class LeaderboardStore {
     if (!replace && current.entries.length >= Math.min(count, current.total)) return;
     const offset = replace ? 0 : current.entries.length;
     const limit = Math.max(1, Math.min(LEADERBOARD_PAGE_SIZE, replace ? count : count - offset));
-    this.update(query, { pending: true, error: null });
+    this.update(query, { pending: true, loadingMore: !replace, error: null });
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const deadline = new Promise<never>((_, reject) => {
@@ -59,7 +59,7 @@ export class LeaderboardStore {
     const request = Promise.race([operation, deadline]).catch((error) => {
       this.update(query, { error: "couldn’t update the leaderboard — tap refresh to try again." });
       try { this.options.reportError?.(error); } catch { /* Reporting must not block recovery. */ }
-    }).finally(() => { clearTimeout(timer); this.requests.delete(key); this.update(query, { pending: false }); });
+    }).finally(() => { clearTimeout(timer); this.requests.delete(key); this.update(query, { pending: false, loadingMore: false }); });
     this.requests.set(key, request);
     await request;
   }

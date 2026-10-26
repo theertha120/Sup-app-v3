@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Animated,
 } from "react-native";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useEffect } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
@@ -48,9 +48,13 @@ export default function FullLeaderboardScreen() {
 
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [scope, setScope] = useState<Scope>("everyone");
+  const listRef = useRef<FlatList<LeaderboardEntry>>(null);
+  useEffect(() => { listRef.current?.scrollToOffset({ offset: 0, animated: false }); }, [scope, period]);
 
   const {
     entries,
+    pending,
+    loadingMore,
     total,
     loadMore,
     isLoading,
@@ -72,13 +76,32 @@ export default function FullLeaderboardScreen() {
     }, [fadeAnim])
   );
 
+  const renderItem = useCallback(({ item }: { item: LeaderboardEntry }) =>
+    <LeaderboardRow rank={item.rank} entry={item} isCurrentUser={item.user.id === userId} />, [userId]);
+  const showFriends = scope !== "friends" || friendCount > 0;
+  const emptyMessage = isLoading ? "Loading leaderboard…" : error
+    ?? (!showFriends ? "you haven't added any friends yet — add some from the profile menu to see them here." : "No posture data for this period yet.");
   if (!fontsLoaded) return null;
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <FlatList
+        ref={listRef}
+        style={styles.container}
+        data={showFriends ? entries : []}
+        keyExtractor={(entry) => entry.user.id}
+        renderItem={renderItem}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        onEndReached={() => { if (!pending && !error && entries.length < total) void loadMore(); }}
+        onEndReachedThreshold={0.5}
+        refreshing={isRefreshing}
+        onRefresh={refresh}
+        ListHeaderComponent={<>
         <HeaderBar />
 
         <View style={styles.sectionRow}>
@@ -133,35 +156,16 @@ export default function FullLeaderboardScreen() {
           ))}
         </View>
 
-        {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
-        {isLoading ? (
-          <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error && !entries.length ? (
-          <Text style={styles.loadingText}>{error}</Text>
-        ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
-          <Text style={styles.loadingText}>
-            you haven't added any friends yet — add some from the profile menu to see them here.
-          </Text>
-        ) : entries.length === 0 ? (
-          <Text style={styles.loadingText}>No posture data for this period yet.</Text>
-        ) : (
-          <View style={styles.list}>
-            {entries.map((entry) => (
-              <LeaderboardRow
-                key={entry.user.id}
-                rank={entry.rank}
-                entry={entry}
-                isCurrentUser={userId ? entry.user.id === userId : false}
-              />
-            ))}
-          </View>
-        )}
-
-        {entries.length < total && <PressFeedback onPress={loadMore}>
-          <Text style={styles.loadingText}>load more</Text>
-        </PressFeedback>}
-        <View style={{ height: 32 }} />
-      </ScrollView>
+          {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
+        </>}
+        ListEmptyComponent={<Text style={styles.loadingText}>{emptyMessage}</Text>}
+        ListFooterComponent={<View style={{ paddingBottom: 32 }}>
+          {loadingMore && <Text style={styles.loadingText}>Loading more…</Text>}
+          {error && entries.length > 0 && entries.length < total && <PressFeedback onPress={loadMore}>
+            <Text style={styles.loadingText}>retry loading more</Text>
+          </PressFeedback>}
+        </View>}
+      />
     </Animated.View>
   );
 }
@@ -172,7 +176,7 @@ interface LeaderboardRowProps {
   isCurrentUser: boolean;
 }
 
-function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
+const LeaderboardRow = React.memo(function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
   const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
   return (
     <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
@@ -197,12 +201,12 @@ function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
-        s'up score: {entry.avgSupScore.toFixed(1)}
+        s&apos;up score: {entry.avgSupScore.toFixed(1)}
         </Text>
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -270,10 +274,8 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
 
-  list: {
-    marginHorizontal: 20,
-  },
   row: {
+    marginHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",

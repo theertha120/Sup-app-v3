@@ -61,6 +61,6 @@ export function useLeaderboard(scope: LeaderboardScope, period: LeaderboardPerio
   const entries = useMemo(() => view.entries.map((entry) => decorate(entry)!), [view.entries, decorate]);
   return { ...view, entries, ownEntry: decorate(view.ownEntry), refresh, loadMore,
     isLoading: !!store && view.updatedAt === null && !view.error,
-    isRefreshing: view.pending && view.updatedAt !== null,
+    isRefreshing: view.pending && !view.loadingMore && view.updatedAt !== null,
     lastUpdatedAt: view.updatedAt };
 }

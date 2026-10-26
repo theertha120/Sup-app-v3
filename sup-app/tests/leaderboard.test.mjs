@@ -190,3 +190,38 @@ test('a stalled request releases its lock and a late result cannot replace the r
   await Promise.resolve(); await Promise.resolve();
   assert.equal(store.get(query).entries[0].user.id, 'u1');
 });
+
+function renderFull(view, fonts = true) {
+  const source = ts.createSourceFile('full.tsx', readFileSync(new URL('../app/leaderboard-full.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const screen = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'FullLeaderboardScreen');
+  const deps = {
+    React: { createElement: (type, props, ...children) => ({ type, props, children }) },
+    useState: (value) => [value, () => {}], useRef: (current) => ({ current }), useCallback: (fn) => fn, useEffect: (fn) => fn(),
+    useAuth: () => ({ userId: 'u9999' }), useLocalSearchParams: () => ({}), useFonts: () => [fonts], useFocusEffect: (fn) => fn(),
+    useLeaderboard: () => view, require: () => 1,
+    Animated: { Value: class { setValue() {} }, timing: () => ({ start() {} }), View: 'AnimatedView' },
+    View: 'View', Text: 'Text', FlatList: 'FlatList', PressFeedback: 'PressFeedback', Ionicons: 'Ionicons',
+    HeaderBar: 'HeaderBar', RefreshButton: 'RefreshButton', BackgroundBlobs: 'BackgroundBlobs', LeaderboardRow: 'LeaderboardRow',
+    styles: {}, PRIMARY_TEXT: '#000', PERIODS: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }],
+  };
+  const js = ts.transpile(screen.getText(source).replace('export default ', ''), { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 });
+  return new Function(...Object.keys(deps), `${js}; return FullLeaderboardScreen();`)(...Object.values(deps));
+}
+function findNode(tree, type) {
+  if (!tree) return null;
+  if (Array.isArray(tree)) { for (const item of tree) { const found = findNode(item, type); if (found) return found; } }
+  if (tree.type === type) return tree;
+  return tree.children ? findNode(tree.children, type) : null;
+}
+test('the full leaderboard virtualizes a long list and fetches near the end', () => {
+  let more = 0;
+  const entries = Array.from({ length: 10000 }, (_, i) => entry(i));
+  const list = findNode(renderFull({ entries, total: 12000, pending: false, friendCount: 1, error: null, loadMore: () => more++ }), 'FlatList');
+  assert.ok(list);
+  assert.equal(list.props.data, entries);
+  assert.equal(list.props.initialNumToRender, 10);
+  assert.equal(list.children.length, 0);
+  assert.equal(list.props.renderItem({ item: entries[9999] }).props.isCurrentUser, true);
+  list.props.onEndReached();
+  assert.equal(more, 1);
+});
