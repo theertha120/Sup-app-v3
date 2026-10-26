@@ -1,13 +1,12 @@
+import { CommunityText as Text, CommunityFonts } from "@/src/components/ui/CommunityTypography";
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import {
   View,
-  Text,
   StyleSheet,
-  ScrollView,
-  Animated,
+  FlatList,
 } from "react-native";
-import React, { useCallback, useRef, useState } from "react";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useRef, useState, useEffect } from "react";
+import { router, useLocalSearchParams } from "expo-router";
 import { useFonts } from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 import HeaderBar from "../src/components/ui/HeaderBar";
@@ -21,6 +20,8 @@ import type {
 } from "../src/services/social/leaderboardPeriodService";
 import { displayName } from "../src/utils/displayName";
 import { UserSupsonaAvatar } from "../src/components/supsona/SupsonaAvatar";
+
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
 const PRIMARY_TEXT = "#1D014A";
 
@@ -39,8 +40,6 @@ export default function FullLeaderboardScreen() {
       ? (params.period as LeaderboardPeriod)
       : "week";
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
   const [fontsLoaded] = useFonts({
     "Agrandir-Regular": require("../assets/fonts/Agrandir-Regular.otf"),
     "Agrandir-GrandHeavy": require("../assets/fonts/Agrandir-GrandHeavy.otf"),
@@ -48,42 +47,49 @@ export default function FullLeaderboardScreen() {
 
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [scope, setScope] = useState<Scope>("everyone");
+  const listRef = useRef<FlatList<LeaderboardEntry>>(null);
+  useEffect(() => { listRef.current?.scrollToOffset({ offset: 0, animated: false }); }, [scope, period]);
 
   const {
-    getEntries,
+    entries,
+    pending,
+    loadingMore,
+    total,
+    loadMore,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
+  } = useLeaderboard(scope, period);
 
-  // Both toggles read the cache loaded at login, so switching period or scope
-  // is instant and costs no network call.
-  const entries: LeaderboardEntry[] = getEntries(scope, period);
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
-  );
-
-  if (!fontsLoaded) return null;
+  const renderItem = useCallback(({ item }: { item: LeaderboardEntry }) =>
+    <LeaderboardRow rank={item.rank} entry={item} isCurrentUser={item.user.id === userId} />, [userId]);
+  const showFriends = scope !== "friends" || friendCount > 0;
+  const emptyMessage = isLoading ? "Loading leaderboard…" : error
+    ?? (!showFriends ? "you haven't added any friends yet — add some from the profile menu to see them here." : "No posture data for this period yet.");
 
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <CommunityFonts.Provider value={fontsLoaded}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <FlatList
+        ref={listRef}
+        style={styles.container}
+        data={showFriends ? entries : []}
+        keyExtractor={(entry) => entry.user.id}
+        renderItem={renderItem}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        onEndReached={() => { if (!pending && !error && entries.length < total) void loadMore(); }}
+        onEndReachedThreshold={0.5}
+        refreshing={isRefreshing}
+        onRefresh={refresh}
+        ListHeaderComponent={<>
         <HeaderBar />
 
         <View style={styles.sectionRow}>
@@ -138,32 +144,18 @@ export default function FullLeaderboardScreen() {
           ))}
         </View>
 
-        {isLoading ? (
-          <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
-          <Text style={styles.loadingText}>{error}</Text>
-        ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
-          <Text style={styles.loadingText}>
-            you haven't added any friends yet — add some from the profile menu to see them here.
-          </Text>
-        ) : entries.length === 0 ? (
-          <Text style={styles.loadingText}>No posture data for this period yet.</Text>
-        ) : (
-          <View style={styles.list}>
-            {entries.map((entry) => (
-              <LeaderboardRow
-                key={entry.user.id}
-                rank={entry.rank}
-                entry={entry}
-                isCurrentUser={userId ? entry.user.id === userId : false}
-              />
-            ))}
-          </View>
-        )}
-
-        <View style={{ height: 32 }} />
-      </ScrollView>
-    </Animated.View>
+          {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
+        </>}
+        ListEmptyComponent={<Text style={styles.loadingText}>{emptyMessage}</Text>}
+        ListFooterComponent={<View style={{ paddingBottom: 32 }}>
+          {loadingMore && <Text style={styles.loadingText}>Loading more…</Text>}
+          {error && entries.length > 0 && entries.length < total && <PressFeedback onPress={loadMore}>
+            <Text style={styles.loadingText}>retry loading more</Text>
+          </PressFeedback>}
+        </View>}
+      />
+    </View>
+    </CommunityFonts.Provider>
   );
 }
 
@@ -173,7 +165,7 @@ interface LeaderboardRowProps {
   isCurrentUser: boolean;
 }
 
-function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
+const LeaderboardRow = React.memo(function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
   const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
   return (
     <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
@@ -198,12 +190,12 @@ function LeaderboardRow({ rank, entry, isCurrentUser }: LeaderboardRowProps) {
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
-        s'up score: {entry.avgSupScore.toFixed(1)}
+        s&apos;up score: {entry.avgSupScore.toFixed(1)}
         </Text>
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -271,10 +263,8 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
 
-  list: {
-    marginHorizontal: 20,
-  },
   row: {
+    marginHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",

@@ -1,16 +1,14 @@
+import { CommunityText as Text, CommunityFonts } from "@/src/components/ui/CommunityTypography";
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
-  Animated,
-  Dimensions,
   Image,
 } from "react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HeaderBar from "@/src/components/ui/HeaderBar";
@@ -20,19 +18,14 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLeaderboard } from "@/src/contexts/LeaderboardContext";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
-import { supabase } from "../../src/lib/supabase";
-import ProfileModal from "../../src/components/modals/ProfileModal";
-import {
-  subscribeToProfileUpdates,
-  userProfileToUser,
-} from "../../src/services/user/profileService";
 import type { LeaderboardEntry } from "../../src/services/social/leaderboardPeriodService";
 import { displayName } from "@/src/utils/displayName";
 import { UserSupsonaAvatar } from "../../src/components/supsona/SupsonaAvatar";
 
 type Scope = "everyone" | "friends";
 
-const { width: SCREEN_W } = Dimensions.get("window");
+export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
+
 const PRIMARY_TEXT = "#1D014A";
 
 // Matches the floating tab bar (LiquidGlass): height 72, offset 25 from the
@@ -63,7 +56,6 @@ export default function LeaderboardScreen() {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, [tutorialStep]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollPaddingBottom = NAV_BAR_HEIGHT + NAV_BOTTOM_OFFSET + bottomInset + 16;
 
@@ -72,47 +64,27 @@ export default function LeaderboardScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
+  const [scope, setScope] = useState<Scope>("everyone");
   const {
-    getEntries,
+    entries,
+    ownEntry,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
-  const [scope, setScope] = useState<Scope>("everyone");
-
-  // A read-only slice of the cache loaded at login. Switching scope costs no
-  // network call, and focusing the tab no longer refetches.
-  const entries: LeaderboardEntry[] = getEntries(scope, SUMMARY_PERIOD);
-
-  useFocusEffect(
-    useCallback(() => {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
-  );
+  } = useLeaderboard(scope, SUMMARY_PERIOD, 5);
 
   const top3 = entries.slice(0, 3);
   const nextTwo = entries.slice(3, 5);
-  const ownIndex = userId ? entries.findIndex((e) => e.user.id === userId) : -1;
-  const ownEntry = ownIndex >= 0 ? entries[ownIndex] : undefined;
-  const showOwnRankCard = ownIndex >= 5;
-  const showLeaderboard = !isLoading && !error && entries.length > 0
+  const showOwnRankCard = !!ownEntry && !entries.slice(0, 5).some((entry) => entry.user.id === ownEntry.user.id);
+  const showLeaderboard = !isLoading && entries.length > 0
     && (scope !== "friends" || (friendCount ?? 0) > 0);
 
-  if (!fontsLoaded) return null;
-
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
+    <CommunityFonts.Provider value={fontsLoaded}>
+    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
       <BackgroundBlobs />
 
       <ScrollView
@@ -132,7 +104,7 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                see how your weekly points stack up against the community!
+                see how your daily score stacks up against the community!
               </Text>
               <TutorialActions>
                 <PressFeedback feedback="link" onPress={() => setTutorialStep("add-friends-tip")}>
@@ -168,16 +140,17 @@ export default function LeaderboardScreen() {
           ))}
         </View>
 
+        {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
+        ) : error && !entries.length ? (
           <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>
-            you haven't added any friends yet — add some from the profile menu to see them here.
+            you haven&apos;t added any friends yet — add some from the profile menu to see them here.
           </Text>
         ) : entries.length === 0 ? (
-          <Text style={styles.loadingText}>No posture data for this week yet.</Text>
+          <Text style={styles.loadingText}>No posture data for today yet.</Text>
         ) : (
           <>
             {/* ── Podium (top 3) ── */}
@@ -250,7 +223,8 @@ export default function LeaderboardScreen() {
           </PressFeedback>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
+    </CommunityFonts.Provider>
   );
 }
 

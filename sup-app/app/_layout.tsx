@@ -44,8 +44,7 @@ function RootLayout() {
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>
-        {/* Leaderboard data is fetched once per login and shared by both
-            leaderboard screens; refreshes are user-triggered. */}
+        {/* Leaderboard screens share a cache and request ranked views on demand. */}
         <LeaderboardProvider>
         {/* The signed-in user’s own posture history, fetched once per login. */}
         <PostureHistoryProvider>
