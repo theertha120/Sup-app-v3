@@ -10,6 +10,7 @@ import { colours } from "../../theme/colours";
 import { useFonts } from "expo-font";
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
 import HeaderBar from "@/src/components/ui/HeaderBar";
+import { useSessionStats } from "../../src/contexts/SessionStatsContext";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -18,7 +19,7 @@ import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/compon
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
-import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
+import { formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { useFocusEffect } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
@@ -422,7 +423,7 @@ export default function DeskScreen() {
   const shsLabel     = getScoreLabel(shs);
   const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
-  const { sessionStats, sessionTotalMs, getSessionTimeline } = useSessionStats(isTracking ? currentState : undefined);
+  const { sessionStats, sessionTotalMs, getSessionTimeline } = useSessionStats();
 
   const blobColor = updateHistory.length > 0
     ? INSIGHT_BORDER[updateHistory[0].color]

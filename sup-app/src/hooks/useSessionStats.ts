@@ -88,7 +88,8 @@ function totalMs(map: StateTimeMap): number {
 
 const TICK_MS = 5_000;
 
-export function useSessionStats(currentState: DeskPostureState | undefined) {
+// Mounted once by SessionStatsProvider, never by individual screens.
+export function useSessionStatsTracker(currentState: DeskPostureState | undefined) {
   const { userId } = useAuth();
   const { setSessionStateTotals, sessionStartTimeMs } = useIMUContext();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
