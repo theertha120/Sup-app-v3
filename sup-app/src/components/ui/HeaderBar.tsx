@@ -249,7 +249,8 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         {/* Wordmark */}
         <Image
           source={require("../../../assets/images/sup-logo-purple.png")}
-          style={{ height: logoSize, width: logoSize * LOGO_ASPECT_RATIO }}
+          // tintColor recolours the logo's solid shape; the app's dark purple.
+          style={{ height: logoSize, width: logoSize * LOGO_ASPECT_RATIO, tintColor: "#5222AE" }}
           resizeMode="contain"
           accessibilityRole="image"
           accessibilityLabel="s'up"
