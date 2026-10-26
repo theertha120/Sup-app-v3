@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeskPostureState } from "../components/desk/mockDeskPostureData";
 import { PostureSegment } from "../lib/sessionHighlights";
-import { useAuth } from "../contexts/AuthContext";
 import { useIMUContext } from "../contexts/IMUContext";
 import { toLocalDateKey } from "../lib/dateKey";
 
@@ -43,10 +42,6 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function dateToKey(d: Date): string {
   return STATS_KEY_PREFIX + toLocalDateKey(d);
-}
-
-function todayKey(): string {
-  return dateToKey(new Date());
 }
 
 /** Returns last 7 days oldest→newest with labels */
@@ -88,8 +83,8 @@ function totalMs(map: StateTimeMap): number {
 
 const TICK_MS = 5_000;
 
-export function useSessionStats(currentState: DeskPostureState | undefined) {
-  const { userId } = useAuth();
+// Mounted once by SessionStatsProvider, never by individual screens.
+export function useSessionStatsTracker(currentState: DeskPostureState | undefined) {
   const { setSessionStateTotals, sessionStartTimeMs } = useIMUContext();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
@@ -97,16 +92,13 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
   const [weekStats,    setWeekStats]    = useState<StateTimeMap>({});
 
   const persistedTodayRef  = useRef<StateTimeMap>({});
-  const persistedWeekRef   = useRef<Record<string, StateTimeMap>>({}); // dateKey → StateTimeMap
   const lastTickRef        = useRef<number>(Date.now());
   const currentStateRef    = useRef<DeskPostureState | undefined>(currentState);
   const sessionRef         = useRef<StateTimeMap>({});
   // Run-length posture timeline for the current session (end-of-session highlights)
   const sessionTimelineRef = useRef<PostureSegment[]>([]);
-  const userIdRef         = useRef<string | null>(userId);
   const prevSessionStartRef = useRef<number | null>(sessionStartTimeMs);
 
-  useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
 
   // ── Load persisted data on mount ──────────────────────────────────────────
@@ -121,8 +113,6 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
         days.forEach((d, i) => {
           dayMap[d.dateKey] = raws[i] ? JSON.parse(raws[i]!) : {};
         });
-
-        persistedWeekRef.current = dayMap;
 
         // Today's persisted base
         const todayDK = toLocalDateKey();
@@ -159,8 +149,8 @@ export function useSessionStats(currentState: DeskPostureState | undefined) {
 
       // Session
       sessionRef.current = addToMap(sessionRef.current, state, elapsed);
-      const sessionTotalBefore = totalMs(sessionRef.current) - elapsed;
       const sessionTotalAfter = totalMs(sessionRef.current);
+      const sessionTotalBefore = sessionTotalAfter - elapsed;
       if (sessionTotalBefore === 0 && sessionTotalAfter > 0) {
         console.log("[useSessionStats] session stats accumulation started — first tick", { state, elapsed, sessionTotalAfter });
       }

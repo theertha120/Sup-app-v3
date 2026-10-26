@@ -2,6 +2,7 @@ import React from "react";
 import { Stack, usePathname } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { IMUProvider } from "@/src/contexts/IMUContext";
+import { SessionStatsProvider } from "@/src/contexts/SessionStatsContext";
 import SignInModal from "@/src/components/modals/SignInModal";
 import { ToastProvider } from "@/src/contexts/ToastContext";
 import { useReminderNotifications } from "@/src/hooks/useReminderNotifications";
@@ -50,6 +51,7 @@ function RootLayout() {
         <PostureHistoryProvider>
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
+        <SessionStatsProvider>
           {/* Offline popup over every screen; remounts the Stack on reconnect */}
           <OfflineGate>
           <Stack
@@ -90,6 +92,7 @@ function RootLayout() {
 
           {/* Global auth modal */}
           <SignInModal />
+        </SessionStatsProvider>
         </IMUProvider>
         </PostureHistoryProvider>
         </LeaderboardProvider>

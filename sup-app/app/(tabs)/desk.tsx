@@ -10,15 +10,16 @@ import { colours } from "../../theme/colours";
 import { useFonts } from "expo-font";
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
 import HeaderBar from "@/src/components/ui/HeaderBar";
+import { useSessionStats } from "../../src/contexts/SessionStatsContext";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 import DeskPostureFigure from "../../src/components/desk/DeskPostureFigure";
-import { DeskPostureState, getScoreColor, getScoreLabel } from "../../src/components/desk/mockDeskPostureData";
+import { DeskPostureState } from "../../src/components/desk/mockDeskPostureData";
 import { useIMUContext } from "../../src/contexts/IMUContext";
 import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
-import { useSessionStats, formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
+import { formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
 import { useFocusEffect } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
@@ -309,7 +310,7 @@ export default function DeskScreen() {
     posture,
     bothConnected, timeInCurrentStateMs,
     sessionDurationMs, cpl,
-    isNeutralCalibrated, shs,
+    isNeutralCalibrated,
     sessionStartTimeMs,
     endSessionKeepConnected, startNewSession,
   } = useIMUContext();
@@ -331,8 +332,7 @@ export default function DeskScreen() {
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // --- Desk UI figure throttle: snapshot posture for figure/label only every 3 seconds ---
-  const DESK_UI_UPDATE_MS = 3 * 1000; // 3 seconds
+  // --- Desk UI figure snapshot ---
   const livePostureRef = useRef(posture);
   const [displayPosture, setDisplayPosture] = useState(posture);
 
@@ -418,11 +418,9 @@ export default function DeskScreen() {
     (displayPosture?.state ?? posture?.state) === "slouched"     ? 42 : 20
   );
 
-  const shsColor     = getScoreColor(shs);
-  const shsLabel     = getScoreLabel(shs);
   const timeInStateMin = (timeInCurrentStateMs / 60000).toFixed(2);
 
-  const { sessionStats, sessionTotalMs, getSessionTimeline } = useSessionStats(isTracking ? currentState : undefined);
+  const { sessionStats, sessionTotalMs, getSessionTimeline } = useSessionStats();
 
   const blobColor = updateHistory.length > 0
     ? INSIGHT_BORDER[updateHistory[0].color]
@@ -1040,20 +1038,6 @@ const s = StyleSheet.create({
 
   disconnectBtn:     { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 30, borderWidth: 1.5, borderColor: "#D32F2F", backgroundColor: "#fff" },
   disconnectBtnText: { fontSize: 15, color: "#D32F2F", fontFamily: "Agrandir-Regular" },
-});
-
-const dbg = StyleSheet.create({
-  badge: {
-    position: "absolute",
-    top: 10,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    zIndex: 50,
-  },
-  line: { color: "#fff", fontSize: 11, fontWeight: "600" },
 });
 
 const su = StyleSheet.create({
