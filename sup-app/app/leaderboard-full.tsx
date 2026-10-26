@@ -50,19 +50,16 @@ export default function FullLeaderboardScreen() {
   const [scope, setScope] = useState<Scope>("everyone");
 
   const {
-    getEntries,
+    entries,
+    total,
+    loadMore,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
-
-  // Both toggles read the cache loaded at login, so switching period or scope
-  // is instant and costs no network call.
-  const entries: LeaderboardEntry[] = getEntries(scope, period);
+  } = useLeaderboard(scope, period);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,9 +69,7 @@ export default function FullLeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
+    }, [fadeAnim])
   );
 
   if (!fontsLoaded) return null;
@@ -138,9 +133,10 @@ export default function FullLeaderboardScreen() {
           ))}
         </View>
 
+        {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
+        ) : error && !entries.length ? (
           <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>
@@ -161,6 +157,9 @@ export default function FullLeaderboardScreen() {
           </View>
         )}
 
+        {entries.length < total && <PressFeedback onPress={loadMore}>
+          <Text style={styles.loadingText}>load more</Text>
+        </PressFeedback>}
         <View style={{ height: 32 }} />
       </ScrollView>
     </Animated.View>

@@ -72,21 +72,17 @@ export default function LeaderboardScreen() {
     "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
   });
 
+  const [scope, setScope] = useState<Scope>("everyone");
   const {
-    getEntries,
+    entries,
+    ownEntry,
     isLoading,
     isRefreshing,
     lastUpdatedAt,
     friendCount,
     error,
     refresh,
-    ensureFreshForToday,
-  } = useLeaderboard();
-  const [scope, setScope] = useState<Scope>("everyone");
-
-  // A read-only slice of the cache loaded at login. Switching scope costs no
-  // network call, and focusing the tab no longer refetches.
-  const entries: LeaderboardEntry[] = getEntries(scope, SUMMARY_PERIOD);
+  } = useLeaderboard(scope, SUMMARY_PERIOD, 5);
 
   useFocusEffect(
     useCallback(() => {
@@ -96,17 +92,13 @@ export default function LeaderboardScreen() {
         duration: 250,
         useNativeDriver: true,
       }).start();
-      // Reloads only if the calendar day rolled over since the last pull.
-      ensureFreshForToday();
-    }, [fadeAnim, ensureFreshForToday])
+    }, [fadeAnim])
   );
 
   const top3 = entries.slice(0, 3);
   const nextTwo = entries.slice(3, 5);
-  const ownIndex = userId ? entries.findIndex((e) => e.user.id === userId) : -1;
-  const ownEntry = ownIndex >= 0 ? entries[ownIndex] : undefined;
-  const showOwnRankCard = ownIndex >= 5;
-  const showLeaderboard = !isLoading && !error && entries.length > 0
+  const showOwnRankCard = !!ownEntry && !entries.slice(0, 5).some((entry) => entry.user.id === ownEntry.user.id);
+  const showLeaderboard = !isLoading && entries.length > 0
     && (scope !== "friends" || (friendCount ?? 0) > 0);
 
   if (!fontsLoaded) return null;
@@ -168,9 +160,10 @@ export default function LeaderboardScreen() {
           ))}
         </View>
 
+        {error && entries.length > 0 && <Text style={styles.loadingText}>{error}</Text>}
         {isLoading ? (
           <Text style={styles.loadingText}>Loading leaderboard…</Text>
-        ) : error ? (
+        ) : error && !entries.length ? (
           <Text style={styles.loadingText}>{error}</Text>
         ) : scope === "friends" && (friendCount ?? 0) === 0 ? (
           <Text style={styles.loadingText}>

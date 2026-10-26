@@ -32,11 +32,10 @@ export const toDateKey = (d: Date): string => toLocalDateKey(d);
  * Returns the [startDateKey, endDateKey] (inclusive, YYYY-MM-DD) window for a given period,
  * anchored on today.
  */
-export function getDateRangeForPeriod(period: LeaderboardPeriod): {
+export function getDateRangeForPeriod(period: LeaderboardPeriod, today = new Date()): {
   startDateKey: string;
   endDateKey: string;
 } {
-  const today = new Date();
   const endDateKey = toDateKey(today);
 
   switch (period) {
@@ -88,9 +87,10 @@ function assignRanks(sorted: Omit<LeaderboardEntry, "rank">[]): LeaderboardEntry
  */
 export async function fetchPostureRowsForLeaderboard(
   users: User[],
-  period: LeaderboardPeriod = WIDEST_LEADERBOARD_PERIOD
+  period: LeaderboardPeriod = WIDEST_LEADERBOARD_PERIOD,
+  today = new Date()
 ): Promise<LeaderboardRowsByUser> {
-  const { startDateKey, endDateKey } = getDateRangeForPeriod(period);
+  const { startDateKey, endDateKey } = getDateRangeForPeriod(period, today);
   return fetchPosturePageRowsForUsers(
     users.map((u) => u.id),
     startDateKey,
@@ -106,9 +106,10 @@ export async function fetchPostureRowsForLeaderboard(
 export function rankLeaderboard(
   users: User[],
   rowsByUser: LeaderboardRowsByUser,
-  period: LeaderboardPeriod
+  period: LeaderboardPeriod,
+  today = new Date()
 ): LeaderboardEntry[] {
-  const { startDateKey, endDateKey } = getDateRangeForPeriod(period);
+  const { startDateKey, endDateKey } = getDateRangeForPeriod(period, today);
 
   const entries = users.map((user): Omit<LeaderboardEntry, "rank"> => {
     const rows = (rowsByUser.get(user.id) ?? []).filter(
