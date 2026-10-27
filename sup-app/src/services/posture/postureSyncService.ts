@@ -1,6 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
 import { DeskPostureState } from "../../components/desk/mockDeskPostureData";
 import { toLocalDateKey, addDaysToDateKey, localDayRange } from "@/src/lib/dateKey";
+import { captureError, createThrottledErrorReporter } from "@/src/lib/sentry";
 
 export type StateTotals = Partial<Record<DeskPostureState, number>>;
 
@@ -43,6 +44,7 @@ export interface PosturePageRow extends DailyPostureRow {
 }
 
 const STALE_SESSION_MS = 30 * 60 * 1000;
+const reportSnapshotError = createThrottledErrorReporter();
 
 const ALL_STATES: DeskPostureState[] = [
   "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
@@ -69,17 +71,19 @@ async function closeStaleSessions(userId: string): Promise<void> {
       .eq("is_completed_session", false)
       .lt("started_at", cutoff);
 
+    if (error) captureError(error, "posture-stale-sessions", { stage: "sessions-read" });
     if (error || !staleSessions?.length) return;
 
-    const { data: lastDaily } = await supabase
+    const { data: lastDaily, error: dailyError } = await supabase
       .from("posture_daily")
       .select("updated_at")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (dailyError) captureError(dailyError, "posture-stale-sessions", { stage: "daily-read" });
 
-    await Promise.all(
+    const updates = await Promise.all(
       staleSessions.map((row) => {
         const fallback =
           row.ended_at ??
@@ -92,6 +96,8 @@ async function closeStaleSessions(userId: string): Promise<void> {
           .eq("id", row.id);
       })
     );
+    const updateError = updates.find((result) => result.error)?.error;
+    if (updateError) captureError(updateError, "posture-stale-sessions", { stage: "sessions-save" });
 
     const affectedDateKeys = new Set(staleSessions.map((row) => toLocalDateKey(new Date(row.started_at))));
     await Promise.all(
@@ -99,6 +105,7 @@ async function closeStaleSessions(userId: string): Promise<void> {
     );
   } catch (e) {
     console.warn("[postureSync] closeStaleSessions failed", e);
+    captureError(e, "posture-stale-sessions");
   }
 }
 
@@ -118,12 +125,14 @@ export async function startSession(userId: string | null): Promise<string | null
 
     if (error || !data) {
       console.warn("[postureSync] startSession failed", error);
+      captureError(error ?? new Error("Session insert returned no data"), "posture-session-start");
       return null;
     }
 
     return data.id as string;
   } catch (e) {
     console.warn("[postureSync] startSession threw", e);
+    captureError(e, "posture-session-start");
     return null;
   }
 }
@@ -148,9 +157,13 @@ export async function endSession(
       })
       .eq("id", sessionId);
 
-    if (error) console.warn("[postureSync] endSession failed", error);
+    if (error) {
+      console.warn("[postureSync] endSession failed", error);
+      captureError(error, "posture-session-end", { sessionId });
+    }
   } catch (e) {
     console.warn("[postureSync] endSession threw", e);
+    captureError(e, "posture-session-end", { sessionId });
   }
 }
 
@@ -175,9 +188,13 @@ export async function snapshotSession(
       })
       .eq("id", sessionId);
 
-    if (error) console.warn("[postureSync] snapshotSession failed", error);
+    if (error) {
+      console.warn("[postureSync] snapshotSession failed", error);
+      reportSnapshotError(error, "posture-session-snapshot", { sessionId });
+    }
   } catch (e) {
     console.warn("[postureSync] snapshotSession threw", e);
+    reportSnapshotError(e, "posture-session-snapshot", { sessionId });
   }
 }
 
@@ -273,9 +290,13 @@ export async function upsertDailyRollup(
       onConflict: "user_id,date",
     });
 
-    if (error) console.warn("[postureSync] upsertDailyRollup failed", error);
+    if (error) {
+      console.warn("[postureSync] upsertDailyRollup failed", error);
+      captureError(error, "posture-daily-save", { dateKey });
+    }
   } catch (e) {
     console.warn("[postureSync] upsertDailyRollup threw", e);
+    captureError(e, "posture-daily-save", { dateKey });
   }
 }
 
@@ -305,7 +326,11 @@ export async function rebuildDailyFromSessions(
       .lt("started_at",  endUtc.toISOString())
       .eq("is_completed_session", true);
 
-    if (error) { console.warn("[postureSync] rebuildDailyFromSessions query failed", error); return; }
+    if (error) {
+      console.warn("[postureSync] rebuildDailyFromSessions query failed", error);
+      captureError(error, "posture-daily-rebuild", { dateKey, stage: "sessions-read" });
+      return;
+    }
     if (!sessions?.length) return;
 
     // Aggregate across all sessions
@@ -362,20 +387,23 @@ export async function rebuildDailyFromSessions(
 
     if (upsertError) {
       console.warn("[postureSync] rebuildDailyFromSessions upsert failed", upsertError);
+      captureError(upsertError, "posture-daily-rebuild", { dateKey, stage: "daily-save" });
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
       // Score comes from the day's per-state time only (docs/score-methodology.md §2);
       // streak and avg_shs are no longer inputs.
       const supScore = computeSupScore(stateTotals);
-      await supabase
+      const { error: scoreError } = await supabase
         .from("posture_daily")
         .update({ sup_score: supScore })
         .eq("user_id", userId)
         .eq("date", dateKey);
+      if (scoreError) captureError(scoreError, "posture-daily-rebuild", { dateKey, stage: "score-save" });
       console.log(`[postureSync] sup_score=${supScore}`);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
+    captureError(e, "posture-daily-rebuild", { dateKey });
   }
 }
 

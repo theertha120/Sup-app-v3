@@ -4,11 +4,12 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 // Exercise the real provider and tracker using deterministic hook lifecycles and time.
-function fixture() {
+function fixture({ failRead = false, failWrite = false } = {}) {
   let now = new Date(2026, 9, 26, 12).getTime();
   let active;
   const timers = new Map();
   const writes = [];
+  const reports = [];
   const imu = {
     posture: { state: 'upright' }, bothConnected: true, isNeutralCalibrated: true,
     sessionStartTimeMs: now, setSessionStateTotals: totals => { imu.totals = totals; },
@@ -76,8 +77,13 @@ function fixture() {
   }
   const tracker = load('../src/hooks/useSessionStats.ts', {
     react,
+    '../lib/sentry': {
+      captureError: (...args) => reports.push(args),
+      createThrottledErrorReporter: () => (...args) => reports.push(args),
+    },
     '@react-native-async-storage/async-storage': {
-      getItem: async () => null, setItem: async (...args) => { writes.push(args); },
+      getItem: async () => { if (failRead) throw new Error('local read failed'); return null; },
+      setItem: async (...args) => { if (failWrite) throw new Error('local write failed'); writes.push(args); },
     },
     '../contexts/AuthContext': { useAuth: () => ({ userId: 'user-a' }) },
     '../contexts/IMUContext': { useIMUContext: () => imu },
@@ -93,7 +99,7 @@ function fixture() {
     for (const { fn, delay } of timers.values()) { assert.equal(delay, 5000); fn(); }
     provider.render();
   };
-  return { provider, screen, tick, imu, timers, writes };
+  return { provider, screen, tick, imu, timers, writes, reports };
 }
 
 test('tracks before Desk opens, after it unmounts, and retains totals and timeline on return', async () => {
@@ -146,4 +152,21 @@ test('session tracking wraps navigation outside OfflineGate screen remounts', ()
   const source = readFileSync(new URL('../app/_layout.tsx', import.meta.url), 'utf8');
   assert.match(source, /<IMUProvider>\s*<SessionStatsProvider>[\s\S]*<OfflineGate>[\s\S]*<Stack/);
   assert.match(source, /<\/OfflineGate>[\s\S]*<\/SessionStatsProvider>\s*<\/IMUProvider>/);
+});
+
+test('local load, periodic save and final save errors are observable without changing tracking', async () => {
+  const f = fixture({ failRead: true, failWrite: true });
+  f.provider.render();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.reports[0][1], 'desk-stats-load');
+  f.tick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.reports[1][1], 'desk-stats-save');
+  assert.equal(f.imu.totals.upright, 5000);
+  f.imu.sessionStartTimeMs = null;
+  f.provider.render();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.reports[2][1], 'desk-stats-final-save');
+  assert.equal(f.reports.length, 3);
+  f.provider.unmount();
 });

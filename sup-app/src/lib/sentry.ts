@@ -67,6 +67,18 @@ export function captureError(error: unknown, context: string, extra?: Record<str
   });
 }
 
+/** Bound noise from periodic saves while still reporting failures that continue. */
+export function createThrottledErrorReporter(intervalMs = 60_000) {
+  const lastReported = new Map<string, number>();
+  return (error: unknown, context: string, extra?: Record<string, unknown>) => {
+    const now = Date.now();
+    const previous = lastReported.get(context);
+    if (previous !== undefined && now - previous < intervalMs) return;
+    lastReported.set(context, now);
+    captureError(error, context, extra);
+  };
+}
+
 /** Report a render crash caught by a screen's error boundary (app keeps running). */
 export function captureRenderError(error: Error) {
   Sentry.captureException(error, { level: "fatal", tags: { context: "render", boundary: "screen" } });
