@@ -83,6 +83,8 @@ function totalMs(map: StateTimeMap): number {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 const TICK_MS = 5_000;
+// Timeline is sampled faster than the totals so the end-of-session replay is near-live.
+const TIMELINE_TICK_MS = 1_000;
 const reportPeriodicSaveError = createThrottledErrorReporter();
 
 // Mounted once by SessionStatsProvider, never by individual screens.
@@ -100,6 +102,7 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
   // Run-length posture timeline for the current session (end-of-session highlights)
   const sessionTimelineRef = useRef<PostureSegment[]>([]);
   const prevSessionStartRef = useRef<number | null>(sessionStartTimeMs);
+  const lastTimelineTickRef = useRef<number | null>(null);
 
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
 
@@ -159,11 +162,6 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
       }
       setSessionStats({ ...sessionRef.current });
 
-      const timeline = sessionTimelineRef.current;
-      const lastSeg = timeline[timeline.length - 1];
-      if (lastSeg && lastSeg.state === state) lastSeg.endMs = now;
-      else timeline.push({ state, startMs: now - elapsed, endMs: now });
-
       // Today live = persisted base + session
       const todayLive = mergeMaps(persistedTodayRef.current, sessionRef.current);
       setTodayStats(todayLive);
@@ -190,6 +188,27 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
       // Week total
       setWeekStats((prev) => mergeMaps(prev, { [state]: elapsed } as StateTimeMap));
     }, TICK_MS);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Timeline sampler ──────────────────────────────────────────────────────
+  // Ref-only (no re-render, no storage). Untracked time is left as a gap.
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const state = currentStateRef.current;
+      const now   = Date.now();
+      const prev  = lastTimelineTickRef.current;
+      if (!state) { lastTimelineTickRef.current = null; return; }
+      lastTimelineTickRef.current = now;
+      if (prev === null) return;
+
+      const timeline = sessionTimelineRef.current;
+      const lastSeg = timeline[timeline.length - 1];
+      if (lastSeg && lastSeg.state === state && lastSeg.endMs === prev) lastSeg.endMs = now;
+      else timeline.push({ state, startMs: prev, endMs: now });
+    }, TIMELINE_TICK_MS);
 
     return () => clearInterval(interval);
   }, []);

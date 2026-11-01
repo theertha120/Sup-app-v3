@@ -28,13 +28,18 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
-import { fetchPreviousSession } from "../../src/services/posture/postureSyncService";
+import { computeSupScore, fetchPreviousSession } from "../../src/services/posture/postureSyncService";
 import {
-  compareSessions, computeSessionHighlights, SessionComparisonMetric, SessionHighlight,
+  compareSessions, computeSessionHighlights, PostureSegment, SessionComparisonMetric, SessionHighlight,
 } from "../../src/lib/sessionHighlights";
 import { toLocalDateKey } from "../../src/lib/dateKey";
+import SessionReplay from "../../src/components/desk/SessionReplay";
+import {
+  clearLastSessionSummary, loadLastSessionSummary, saveLastSessionSummary, StoredSessionSummary,
+} from "../../src/services/session/lastSessionSummaryStore";
 
 const UPDATE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours between s'update clicks
+const SUMMARY_FALLBACK_MESSAGE = "great session! keep up the good work, every minute of good posture counts.";
 
 function formatClockTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -73,6 +78,10 @@ const STATE_INFO: Record<DeskPostureState, { label: string; icon: string }> = {
 };
 
 
+const STATE_LABELS = Object.fromEntries(
+  Object.entries(STATE_INFO).map(([k, v]) => [k, v.label]),
+) as Record<DeskPostureState, string>;
+
 const STATE_ORDER: DeskPostureState[] = [
   "upright", "transition", "forward_lean", "slouched", "severe", "tilted_left", "tilted_right",
 ];
@@ -108,6 +117,26 @@ const STRAIN_INFO: Record<string, InfoModalEntry> = {
 // "s'kipper says" bubble, sourced from aiProvider.ts so the copy lives once.
 const SKIPPER_INFO: Record<string, InfoModalEntry> = {
   skipper: SKIPPER_DISCLAIMER,
+};
+
+// Explains each part of the end-of-session summary card. Keeps the key points
+// of SKIPPER_DISCLAIMER for s'kipper's message, since the card shows AI text.
+const SUMMARY_INFO: Record<string, InfoModalEntry> = {
+  summary: {
+    title: "session end summary",
+    body:
+      "a recap of the session you just ended. it stays here until you start a new s'ession.\n\n" +
+      "• s'core: this session's score out of 100. it starts " +
+      "at 50, so short sessions stay close to 50.\n\n" +
+      "• replay: your posture second by second. tap play, change the speed, or drag the bar " +
+      "to jump to any moment.\n\n" +
+      "• s'kipper's message: written based on this session's data. a " +
+      "friendly nudge, not medical advice, and not reviewed by a person.\n\n" +
+      "• highlights: your longest upright stretch and longest slouch, when your posture " +
+      "started to drop, and how often you got back to good alignment.\n\n" +
+      "• vs last session: how this session compares with your previous one. green is " +
+      "better, red is worse.",
+  },
 };
 
 // ── Session stats row ─────────────────────────────────────────────────────────
@@ -323,14 +352,28 @@ export default function DeskScreen() {
   const [updateColor, setUpdateColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
   const [updateHistory, setUpdateHistory] = useState<{ text: string; color: "green" | "yellow" | "red"; time: Date }[]>([]);
-  const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
   const [summaryColor, setSummaryColor] = useState<"green" | "yellow" | "red">("yellow");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [summaryComparison, setSummaryComparison] = useState<SessionComparisonMetric[] | null>(null);
   const [summaryHighlights, setSummaryHighlights] = useState<SessionHighlight[]>([]);
   const [showSkipperInfo, setShowSkipperInfo] = useState(false);
+  const [showSummaryInfo, setShowSummaryInfo] = useState(false);
+  // Snapshot taken on "end s'ession"; non-null = the summary is shown inline
+  // on this screen until a new session starts.
+  const [summaryReplay, setSummaryReplay] = useState<{
+    startMs: number; endMs: number; score: number | null; timeline: PostureSegment[];
+  } | null>(null);
+  // Bumped on each end/clear so a late s'kipper reply can't land on a newer summary.
+  const summaryIdRef = useRef(0);
+  // Persisted copy of the shown summary (survives app restarts until a new session starts).
+  const storedSummaryRef = useRef<StoredSessionSummary | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const sessionActiveRef = useRef(sessionActive);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
+  useEffect(() => { sessionActiveRef.current = sessionActive; }, [sessionActive]);
 
   // --- Desk UI figure snapshot ---
   const livePostureRef = useRef(posture);
@@ -491,15 +534,43 @@ export default function DeskScreen() {
 
   const handleEndSession = useCallback(async () => {
     if (!topSensor.state.connected && !bottomSensor.state.connected) return;
+
+    // Snapshot everything first: ending the session resets the shared
+    // session stats and timeline.
+    const summaryId  = ++summaryIdRef.current;
+    const timeline   = getSessionTimeline();
+    const highlights = computeSessionHighlights(timeline);
+    const endedAt    = Date.now();
+    const startedAt  = sessionStartTimeMs;
+    const replay = {
+      startMs: startedAt ?? timeline[0]?.startMs ?? endedAt,
+      endMs: endedAt,
+      score: computeSupScore(sessionStats),
+      timeline,
+    };
+    setSummaryReplay(replay);
+    const persist = (patch: Partial<StoredSessionSummary>) => {
+      if (!storedSummaryRef.current) return;
+      storedSummaryRef.current = { ...storedSummaryRef.current, ...patch };
+      if (currentUserId) saveLastSessionSummary(currentUserId, storedSummaryRef.current);
+    };
+    storedSummaryRef.current = {
+      version: 1, ...replay, highlights, comparison: null, message: null, color: "yellow",
+    };
+    persist({});
+    setSummaryHighlights(highlights);
+    setSummaryComparison(null);
     setSummaryMessage(null);
+    setSummaryColor("yellow");
     setIsLoadingSummary(true);
-    setShowSummaryModal(true);
+
+    // End the session but keep the s'pots connected so it can be restarted from here.
+    endSessionKeepConnected();
 
     // Highlights + previous-session comparison are computed on-device, shown
     // even if s'kipper can't be reached, and passed to it as context.
-    const highlights = computeSessionHighlights(getSessionTimeline());
-    const previous = sessionStartTimeMs !== null
-      ? await fetchPreviousSession(currentUserId, sessionStartTimeMs)
+    const previous = startedAt !== null
+      ? await fetchPreviousSession(currentUserId, startedAt)
       : null;
     const comparison = previous
       ? compareSessions(
@@ -507,9 +578,12 @@ export default function DeskScreen() {
           { durationMs: previous.totalDurationMs, stateTotals: previous.stateTotals },
         )
       : null;
-    setSummaryHighlights(highlights);
+    if (summaryId !== summaryIdRef.current) return;
     setSummaryComparison(comparison);
+    persist({ comparison });
 
+    let message = SUMMARY_FALLBACK_MESSAGE;
+    let color: "green" | "yellow" | "red" = "yellow";
     try {
       const result = await aiProvider.getSessionSummary({
         sessionDurationMs,
@@ -519,25 +593,71 @@ export default function DeskScreen() {
         comparison,
         highlights,
       });
-      setSummaryMessage(result.message);
-      setSummaryColor(result.color);
+      message = result.message;
+      color = result.color;
     } catch {
-      setSummaryMessage("great session! keep up the good work, every minute of good posture counts.");
-      setSummaryColor("yellow");
-    } finally {
-      setIsLoadingSummary(false);
+      // fall back to the default message above
     }
-  }, [topSensor.state.connected, bottomSensor.state.connected, sessionDurationMs, cpl, sessionStats, sessionTotalMs, updateHistory, getSessionTimeline, sessionStartTimeMs, currentUserId]);
+    if (summaryId !== summaryIdRef.current) return;
+    setSummaryMessage(message);
+    setSummaryColor(color);
+    setIsLoadingSummary(false);
+    persist({ message, color });
+  }, [topSensor.state.connected, bottomSensor.state.connected, sessionDurationMs, cpl, sessionStats, sessionTotalMs, updateHistory, getSessionTimeline, sessionStartTimeMs, currentUserId, endSessionKeepConnected]);
 
-  const handleCloseSummaryModal = useCallback(async () => {
-    setShowSummaryModal(false);
+  const clearSummary = useCallback(() => {
+    summaryIdRef.current++;
+    storedSummaryRef.current = null;
+    if (currentUserIdRef.current) clearLastSessionSummary(currentUserIdRef.current);
+    setSummaryReplay(null);
     setSummaryMessage(null);
     setSummaryColor("yellow");
     setSummaryComparison(null);
     setSummaryHighlights([]);
-    // End the session but keep the s'pots connected so it can be restarted from here.
-    endSessionKeepConnected();
-  }, [endSessionKeepConnected]);
+    setIsLoadingSummary(false);
+    setScrollEnabled(true);
+  }, []);
+
+  const handleStartNewSession = useCallback(() => {
+    clearSummary();
+    startNewSession();
+  }, [clearSummary, startNewSession]);
+
+  // Also clear if a new session starts some other way (e.g. after reconnecting).
+  useEffect(() => {
+    if (sessionActive) clearSummary();
+  }, [sessionActive, clearSummary]);
+
+  // Restore the latest session's summary after an app restart.
+  useEffect(() => {
+    if (!currentUserId) return;
+    let cancelled = false;
+    const idAtStart = summaryIdRef.current;
+    (async () => {
+      const stored = await loadLastSessionSummary(currentUserId);
+      if (!stored || cancelled) return;
+      // Drop it if a newer session was recorded since (e.g. on another device).
+      // Offline → null → keep showing it.
+      const latest = await fetchPreviousSession(currentUserId, Date.now());
+      if (cancelled) return;
+      if (latest && Date.parse(latest.startedAt) >= stored.endMs) {
+        clearLastSessionSummary(currentUserId);
+        return;
+      }
+      // Don't replace a live session or a summary created while loading.
+      if (sessionActiveRef.current || summaryIdRef.current !== idAtStart) return;
+      storedSummaryRef.current = stored;
+      setSummaryReplay({
+        startMs: stored.startMs, endMs: stored.endMs, score: stored.score, timeline: stored.timeline,
+      });
+      setSummaryHighlights(stored.highlights);
+      setSummaryComparison(stored.comparison);
+      setSummaryMessage(stored.message ?? SUMMARY_FALLBACK_MESSAGE);
+      setSummaryColor(stored.color);
+      setIsLoadingSummary(false);
+    })();
+    return () => { cancelled = true; };
+  }, [currentUserId]);
 
   if (!fontsLoaded) return null;
 
@@ -578,67 +698,21 @@ export default function DeskScreen() {
         </View>
       </Modal>
 
-      {/* session end summary modal */}
-      <Modal visible={showSummaryModal} transparent animationType="fade" onRequestClose={handleCloseSummaryModal}>
-        <View style={su.overlay}>
-          <View style={[su.card, { borderColor: INSIGHT_BORDER[summaryColor] }]}>
-            <PressFeedback style={su.closeBtn} onPress={handleCloseSummaryModal}>
-              <Text style={su.closeText}>×</Text>
-            </PressFeedback>
-            <InfoButton onPress={() => setShowSkipperInfo(true)} color={colours.primary} />
-            <Text style={[su.title, { fontSize: 22 }]}>session end summary!</Text>
-            <Image source={INSIGHT_MASCOT[summaryColor]} style={su.mascot} resizeMode="contain" />
-            <ScrollView style={su.summaryScroll} showsVerticalScrollIndicator={false}>
-              <Text style={su.body}>
-                {isLoadingSummary
-                  ? "s'kipper is reviewing your session..."
-                  : summaryMessage ?? ""}
-              </Text>
-
-              {summaryHighlights.length > 0 && (
-                <View style={su.summarySection}>
-                  {summaryHighlights.map((h) => (
-                    <Text key={h.label} style={su.highlightLine}>
-                      <Text style={su.highlightLabel}>{h.label}:</Text> {h.text}
-                    </Text>
-                  ))}
-                </View>
-              )}
-
-              {summaryComparison && (
-                <View style={su.summarySection}>
-                  <Text style={su.highlightLabel}>vs last session</Text>
-                  {summaryComparison.map((m) => (
-                    <View key={m.label} style={su.compareRow}>
-                      <Text style={su.compareLabel}>{m.label}</Text>
-                      <Text style={su.compareValue}>{m.current}</Text>
-                      <Text
-                        style={[
-                          su.compareChange,
-                          { color: m.improved === null ? "#888" : m.improved ? "#2E7D32" : "#C62828" },
-                        ]}
-                      >
-                        {m.change}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       <InfoModal
         metricKey={showSkipperInfo ? "skipper" : null}
         onClose={() => setShowSkipperInfo(false)}
         metricInfo={SKIPPER_INFO}
       />
+      <InfoModal
+        metricKey={showSummaryInfo ? "summary" : null}
+        onClose={() => setShowSummaryInfo(false)}
+        metricInfo={SUMMARY_INFO}
+      />
 
       <InterventionModal />
       <MovementNudgeModal />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
         <HeaderBar />
 
         <View style={s.container}>
@@ -786,12 +860,74 @@ export default function DeskScreen() {
                   </PressFeedback>
                 </>
               ) : (
-                <PressFeedback style={s.updateBtn} onPress={startNewSession}>
+                <PressFeedback style={s.updateBtn} onPress={handleStartNewSession}>
                   <Text style={s.updateBtnText}>start new s'ession</Text>
                 </PressFeedback>
               )}
             </View>
           </>
+        )}
+
+        {/* End-of-session summary — stays until a new session starts */}
+        {summaryReplay && (
+          <View style={sm.card}>
+            <View style={sm.titleRow}>
+              <Text style={sm.title}>session end summary</Text>
+              <InfoButton onPress={() => setShowSummaryInfo(true)} color={colours.primary} style={ss.strainInfoBtn} />
+            </View>
+
+            <SessionReplay
+              key={summaryReplay.startMs}
+              startMs={summaryReplay.startMs}
+              endMs={summaryReplay.endMs}
+              score={summaryReplay.score}
+              timeline={summaryReplay.timeline}
+              stateColors={STATE_COLORS}
+              stateLabels={STATE_LABELS}
+              onScrubbingChange={(scrubbing) => setScrollEnabled(!scrubbing)}
+            />
+
+            <View style={[su.historyItem, sm.skipperRow]}>
+              <Image source={INSIGHT_MASCOT[summaryColor]} style={su.historyMascot} resizeMode="contain" />
+              <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[summaryColor] }]}>
+                <Text style={su.historyText}>
+                  {isLoadingSummary
+                    ? "s'kipper is reviewing your session..."
+                    : summaryMessage ?? ""}
+                </Text>
+              </View>
+            </View>
+
+            {summaryHighlights.length > 0 && (
+              <View style={su.summarySection}>
+                {summaryHighlights.map((h) => (
+                  <Text key={h.label} style={su.highlightLine}>
+                    <Text style={su.highlightLabel}>{h.label}:</Text> {h.text}
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            {summaryComparison && (
+              <View style={su.summarySection}>
+                <Text style={su.highlightLabel}>vs last session</Text>
+                {summaryComparison.map((m) => (
+                  <View key={m.label} style={su.compareRow}>
+                    <Text style={su.compareLabel}>{m.label}</Text>
+                    <Text style={su.compareValue}>{m.current}</Text>
+                    <Text
+                      style={[
+                        su.compareChange,
+                        { color: m.improved === null ? "#888" : m.improved ? "#2E7D32" : "#C62828" },
+                      ]}
+                    >
+                      {m.change}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         )}
 
         {/* Session stats — only when tracking */}
@@ -903,6 +1039,19 @@ const sb = StyleSheet.create({
   stateLabel:{ flex: 1, fontSize: 13, color: colours.textPrimary, fontFamily: "Agrandir-Regular" },
   statePct:  { fontSize: 13, minWidth: 36, textAlign: "right", fontFamily: "Agrandir-Regular" },
   stateTime: { fontSize: 12, color: colours.textSecondary, minWidth: 40, textAlign: "right", fontFamily: "Agrandir-Regular" },
+});
+
+// ── End-of-session summary card styles ───────────────────────────────────────
+
+const sm = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 16,
+    alignSelf: "stretch", marginBottom: 16,
+    ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
+  },
+  titleRow:   { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  title:      { fontSize: 18, color: "#1D014A", fontFamily: "Agrandir-GrandHeavy" },
+  skipperRow: { marginTop: 4 },
 });
 
 // ── Intervention modal styles ─────────────────────────────────────────────────
@@ -1072,7 +1221,6 @@ const su = StyleSheet.create({
   body:       { fontSize: 17, color: "#333", textAlign: "center", lineHeight: 25, marginBottom: 12, fontFamily: "Agrandir-Regular" },
 
   // end-of-session summary: highlights + previous-session comparison
-  summaryScroll:  { alignSelf: "stretch", maxHeight: SCREEN_H * 0.45 },
   summarySection: { alignSelf: "stretch", borderTopWidth: 1, borderTopColor: "#EEE", paddingTop: 12, marginBottom: 12, gap: 6 },
   highlightLine:  { fontSize: 14, color: "#333", lineHeight: 20, fontFamily: "Agrandir-Regular" },
   highlightLabel: { fontSize: 14, color: "#1D014A", fontFamily: "Agrandir-GrandHeavy" },
