@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs the test suite before every `git push`. Opt in once per clone with
+#   npm run hooks:install        (from sup-app/)
+# Skip in an emergency with `git push --no-verify`.
+cd "$(git rev-parse --show-toplevel)/sup-app" || exit 1
+echo "pre-push: running npm test..."
+npm test --silent
+status=$?
+if [ $status -ne 0 ]; then
+  echo "pre-push: tests failed, push aborted (see output above)."
+fi
+exit $status
