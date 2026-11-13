@@ -150,7 +150,8 @@ const ACTIVE_TIME_PRESET_RANGES: Record<
 };
  
 function isWithinActivePresets(
-  activeTimePresets: ActiveTimePreset[]
+  activeTimePresets: ActiveTimePreset[],
+  now: Date = new Date()
 ): boolean {
   if (!activeTimePresets || activeTimePresets.length === 0) {
     console.log("No active time presets configured");
@@ -160,7 +161,6 @@ function isWithinActivePresets(
   // Current time as "HH:MM" on the phone's own clock. This runs on the
   // device, so its local time is the user's time — no need for the stored
   // timezone_offset_minutes, which is null until the app first saves it.
-  const now = new Date();
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const currentTime = `${hours}:${minutes}`;
@@ -591,6 +591,73 @@ export async function getReminderForUser(): Promise<RemindersContent | null> {
     return reminderContent;
   } catch (error) {
     console.error("Error in reminder engine:", error);
+    return null;
+  }
+}
+
+// RULE GROUP 5 (scheduled): the interval check above only runs while the app
+// is open, so it can never see a 48h absence. Instead, each time the user
+// leaves the app a re-engagement notification is scheduled with the OS for
+// 48h later (see scheduleReEngagementReminder in pushNotificationService);
+// leaving again replaces it, so it only fires after a real 48h away.
+const RE_ENGAGEMENT_AFTER_MS = 48 * 60 * 60 * 1000;
+
+// Start of each preset window — a reminder that would land outside active
+// hours waits for the next one.
+const ACTIVE_TIME_PRESET_STARTS: Record<ActiveTimePreset, [number, number]> = {
+  morning:    [7, 0],
+  afternoon:  [12, 0],
+  evening:    [17, 0],
+  late_night: [21, 0],
+};
+
+/** `from` if it's inside active hours, else the next preset start after it; null with no presets. */
+export function nextActiveMoment(from: Date, activeTimePresets: ActiveTimePreset[]): Date | null {
+  if (!activeTimePresets?.length) return null;
+  if (isWithinActivePresets(activeTimePresets, from)) return from;
+  let best: Date | null = null;
+  for (const preset of activeTimePresets) {
+    const [h, m] = ACTIVE_TIME_PRESET_STARTS[preset];
+    for (const dayOffset of [0, 1]) {
+      const candidate = new Date(from.getFullYear(), from.getMonth(), from.getDate() + dayOffset, h, m);
+      if (candidate > from && (!best || candidate < best)) best = candidate;
+    }
+  }
+  return best;
+}
+
+/**
+ * Content and delivery time for the re-engagement reminder, 48h from `leftAt`
+ * shifted into the user's active hours. Null for guests, users with no active
+ * hours, or when there's no re_engagement content. Not logged here — it may
+ * never be delivered (replaced when the user comes back).
+ */
+export async function getReEngagementReminder(
+  leftAt: Date = new Date()
+): Promise<{ content: RemindersContent; fireAt: Date } | null> {
+  const userId = await getCurrentUserId();
+  if (userId === "guest") return null;
+  try {
+    const { data: profile, error } = await supabase
+      .from("user_profile")
+      .select("preferred_tones, active_time_presets")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error || !profile) return null;
+
+    const fireAt = nextActiveMoment(
+      new Date(leftAt.getTime() + RE_ENGAGEMENT_AFTER_MS),
+      profile.active_time_presets as ActiveTimePreset[]
+    );
+    if (!fireAt) return null;
+
+    const tones = (profile.preferred_tones as ReminderTone[] | null)?.length
+      ? (profile.preferred_tones as ReminderTone[])
+      : ["gentle" as ReminderTone];
+    const content = await fetchReminderContent("re_engagement", tones);
+    return content ? { content, fireAt } : null;
+  } catch (error) {
+    console.error("Error preparing re-engagement reminder:", error);
     return null;
   }
 }

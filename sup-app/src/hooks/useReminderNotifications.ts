@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import {
   setupNotifications,
   setupNotificationListeners,
   startReminderCheckInterval,
   triggerReminder,
+  scheduleReEngagementReminder,
 } from "../services/reminder/pushNotificationService";
 
 /**
@@ -28,6 +30,14 @@ export function useReminderNotifications() {
         const unsubscribeInterval = startReminderCheckInterval(30); // FOR TESTING ONLY
         // const unsubscribeInterval = startReminderCheckInterval(300); // ORIGINAL INTERVAL
         cleanupRef.current.push(unsubscribeInterval);
+
+        // Re-engagement: (re)schedule 48h ahead now and every time the user
+        // leaves the app, so it only fires after a real 48h absence.
+        scheduleReEngagementReminder();
+        const appStateSub = AppState.addEventListener("change", (next) => {
+          if (next === "background") scheduleReEngagementReminder();
+        });
+        cleanupRef.current.push(() => appStateSub.remove());
 
         console.log("Reminder notifications initialized");
       } catch (error) {
