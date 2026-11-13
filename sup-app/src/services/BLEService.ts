@@ -76,7 +76,9 @@ class BLEService {
   // Reconnect guard — prevents parallel reconnect loops for the same slot.
   // true = a reconnect is already in flight for that slot; ignore new attempts.
   private reconnecting: Record<SensorSlot, boolean> = { top: false, bottom: false };
-  private reconnectingAny = false; // global lock — only one slot reconnects at a time
+  // Global connect queue — every device.connect() (foreground or reconnect
+  // loop, either slot) runs through withConnectLock(), one at a time.
+  private connectQueue: Promise<void> = Promise.resolve();
 
   // Manual disconnect flag — set when the user explicitly disconnects a slot.
   // Prevents auto-reconnect from firing after an intentional disconnection.
@@ -248,15 +250,11 @@ class BLEService {
       // connect operations cancel each other on iOS (see runReconnectLoop's
       // own use of this same lock, which only protected itself from itself
       // until now).
-      await this.waitForReconnectSlot();
-      this.reconnectingAny = true;
-      let connected: Device;
-      try {
-        connected = await device.connect({ timeout: CONNECT_TIMEOUT_MS });
-        await connected.discoverAllServicesAndCharacteristics();
-      } finally {
-        this.reconnectingAny = false;
-      }
+      const connected = await this.withConnectLock(async () => {
+        const d = await device.connect({ timeout: CONNECT_TIMEOUT_MS });
+        await d.discoverAllServicesAndCharacteristics();
+        return d;
+      });
 
       this.devices[slot] = connected;
       // Fresh connection is live — a later drop on it is unexpected until
@@ -432,18 +430,23 @@ class BLEService {
   }
 
   /**
-   * Blocks while another connect operation (a foreground connectDevice() or
-   * another slot's reconnect loop) holds the shared reconnectingAny lock —
-   * only one BLE central connect should be in flight at a time, since two
-   * simultaneous device.connect() calls cancel each other on iOS. Gives up
-   * waiting after 15s so a stuck lock can't wedge every future connect.
+   * Runs `fn` once every earlier connect operation (a foreground
+   * connectDevice() or either slot's reconnect loop) has finished — only one
+   * BLE central connect should be in flight at a time, since two simultaneous
+   * device.connect() calls cancel each other on iOS. Each caller takes its
+   * place in the queue synchronously, so two callers can never both see it
+   * free (the old check-then-set flag could, if two timers fired in one batch).
+   * Waits at most 15s on the previous operation so a stuck one can't wedge
+   * every future connect.
    */
-  private async waitForReconnectSlot(): Promise<void> {
-    let waited = 0;
-    while (this.reconnectingAny && waited < 15000) {
-      await new Promise((r) => setTimeout(r, 500));
-      waited += 500;
-    }
+  private withConnectLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = this.connectQueue;
+    const run = (async () => {
+      await Promise.race([previous, new Promise((r) => setTimeout(r, 15000))]);
+      return fn();
+    })();
+    this.connectQueue = run.then(() => {}, () => {});
+    return run;
   }
 
   private async runReconnectLoop(device: Device, slot: SensorSlot): Promise<void> {
@@ -462,22 +465,18 @@ class BLEService {
 
       // Wait for any other slot (or a foreground connectDevice()) to finish
       // first — prevents parallel BLE connections which cancel each other on iOS
-      await this.waitForReconnectSlot();
-
-      if (this.devices[slot] !== null) break; // reconnected while waiting
-
-      this.reconnectingAny = true;
       try {
-        await this.reconnectDirect(device, slot);
-        console.log(`[BLE] ${slot} s'pot reconnected`);
+        await this.withConnectLock(async () => {
+          if (this.devices[slot] !== null) return; // reconnected while waiting
+          await this.reconnectDirect(device, slot);
+          console.log(`[BLE] ${slot} s'pot reconnected`);
+        });
         break;
       } catch (e: any) {
         console.warn(`[BLE] ${slot} reconnect attempt ${attempts} failed:`, e.message);
         if (attempts >= 5) {
           console.log(`[BLE] ${slot} giving up after 5 attempts`);
         }
-      } finally {
-        this.reconnectingAny = false;
       }
     }
 
