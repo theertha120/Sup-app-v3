@@ -20,7 +20,7 @@ Before release, check on a device with that database:
 2. Log plank (3 × 30 seconds), glute bridge (3 × 12 reps), and yoga (20 minutes) in one workout. Choose a back rating and save. Relaunch and confirm the workout persists.
 3. Enter different values per set, a custom strength exercise, and a fractional activity duration. Check the keyboard does not cover Save and that long exercise names wrap.
 4. Save with missing/zero/negative values or no back rating; confirm the form remains open with a helpful error. Cancel a dirty form and choose Keep editing, then Discard.
-5. Edit a date using the calendar, try a leap day, filter by day/category, and navigate across month/year boundaries. Swipe the weekly card left for older weeks and right for newer weeks, matching Stats; check short drags snap back, vertical scrolling and day taps still work, and swiping right at the current week stops at the boundary. Future dates must be disabled.
+5. Edit a date using the calendar, try a leap day, filter by day, and navigate across month/year boundaries. Swipe the weekly card left for older weeks and right for newer weeks, matching Stats; check short drags snap back, vertical scrolling and day taps still work, and swiping right at the current week stops at the boundary. Future dates must be disabled.
 6. Use last values and Log again. Confirm the copied workout is not saved automatically and the rating is unset.
 7. Edit and delete a workout, then reload. Delete must require confirmation.
 8. Interrupt the connection on save: no success message, form values retained. Restore connectivity and retry.

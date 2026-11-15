@@ -11,7 +11,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/contexts/ToastContext';
 import { toLocalDateKey, fromLocalDateKey, addDaysToDateKey } from '@/src/lib/dateKey';
 import { fetchWorkouts, saveWorkout, deleteWorkout } from '@/src/services/exercise/exerciseLogService';
-import { formatAmount, repeatWorkout, FEELINGS, type Workout, type WorkoutInput, type ExerciseCategory } from '@/src/features/exercise/model';
+import { formatAmount, repeatWorkout, FEELINGS, type Workout, type WorkoutInput } from '@/src/features/exercise/model';
 import { Button, s, purple, soft } from '@/src/features/exercise/ui';
 import { WeekCalendar } from '@/src/features/exercise/WeekCalendar';
 import { DateCalendar } from '@/src/features/exercise/DateCalendar';
@@ -31,7 +31,6 @@ export default function ExerciseLogScreen() {
   const [loadError, setLoadError] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [category, setCategory] = useState<ExerciseCategory | 'all'>('all');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [weekAnchor, setWeekAnchor] = useState(toLocalDateKey());
   const [calendar, setCalendar] = useState(false);
@@ -65,7 +64,7 @@ export default function ExerciseLogScreen() {
     request.current++; setLoading(false);
     setData(current => ({ owner: userId, rows: [saved, ...(current?.owner === userId ? current.rows : []).filter(row => row.id !== saved.id)]
       .sort((a, b) => b.performed_on.localeCompare(a.performed_on) || b.created_at.localeCompare(a.created_at)) }));
-    setSelectedDay(null); setCategory('all'); setWeekAnchor(saved.performed_on); setEditor(null);
+    setSelectedDay(null); setWeekAnchor(saved.performed_on); setEditor(null);
     showToast(editor?.id ? 'Workout updated' : 'Workout saved', 'success');
   };
   const remove = async (workout: Workout) => {
@@ -82,8 +81,7 @@ export default function ExerciseLogScreen() {
   };
   const today = toLocalDateKey();
   const activeDays = new Set(workouts.map(workout => workout.performed_on));
-  const visible = workouts.filter(workout => (!selectedDay || workout.performed_on === selectedDay) &&
-    (category === 'all' || workout.exercises.some(exercise => exercise.category === category)));
+  const visible = workouts.filter(workout => !selectedDay || workout.performed_on === selectedDay);
   const groups = [...new Set(visible.map(workout => workout.performed_on))];
   const dateLabel = (date: string) => date === today ? 'Today' : date === addDaysToDateKey(today, -1) ? 'Yesterday' :
     fromLocalDateKey(date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -99,14 +97,13 @@ export default function ExerciseLogScreen() {
           onWeekChange={day => { setWeekAnchor(day); setSelectedDay(null); }}
           onSelectDay={setSelectedDay} onOpenCalendar={() => setCalendar(true)} />
         <Button label="+ Log exercise" onPress={() => setEditor({})} disabled={!userId || busy} />
-        <View style={s.row}>{(['all', 'strength', 'other'] as const).map(value => <Button key={value} label={value === 'all' ? 'All' : value === 'strength' ? 'Strength' : 'Other'} secondary selected={category === value} onPress={() => setCategory(value)} style={{ flex: 1, paddingHorizontal: 8 }} />)}</View>
         {selectedDay && <View style={s.between}><Text style={s.label}>{dateLabel(selectedDay)}</Text><Button label="Show all dates" secondary onPress={() => setSelectedDay(null)} /></View>}
         {loadError ? <View style={s.card}><Text style={s.error}>We couldn’t load your exercise history. Please try again.</Text><Button label="Retry" secondary onPress={() => void load()} /></View> : null}
         {loading && !data ? <ActivityIndicator color={purple} accessibilityLabel="Loading workouts" /> : null}
         {!loading && !loadError && visible.length === 0 && <View style={[s.card, { alignItems: 'center', paddingVertical: 30 }]}>
           <View style={styles.emptyIcon}><Ionicons name="barbell" size={30} color={purple} /></View>
           <Text style={[s.heading, { textAlign: 'center' }]}>{!userId ? 'Sign in to keep your exercise log' : workouts.length ? 'No workouts here yet' : 'Your exercise history starts here'}</Text>
-          <Text style={[s.muted, { textAlign: 'center' }]}>{workouts.length ? 'Try another day or filter, or log an exercise.' : 'Record what you trained and how your back felt, one workout at a time.'}</Text>
+          <Text style={[s.muted, { textAlign: 'center' }]}>{workouts.length ? 'Try another day or log an exercise.' : 'Record what you trained and how your back felt, one workout at a time.'}</Text>
           {!workouts.length && <Text style={[s.muted, { textAlign: 'center' }]}>A stronger core and upper back make sitting upright easier.</Text>}
         </View>}
         {groups.map(day => <View key={day} style={{ gap: 12 }}>
