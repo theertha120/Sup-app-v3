@@ -61,11 +61,12 @@ test('skipping the final message finishes the tutorial without navigating', () =
   assert.deepEqual(skip('add-friends-tip'), [['dismiss']]);
 });
 
-test('closes coaching setup before moving on and cannot skip during a save', () => {
-  assert.deepEqual(skip('coaching-tip', { modal: true }), [
-    ['close-modal'], ['step', 'go-sensor-tip'],
-  ]);
-  assert.deepEqual(skip('coaching-tip', { modal: true, disabled: true }), []);
+// The onBeforeSkip/skipDisabled hooks were removed in 063866b; settings and
+// coaching tips now skip straight to the sensor prompt.
+test('settings and coaching tips skip to the sensor prompt', () => {
+  for (const step of ['settings-tip', 'coaching-tip']) {
+    assert.deepEqual(skip(step), [['step', 'go-sensor-tip']]);
+  }
 });
 
 test('inactive tutorials and sensor-specific steps do not navigate', () => {

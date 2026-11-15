@@ -49,14 +49,20 @@ test('REST endpoint config becomes the correct project root', () => {
 // Execute the actual screen callback with mocked dependencies: no React Native
 // runtime, production users, or real signup/email side effects are needed.
 const source = ts.createSourceFile('details.tsx', readFileSync(new URL('../app/onboarding/details.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let callback;
+// handleNext guards repeat taps and delegates the network work to submit().
+const callbacks = {};
 function visit(node) {
-  if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'handleNext') callback = node.initializer.getText(source);
+  if (ts.isVariableDeclaration(node) && ['handleNext', 'submit'].includes(node.name.getText(source))) {
+    callbacks[node.name.getText(source)] = node.initializer.getText(source);
+  }
   ts.forEachChild(node, visit);
 }
 visit(source);
-assert.ok(callback);
-const callbackJs = ts.transpile(`const handleNext = ${callback};`, {target: ts.ScriptTarget.ES2022});
+assert.ok(callbacks.handleNext && callbacks.submit);
+const callbackJs = ts.transpile(
+  `const handleNext = ${callbacks.handleNext};\nconst submit = ${callbacks.submit};`,
+  {target: ts.ScriptTarget.ES2022},
+);
 
 test('signup screen blocks existing/failed checks and routes a new email to verification', async () => {
   for (const result of [{success: true, exists: true}, {success: false, error: EMAIL_CHECK_UNAVAILABLE}, {success: true, exists: false}]) {
@@ -68,6 +74,7 @@ test('signup screen blocks existing/failed checks and routes a new email to veri
       checkEmailRegistered: async () => result,
       register: async (...args) => {calls.push(['register', ...args]); return {success: true};},
       setPendingSignup: value => calls.push(['pending', value]), router: {push: route => calls.push(['route', route])},
+      submitting: false, setSubmitting: () => {}, captureError: () => {},
     };
     await new Function(...Object.keys(deps), `${callbackJs}; return handleNext();`)(...Object.values(deps));
     if (!result.success) {assert.equal(message, EMAIL_CHECK_UNAVAILABLE); assert.deepEqual(calls, []);}
