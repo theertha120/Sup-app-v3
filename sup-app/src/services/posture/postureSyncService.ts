@@ -432,7 +432,7 @@ const SUP_SCORE_PRIOR_MS    = 10 * 60_000;
  * tracked time, blended with a 10-minute prior of 50. Null if nothing was
  * tracked (a day off has no score rather than a free 50).
  */
-function computeSupScore(stateTotals: StateTotals): number | null {
+export function computeSupScore(stateTotals: StateTotals): number | null {
   const score = unroundedSupScore(stateTotals);
   return score === null ? null : Math.round(score);
 }

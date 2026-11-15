@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import { AppState, Platform } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
-import { getReminderForUser } from "./reminderEngineService";
+import { getReminderForUser, getReEngagementReminder } from "./reminderEngineService";
 
 /**
  * LOCAL NOTIFICATION SERVICE
@@ -23,6 +23,10 @@ const CHANNEL_SESSION_ALERTS = "session_alerts";
 
 // data.type marking a background alert mirrored from an in-app pop-up
 const SESSION_ALERT_TYPE = "session_alert";
+
+// Fixed identifier, so scheduling again replaces the pending re-engagement reminder
+const RE_ENGAGEMENT_ID = "re-engagement";
+const RE_ENGAGEMENT_TYPE = "re_engagement";
 
 // Configure notification behavior when app is in foreground
 Notifications.setNotificationHandler({
@@ -412,6 +416,49 @@ async function handleBehaviourStateUpdate(
 }
 
 /**
+ * SCHEDULE RE-ENGAGEMENT REMINDER
+ * Call when the user leaves the app (and at startup). Replaces any pending
+ * one with a reminder 48h from now, inside active hours — so it fires only if
+ * the user really stays away that long. The interval-driven triggerReminder()
+ * can't do this: it only runs while the app is open. Signed out, no active
+ * hours or no content → the pending one is just cancelled.
+ */
+export async function scheduleReEngagementReminder(): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(RE_ENGAGEMENT_ID);
+    const reminder = await getReEngagementReminder();
+    if (!reminder) return;
+    const { content, fireAt } = reminder;
+    await Notifications.scheduleNotificationAsync({
+      identifier: RE_ENGAGEMENT_ID,
+      content: {
+        title: content.title,
+        body: content.body,
+        sound: "default",
+        categoryIdentifier: CATEGORY_REMINDER,
+        data: {
+          actionLabel: content.action_label || "View",
+          type: RE_ENGAGEMENT_TYPE,
+          reminderContentId: content.id,
+          fireAt: fireAt.toISOString(),
+        },
+        ...(Platform.OS === "android" && {
+          channelId: CHANNEL_REMINDERS,
+          color: "#FF6B6B",
+          tag: "reminder",
+          sticky: false,
+          autoDismiss: true,
+        }),
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
+    });
+    console.log("Re-engagement reminder scheduled for", fireAt.toISOString());
+  } catch (error) {
+    console.error("Error scheduling re-engagement reminder:", error);
+  }
+}
+
+/**
  * TRIGGER REMINDER
  * Calls the reminder engine and sends notification if reminder is selected
  */
@@ -421,7 +468,9 @@ export async function triggerReminder(): Promise<void> {
     const userId = await getCurrentUserId();
     console.log(userId);
 
-    // Update last interaction timestamp
+    // Update last interaction timestamp. This runs only while the app is open,
+    // so the engine's 48h re-engagement check never fires from here — that
+    // case is covered by scheduleReEngagementReminder() instead.
     await supabase
       .from("user_profile")
       .update({
@@ -474,6 +523,27 @@ export function setupNotificationListeners(): () => void {
       console.log("User interacted with notification:", actionIdentifier);
       const userId = await getCurrentUserId();
       await handleBehaviourStateUpdate(userId, actionIdentifier);
+
+      // A scheduled re-engagement reminder was never logged when it was
+      // scheduled (it may have been replaced), so log it now, as delivered
+      // and interacted with — rather than marking an older reminder's row.
+      const data = response.notification.request.content.data;
+      if (data?.type === RE_ENGAGEMENT_TYPE) {
+        if (userId === "guest") return;
+        const now = new Date().toISOString();
+        const { error } = await supabase.from("reminder_log").insert({
+          user_id: userId,
+          reminder_content_id: data.reminderContentId,
+          reminder_type: RE_ENGAGEMENT_TYPE,
+          sent_at: typeof data.fireAt === "string" ? data.fireAt : now,
+          created_at: now,
+          user_interacted: true,
+          interaction_at: now,
+          interaction_action: actionIdentifier,
+        });
+        if (error) console.error("Error logging re-engagement interaction:", error);
+        return;
+      }
 
       if (actionLabel) {
         console.log("User interacted with notification:", actionLabel);
