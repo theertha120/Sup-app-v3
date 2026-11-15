@@ -371,6 +371,9 @@ export default function DeskScreen() {
   const currentUserIdRef = useRef<string | null>(null);
   const sessionActiveRef = useRef(sessionActive);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  // Collapse state for the two "recent history" cards — collapsed until the user expands them.
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [updatesExpanded, setUpdatesExpanded] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   useEffect(() => { sessionActiveRef.current = sessionActive; }, [sessionActive]);
@@ -628,6 +631,12 @@ export default function DeskScreen() {
     if (sessionActive) clearSummary();
   }, [sessionActive, clearSummary]);
 
+  // Collapse the summary card again whenever a new summary appears.
+  const summaryStartMs = summaryReplay?.startMs;
+  useEffect(() => {
+    if (summaryStartMs != null) setSummaryExpanded(false);
+  }, [summaryStartMs]);
+
   // Restore the latest session's summary after an app restart.
   useEffect(() => {
     if (!currentUserId) return;
@@ -868,68 +877,6 @@ export default function DeskScreen() {
           </>
         )}
 
-        {/* End-of-session summary — stays until a new session starts */}
-        {summaryReplay && (
-          <View style={sm.card}>
-            <View style={sm.titleRow}>
-              <Text style={sm.title}>session end summary</Text>
-              <InfoButton onPress={() => setShowSummaryInfo(true)} color={colours.primary} style={ss.strainInfoBtn} />
-            </View>
-
-            <SessionReplay
-              key={summaryReplay.startMs}
-              startMs={summaryReplay.startMs}
-              endMs={summaryReplay.endMs}
-              score={summaryReplay.score}
-              timeline={summaryReplay.timeline}
-              stateColors={STATE_COLORS}
-              stateLabels={STATE_LABELS}
-              onScrubbingChange={(scrubbing) => setScrollEnabled(!scrubbing)}
-            />
-
-            <View style={[su.historyItem, sm.skipperRow]}>
-              <Image source={INSIGHT_MASCOT[summaryColor]} style={su.historyMascot} resizeMode="contain" />
-              <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[summaryColor] }]}>
-                <Text style={su.historyText}>
-                  {isLoadingSummary
-                    ? "s'kipper is reviewing your session..."
-                    : summaryMessage ?? ""}
-                </Text>
-              </View>
-            </View>
-
-            {summaryHighlights.length > 0 && (
-              <View style={su.summarySection}>
-                {summaryHighlights.map((h) => (
-                  <Text key={h.label} style={su.highlightLine}>
-                    <Text style={su.highlightLabel}>{h.label}:</Text> {h.text}
-                  </Text>
-                ))}
-              </View>
-            )}
-
-            {summaryComparison && (
-              <View style={su.summarySection}>
-                <Text style={su.highlightLabel}>vs last session</Text>
-                {summaryComparison.map((m) => (
-                  <View key={m.label} style={su.compareRow}>
-                    <Text style={su.compareLabel}>{m.label}</Text>
-                    <Text style={su.compareValue}>{m.current}</Text>
-                    <Text
-                      style={[
-                        su.compareChange,
-                        { color: m.improved === null ? "#888" : m.improved ? "#2E7D32" : "#C62828" },
-                      ]}
-                    >
-                      {m.change}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
         {/* Session stats — only when tracking */}
         {isTracking && (
           <SessionStatsRow
@@ -970,21 +917,105 @@ export default function DeskScreen() {
           </View>
         )}
 
-        {/* s'update history */}
-        {updateHistory.length > 0 && (
+        {/* Recent history: session end summary + s'update history, each a collapsible card */}
+        {(summaryReplay || updateHistory.length > 0) && (
           <View style={su.historySection}>
-            <Text style={su.historyHeading}>s<Text style={su.historyHeadingApostrophe}>'</Text>update history</Text>
-            {updateHistory.map((entry, i) => (
-              <View key={i} style={su.historyItem}>
-                <Image source={INSIGHT_MASCOT[entry.color]} style={su.historyMascot} resizeMode="contain" />
-                <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[entry.color] }]}>
-                  <Text style={su.historyText}>{entry.text}</Text>
-                  <Text style={su.historyTime}>
-                    today, {entry.time.getHours()}:{String(entry.time.getMinutes()).padStart(2, "0")}
-                  </Text>
-                </View>
+            <Text style={su.historyHeading}>recent history</Text>
+
+            {/* End-of-session summary — stays until a new session starts */}
+            {summaryReplay && (
+              <View style={sm.card}>
+                <PressFeedback
+                  style={[sm.titleRow, !summaryExpanded && sm.titleRowCollapsed]}
+                  onPress={() => setSummaryExpanded((v) => !v)}
+                >
+                  <Text style={sm.title}>session end summary</Text>
+                  <InfoButton onPress={() => setShowSummaryInfo(true)} color={colours.primary} style={ss.strainInfoBtn} />
+                  <Ionicons name={summaryExpanded ? "chevron-up" : "chevron-down"} size={20} color="#1D014A" style={sm.chevron} />
+                </PressFeedback>
+
+                {summaryExpanded && (
+                  <>
+                    <SessionReplay
+                      key={summaryReplay.startMs}
+                      startMs={summaryReplay.startMs}
+                      endMs={summaryReplay.endMs}
+                      score={summaryReplay.score}
+                      timeline={summaryReplay.timeline}
+                      stateColors={STATE_COLORS}
+                      stateLabels={STATE_LABELS}
+                      onScrubbingChange={(scrubbing) => setScrollEnabled(!scrubbing)}
+                    />
+
+                    <View style={[su.historyItem, sm.skipperRow]}>
+                      <Image source={INSIGHT_MASCOT[summaryColor]} style={su.historyMascot} resizeMode="contain" />
+                      <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[summaryColor] }]}>
+                        <Text style={su.historyText}>
+                          {isLoadingSummary
+                            ? "s'kipper is reviewing your session..."
+                            : summaryMessage ?? ""}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {summaryHighlights.length > 0 && (
+                      <View style={su.summarySection}>
+                        {summaryHighlights.map((h) => (
+                          <Text key={h.label} style={su.highlightLine}>
+                            <Text style={su.highlightLabel}>{h.label}:</Text> {h.text}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+
+                    {summaryComparison && (
+                      <View style={su.summarySection}>
+                        <Text style={su.highlightLabel}>vs last session</Text>
+                        {summaryComparison.map((m) => (
+                          <View key={m.label} style={su.compareRow}>
+                            <Text style={su.compareLabel}>{m.label}</Text>
+                            <Text style={su.compareValue}>{m.current}</Text>
+                            <Text
+                              style={[
+                                su.compareChange,
+                                { color: m.improved === null ? "#888" : m.improved ? "#2E7D32" : "#C62828" },
+                              ]}
+                            >
+                              {m.change}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
               </View>
-            ))}
+            )}
+
+            {/* s'update history */}
+            {updateHistory.length > 0 && (
+              <View style={sm.card}>
+                <PressFeedback
+                  style={[sm.titleRow, !updatesExpanded && sm.titleRowCollapsed]}
+                  onPress={() => setUpdatesExpanded((v) => !v)}
+                >
+                  <Text style={sm.title}>s<Text style={su.historyHeadingApostrophe}>'</Text>update history</Text>
+                  <Ionicons name={updatesExpanded ? "chevron-up" : "chevron-down"} size={20} color="#1D014A" style={sm.chevron} />
+                </PressFeedback>
+
+                {updatesExpanded && updateHistory.map((entry, i) => (
+                  <View key={i} style={su.historyItem}>
+                    <Image source={INSIGHT_MASCOT[entry.color]} style={su.historyMascot} resizeMode="contain" />
+                    <View style={[su.historyBubble, { borderWidth: 2, borderColor: INSIGHT_BORDER[entry.color] }]}>
+                      <Text style={su.historyText}>{entry.text}</Text>
+                      <Text style={su.historyTime}>
+                        today, {entry.time.getHours()}:{String(entry.time.getMinutes()).padStart(2, "0")}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -1050,7 +1081,10 @@ const sm = StyleSheet.create({
     ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 2 } }),
   },
   titleRow:   { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  titleRowCollapsed: { marginBottom: 0 },
   title:      { fontSize: 18, color: "#1D014A", fontFamily: "Agrandir-GrandHeavy" },
+  // Pushes the collapse chevron to the right edge of the card header.
+  chevron:    { marginLeft: "auto" },
   skipperRow: { marginTop: 4 },
 });
 
