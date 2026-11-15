@@ -1,3 +1,4 @@
+/* global __dirname:readonly */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -102,4 +103,31 @@ test('load, save and delete errors reach the caller for retry', async () => {
     const api = service([{ data: null, error: failure }]);
     await assert.rejects(operation === 'load' ? api.fetchWorkouts('user-a') : operation === 'save' ? api.saveWorkout('user-a', workout()) : api.deleteWorkout('user-a', 'existing'), /Connection failed/);
   }
+});
+
+test('limits allow 30 exercises and 50 sets, but reject excess or multiple activity durations', () => {
+  const entry = workout().exercises[0];
+  assert.equal(validate({ ...workout(), exercises: Array.from({length: 30}, () => ({...entry, values: Array(50).fill(1)})) }), null);
+  assert.ok(validate({ ...workout(), exercises: Array(31).fill(entry) }));
+  assert.ok(validate({ ...workout(), exercises: [{ ...entry, values: Array(51).fill(1) }] }));
+  assert.ok(validate({ ...workout(), exercises: [{ name: 'Yoga', category: 'other', unit: 'minutes', values: [10, 20] }] }));
+});
+test('custom exercises enforce name length and category-specific units', () => {
+  for (const exercise of [
+    {name: 'Side plank', category: 'strength', unit: 'seconds', values: [30]},
+    {name: 'Bird dog', category: 'strength', unit: 'reps', values: [10]},
+    {name: 'Dance', category: 'other', unit: 'minutes', values: [20.5]},
+  ]) assert.equal(validate({...workout(), exercises: [exercise]}), null);
+  assert.ok(validate({...workout(), exercises: [{...workout().exercises[0], name: 'x'.repeat(81)}]}));
+  assert.ok(validate({...workout(), exercises: [{...workout().exercises[0], category: 'other'}]}));
+});
+test('an exact full history page is followed by a final empty page without duplicates', async () => {
+  const rows = Array.from({length: 500}, (_, id) => ({id: String(id)}));
+  const api = service([{data: rows, error: null}, {data: [], error: null}]);
+  const result = await api.fetchWorkouts('user-a');
+  assert.equal(result.length, 500); assert.equal(new Set(result.map(row => row.id)).size, 500);
+});
+test('failure on a later history page rejects instead of returning a misleading partial history', async () => {
+  const api = service([{data: Array(500).fill({id: 'row'}), error: null}, {data: null, error: Error('lost connection')}]);
+  await assert.rejects(api.fetchWorkouts('user-a'), /lost connection/);
 });

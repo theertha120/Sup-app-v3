@@ -12,7 +12,7 @@ The app reports load/save errors and preserves an open form after a failed save.
 
 ## Checks
 
-Run `node --test tests/exercise-log.test.cjs` for date/amount validation, repeat behavior, pagination, owner-scoped storage operations and failure propagation. These tests mock the storage transport; database policies also need verification against a migrated test database.
+Run `npm test` from `sup-app` before pushing or merging. Exercise Log coverage includes model/storage tests and real form, calendar, history and navigation callbacks with mocked native dependencies. See [the test record](exercise-log-test-results.md) for results and [the device checklist](device-test-checklist.md) for manual checks; database policies also need verification against a migrated test database.
 
 Before release, check on a device with that database:
 
