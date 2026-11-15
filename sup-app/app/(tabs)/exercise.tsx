@@ -97,7 +97,6 @@ export default function ExerciseLogScreen() {
       contentContainerStyle={{ paddingTop: 8, paddingBottom: 125 + insets.bottom }}>
       <HeaderBar />
       <View style={{ paddingHorizontal: 20, gap: 20 }}>
-        <View style={{ gap: 6 }}><Text accessibilityRole="header" style={s.title}>exercise log</Text><Text style={s.text}>What did I train?</Text></View>
         <View style={s.card}>
           <View style={s.between}><View style={{ flex: 1, gap: 4 }}>
             <Text style={s.heading}>{days.includes(today) ? 'This week' : `${fromLocalDateKey(monday).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${fromLocalDateKey(days[6]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}</Text>
