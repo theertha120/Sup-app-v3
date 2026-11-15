@@ -13,6 +13,7 @@ import { toLocalDateKey, fromLocalDateKey, addDaysToDateKey } from '@/src/lib/da
 import { fetchWorkouts, saveWorkout, deleteWorkout } from '@/src/services/exercise/exerciseLogService';
 import { formatAmount, repeatWorkout, FEELINGS, type Workout, type WorkoutInput, type ExerciseCategory } from '@/src/features/exercise/model';
 import { Button, s, purple, soft } from '@/src/features/exercise/ui';
+import { WeekCalendar } from '@/src/features/exercise/WeekCalendar';
 import { DateCalendar } from '@/src/features/exercise/DateCalendar';
 import { WorkoutForm } from '@/src/features/exercise/WorkoutForm';
 export { default as ErrorBoundary } from '@/src/components/ui/ScreenErrorBoundary';
@@ -80,10 +81,7 @@ export default function ExerciseLogScreen() {
     finally { busyRef.current = false; setBusy(false); }
   };
   const today = toLocalDateKey();
-  const monday = addDaysToDateKey(weekAnchor, -((fromLocalDateKey(weekAnchor).getDay() + 6) % 7));
-  const days = Array.from({ length: 7 }, (_, index) => addDaysToDateKey(monday, index));
   const activeDays = new Set(workouts.map(workout => workout.performed_on));
-  const weekCount = days.filter(day => activeDays.has(day)).length;
   const visible = workouts.filter(workout => (!selectedDay || workout.performed_on === selectedDay) &&
     (category === 'all' || workout.exercises.some(exercise => exercise.category === category)));
   const groups = [...new Set(visible.map(workout => workout.performed_on))];
@@ -97,26 +95,9 @@ export default function ExerciseLogScreen() {
       contentContainerStyle={{ paddingTop: 8, paddingBottom: 125 + insets.bottom }}>
       <HeaderBar />
       <View style={{ paddingHorizontal: 20, paddingTop: 24, gap: 20 }}>
-        <View style={s.card}>
-          <View style={s.between}><View style={{ flex: 1, gap: 4 }}>
-            <Text style={s.heading}>{days.includes(today) ? 'This week' : `${fromLocalDateKey(monday).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${fromLocalDateKey(days[6]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}</Text>
-            <Text style={s.muted}>{weekCount} {weekCount === 1 ? 'day' : 'days'} with logged exercise</Text></View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open exercise calendar" onPress={() => setCalendar(true)} style={styles.iconButton}><Ionicons name="calendar-outline" size={22} color={purple} /></Pressable>
-          </View>
-          <View style={{ flexDirection: 'row' }}>{days.map((day, index) => <Pressable key={day}
-            accessibilityRole="button" accessibilityLabel={`${dateLabel(day)}${activeDays.has(day) ? ', exercise logged' : ''}`}
-            accessibilityState={{ selected: selectedDay === day, disabled: day > today }} disabled={day > today}
-            onPress={() => setSelectedDay(selectedDay === day ? null : day)}
-            style={[styles.day, selectedDay === day && { backgroundColor: purple }, { opacity: day > today ? 0.35 : 1 }]}>
-            <Text style={[s.muted, selectedDay === day && styles.white]}>{['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]}</Text>
-            <Text style={[s.label, day === today && { color: purple }, selectedDay === day && styles.white]}>{fromLocalDateKey(day).getDate()}</Text>
-            <View style={[styles.dot, { backgroundColor: activeDays.has(day) ? selectedDay === day ? '#fff' : purple : 'transparent' }]} />
-          </Pressable>)}</View>
-          <View style={s.between}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Previous week" style={styles.weekButton} onPress={() => { setWeekAnchor(addDaysToDateKey(monday, -7)); setSelectedDay(null); }}><Text style={s.muted}>‹ Previous</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Next week" style={styles.weekButton} disabled={days.includes(today)} onPress={() => { setWeekAnchor(addDaysToDateKey(monday, 7)); setSelectedDay(null); }}><Text style={[s.muted, days.includes(today) && { opacity: 0.3 }]}>Next ›</Text></Pressable>
-          </View>
-        </View>
+        <WeekCalendar anchor={weekAnchor} selectedDay={selectedDay} marked={activeDays}
+          onWeekChange={day => { setWeekAnchor(day); setSelectedDay(null); }}
+          onSelectDay={setSelectedDay} onOpenCalendar={() => setCalendar(true)} />
         <Button label="+ Log exercise" onPress={() => setEditor({})} disabled={!userId || busy} />
         <View style={s.row}>{(['all', 'strength', 'other'] as const).map(value => <Button key={value} label={value === 'all' ? 'All' : value === 'strength' ? 'Strength' : 'Other'} secondary selected={category === value} onPress={() => setCategory(value)} style={{ flex: 1, paddingHorizontal: 8 }} />)}</View>
         {selectedDay && <View style={s.between}><Text style={s.label}>{dateLabel(selectedDay)}</Text><Button label="Show all dates" secondary onPress={() => setSelectedDay(null)} /></View>}
@@ -165,11 +146,7 @@ export default function ExerciseLogScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: 'rgba(211,193,231,0.64)' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  day: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 16 },
-  dot: { width: 5, height: 5, borderRadius: 3 },
-  white: { color: '#fff' },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  weekButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   emptyIcon: { backgroundColor: soft, borderRadius: 24, padding: 18 },
   workoutIcon: { backgroundColor: soft, borderRadius: 12, padding: 9 },
   feeling: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center', paddingTop: 14, borderTopWidth: 1, borderTopColor: '#F0EBF6' },
