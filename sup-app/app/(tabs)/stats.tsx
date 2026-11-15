@@ -470,8 +470,8 @@ const PAGE_W           = CARD_W - CARD_PADDING_X * 2;
 // Pages sit a full card-padding apart so a neighbour starts just past the card edge
 const PAGE_STRIDE      = PAGE_W + CARD_PADDING_X * 2;
 
-// Horizontal pager for one card. Page 0 is the current period; swiping left
-// goes back in time. renderPage also gets the next-older page for ↑/↓ comparisons.
+// Horizontal pager for one card. Page 0 is the current period; older pages sit
+// to its left, so swiping right goes back in time. renderPage also gets the next-older page for ↑/↓ comparisons.
 function SwipeCard({
   pages,
   renderPage,
@@ -507,14 +507,15 @@ function SwipeCard({
       onPanResponderGrant: () => offset.stopAnimation(),
       onPanResponderMove: (_, g) => {
         const maxIdx = pagesRef.current.length - 1;
-        const atEdge = (g.dx > 0 && pageIdxRef.current <= 0) || (g.dx < 0 && pageIdxRef.current >= maxIdx);
-        offset.setValue(-pageIdxRef.current * PAGE_STRIDE + (atEdge ? g.dx * EDGE_RESISTANCE : g.dx));
+        const atEdge = (g.dx < 0 && pageIdxRef.current <= 0) || (g.dx > 0 && pageIdxRef.current >= maxIdx);
+        offset.setValue(pageIdxRef.current * PAGE_STRIDE + (atEdge ? g.dx * EDGE_RESISTANCE : g.dx));
       },
       onPanResponderRelease: (_, g) => {
         const maxIdx = pagesRef.current.length - 1;
+        // Drag right → older page (+1), drag left → newer page (-1).
         const dir: 1 | -1 | 0 =
-          g.dx < -SWIPE_DISTANCE || g.vx < -SWIPE_VELOCITY ? 1 :
-          g.dx >  SWIPE_DISTANCE || g.vx >  SWIPE_VELOCITY ? -1 : 0;
+          g.dx >  SWIPE_DISTANCE || g.vx >  SWIPE_VELOCITY ? 1 :
+          g.dx < -SWIPE_DISTANCE || g.vx < -SWIPE_VELOCITY ? -1 : 0;
         const next = pageIdxRef.current + dir;
         if (dir === 0 || next < 0 || next > maxIdx) {
           settleOn(pageIdxRef.current);
@@ -530,7 +531,7 @@ function SwipeCard({
   function settleOn(idx: number) {
     animatingRef.current = true;
     Animated.timing(offset, {
-      toValue: -idx * PAGE_STRIDE,
+      toValue: idx * PAGE_STRIDE,
       duration: 240,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
@@ -543,7 +544,7 @@ function SwipeCard({
   // Keep the row on the current slot when the page changes without a swipe
   // (e.g. the range reset back to page 0).
   useEffect(() => {
-    if (!animatingRef.current) offset.setValue(-pageIdx * PAGE_STRIDE);
+    if (!animatingRef.current) offset.setValue(pageIdx * PAGE_STRIDE);
   }, [pageIdx, offset]);
 
   // Tell the parent (it closes any open popup, which would point at the old page).
@@ -562,8 +563,11 @@ function SwipeCard({
   const displayIdx  = Math.min(pageIdx, pages.length - 1);
   // Only the current page and its neighbours get a View; the first one is
   // pushed to its slot with a margin so slots before it don't need empty Views.
+  // Page i's slot is at x = -i * PAGE_STRIDE, so the window is rendered oldest
+  // first (leftmost) and pulled left to its slot with a negative margin.
   const firstIdx    = Math.max(0, displayIdx - 1);
-  const windowPages = pages.slice(firstIdx, displayIdx + 2);
+  const lastIdx     = Math.min(pages.length - 1, displayIdx + 1);
+  const windowPages = pages.slice(firstIdx, lastIdx + 1).reverse();
 
   return (
     <View>
@@ -573,9 +577,9 @@ function SwipeCard({
       <View style={swipeStyles.clip} {...panResponder.panHandlers}>
         <Animated.View style={[swipeStyles.row, { transform: [{ translateX: offset }] }]}>
           {windowPages.map((p, j) => {
-            const i = firstIdx + j;
+            const i = lastIdx - j;
             return (
-              <View key={i} style={[swipeStyles.page, j === 0 && { marginLeft: i * PAGE_STRIDE }]}>
+              <View key={i} style={[swipeStyles.page, j === 0 && { marginLeft: -i * PAGE_STRIDE }]}>
                 {renderPage(p, pages[i + 1] ?? null)}
               </View>
             );
@@ -588,7 +592,7 @@ function SwipeCard({
           <Text style={swipeStyles.counter}>
             {displayIdx + 1} / {pages.length}
           </Text>
-          <Text style={swipeStyles.hint}>swipe left for older data</Text>
+          <Text style={swipeStyles.hint}>swipe right for older data</Text>
         </>
       )}
     </View>
