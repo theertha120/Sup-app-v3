@@ -1,6 +1,6 @@
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
-import { View, Dimensions, StyleSheet, Image, Text } from "react-native";
+import { View, useWindowDimensions, StyleSheet, Image, Text } from "react-native";
 import { BlurView } from "expo-blur";
 import Svg, { Defs, Mask, Rect } from "react-native-svg";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
@@ -15,11 +15,7 @@ import { logNavbarClick, type NavbarTab } from "@/src/services/analytics/navbarC
 import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 
-const { width } = Dimensions.get("window");
-
-const TAB_BAR_WIDTH = width - 40;
 const TAB_BAR_HEIGHT = 72;
-const TIP_WIDTH = Math.min(260, TAB_BAR_WIDTH);
 const CARET_SIZE = 14;
 
 // Tutorial "go to" prompts: the user opens the next page from the navbar
@@ -63,13 +59,35 @@ function DailyIcon({ color }: { color: string }) {
   );
 }
 
+function ExerciseIcon({ color }: { color: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Rect x="1" y="9" width="3" height="6" rx="1" fill={color} />
+      <Rect x="4" y="5" width="4" height="14" rx="1.4" fill={color} />
+      <Rect x="9" y="10.5" width="6" height="3" rx="0.8" fill={color} />
+      <Rect x="16" y="5" width="4" height="14" rx="1.4" fill={color} />
+      <Rect x="20" y="9" width="3" height="6" rx="1" fill={color} />
+    </Svg>
+  );
+}
+
+function TabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: withSpring(focused ? 1.15 : 1) }] }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
 export default function LiquidGlass({
   state,
   navigation,
+  descriptors,
 }: BottomTabBarProps) {
+  const { width } = useWindowDimensions();
+  const TAB_BAR_WIDTH = width - 40;
+  const TIP_WIDTH = Math.min(260, TAB_BAR_WIDTH);
   const { userId } = useAuth();
   const activeIndex = state.index;
   const TAB_WIDTH = TAB_BAR_WIDTH / state.routes.length;
+  const bubbleWidth = Math.min(60, TAB_WIDTH - 6);
   const { bottom: bottomInset } = useSafeAreaInsets();
   const { tutorialStep, setTutorialStep } = useTutorial();
   const prompt = tutorialStep ? NAV_PROMPTS[tutorialStep] : undefined;
@@ -82,7 +100,7 @@ export default function LiquidGlass({
       transform: [
         {
           translateX: withSpring(
-            activeIndex * TAB_WIDTH + TAB_WIDTH / 2 - 30,
+            activeIndex * TAB_WIDTH + (TAB_WIDTH - bubbleWidth) / 2,
             {
               damping: 15,
               stiffness: 140,
@@ -129,7 +147,7 @@ export default function LiquidGlass({
         <View style={styles.shineBottom} />
 
         <Animated.View
-          style={[styles.activeBubble, animatedBubbleStyle]}
+          style={[styles.activeBubble, { width: bubbleWidth }, animatedBubbleStyle]}
         />
 
         {state.routes.map((route, index) => {
@@ -153,33 +171,30 @@ export default function LiquidGlass({
             }
           };
 
-          const scaleStyle = useAnimatedStyle(() => ({
-            transform: [
-              {
-                scale: withSpring(isFocused ? 1.15 : 1),
-              },
-            ],
-          }));
-
           return (
             <PressFeedback
               feedback="scale"
+              accessibilityRole="tab"
+              accessibilityLabel={descriptors[route.key].options.title ?? route.name}
+              accessibilityState={{ selected: isFocused }}
               key={route.key}
               onPress={onPress}
               style={styles.tab}
             >
               {isPromptTarget && <View style={styles.tabHighlight} />}
-              <Animated.View style={scaleStyle}>
+              <TabIcon focused={isFocused}>
                 {NAV_IMAGES[route.name] ? (
                   <Image
                     source={NAV_IMAGES[route.name]}
                     style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
                     resizeMode="contain"
                   />
+                ) : route.name === "exercise" ? (
+                  <ExerciseIcon color={isFocused ? "#111" : "#888"} />
                 ) : (
                   <DailyIcon color={isFocused ? "#111" : "#888"} />
                 )}
-              </Animated.View>
+              </TabIcon>
             </PressFeedback>
           );
         })}
@@ -270,7 +285,7 @@ const styles = StyleSheet.create({
     right: 20,
   },
   tip: {
-    width: TIP_WIDTH,
+    maxWidth: 260,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
