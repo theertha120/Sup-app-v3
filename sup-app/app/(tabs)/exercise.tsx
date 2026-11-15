@@ -135,24 +135,23 @@ export default function ExerciseLogScreen() {
             const strength = workout.exercises.some(exercise => exercise.category === 'strength');
             const other = workout.exercises.some(exercise => exercise.category === 'other');
             return <View key={workout.id} style={s.card}>
-              <View style={s.between}><View style={s.row}><View style={styles.workoutIcon}><Ionicons name={strength ? 'barbell' : 'fitness-outline'} size={21} color={purple} /></View>
-                <Text style={s.label}>{strength && other ? 'Mixed workout' : strength ? 'Strength' : workout.exercises.length === 1 ? workout.exercises[0].name : 'Activity'}</Text></View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Options for ${workout.exercises.map(exercise => exercise.name).join(', ')} on ${dateLabel(day)}`} disabled={busy} onPress={() => setActions(workout)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={22} color={purple} /></Pressable>
+              <View style={s.between}><View style={[s.row, { flex: 1 }]}><View style={styles.workoutIcon}><Ionicons name={strength ? 'barbell' : 'fitness-outline'} size={21} color={purple} /></View>
+                <Text style={[s.label, { flexShrink: 1 }]}>{strength && other ? 'Mixed workout' : strength ? 'Strength' : workout.exercises.length === 1 ? workout.exercises[0].name : 'Activity'}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Options for ${workout.exercises.map(exercise => exercise.name).join(', ')} on ${dateLabel(day)}`} disabled={busy} onPress={() => setActions(actions?.id === workout.id ? null : workout)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={22} color={purple} /></Pressable>
               </View>
               {workout.exercises.map((exercise, index) => <View key={index} style={[s.between, { alignItems: 'flex-start' }]}><Text style={[s.text, { flex: 1 }]}>{exercise.name}</Text><Text style={[s.label, { flex: 1, textAlign: 'right', lineHeight: 21 }]}>{formatAmount(exercise)}</Text></View>)}
               <View style={styles.feeling}><Text style={s.muted}>Back felt</Text><Text style={[s.label, { color: purple }]}>{workout.back_feeling}/5 · {FEELINGS[workout.back_feeling - 1]}</Text></View>
+              {actions?.id === workout.id && <View style={[s.row, { flexWrap: 'wrap' }]}>
+                <Button label="Edit" secondary onPress={() => { setActions(null); setEditor({ id: workout.id, initial: workout }); }} />
+                <Button label="Log again" secondary onPress={() => { setActions(null); setEditor({ initial: repeatWorkout(workout) }); }} />
+                <Button label="Delete" secondary onPress={() => { setActions(null); setDeleting(workout); }} />
+              </View>}
             </View>;
           })}
         </View>)}
       </View>
     </ScrollView>
     {editor && userId && <WorkoutForm key={userId} initial={editor.initial} editing={!!editor.id} history={workouts} onClose={() => setEditor(null)} onSave={save} />}
-    <BrandAlert visible={!!actions} title="Workout options" onRequestClose={() => setActions(null)} buttons={[
-      { text: 'Edit workout', onPress: () => actions && setEditor({ id: actions.id, initial: actions }) },
-      { text: 'Log again', onPress: () => actions && setEditor({ initial: repeatWorkout(actions) }) },
-      { text: 'Delete workout', style: 'destructive', onPress: () => setDeleting(actions) },
-      { text: 'Cancel', style: 'cancel' },
-    ]} />
     <BrandAlert visible={!!deleting} title="Delete this workout?" message="This removes all exercises and the back-feeling rating in this workout." onRequestClose={() => setDeleting(null)} buttons={[
       { text: 'Keep workout', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { if (deleting) void remove(deleting); } },
     ]} />

@@ -6,8 +6,9 @@ import { EXERCISES, FEELINGS, validateWorkout, type WorkoutInput, type ExerciseE
 import { Button, s, purple, soft } from './ui';
 import { DateCalendar } from './DateCalendar';
 
-type DraftEntry = Omit<ExerciseEntry, 'values'> & { values: string[]; count: string; individual: boolean };
+type DraftEntry = Omit<ExerciseEntry, 'values'> & { values: string[]; count: string; individual: boolean; custom: boolean };
 const draft = (exercise: ExerciseEntry): DraftEntry => ({ ...exercise,
+  custom: !EXERCISES.some(known => known.name === exercise.name && known.category === exercise.category),
   values: exercise.values.map(String), count: String(exercise.values.length),
   individual: !exercise.values.every(value => value === exercise.values[0]),
 });
@@ -31,10 +32,10 @@ export function WorkoutForm({ initial, editing, history, onClose, onSave }: {
   const patch = (index: number, change: Partial<DraftEntry>) => {
     setEntries(current => current.map((entry, i) => i === index ? { ...entry, ...change } : entry)); setDirty(true);
   };
-  const add = (exercise: Omit<ExerciseEntry, 'values'>) => {
+  const add = (exercise: Omit<ExerciseEntry, 'values'>, custom = !EXERCISES.some(known => known.name === exercise.name && known.category === exercise.category)) => {
     if (entries.length >= 30) { setError('A workout can contain up to 30 exercises.'); setPicker(false); return; }
-    setEntries(current => [...current, { ...exercise, values: [''], count: '1', individual: false }]);
-    setPicker(false); setQuery(''); setDirty(true);
+    setEntries(current => [...current, { ...exercise, values: [''], count: '1', individual: false, custom }]);
+    setPicker(false); setQuery(''); setDirty(true); scroll.current?.scrollTo({ y: 0, animated: false });
   };
   const recent = history.flatMap(workout => workout.exercises).filter((entry, index, all) =>
     all.findIndex(other => other.name.toLowerCase() === entry.name.toLowerCase() && other.unit === entry.unit) === index);
@@ -45,12 +46,12 @@ export function WorkoutForm({ initial, editing, history, onClose, onSave }: {
       (!/^\d+$/.test(entry.count) || Number(entry.count) < 1 || Number(entry.count) > 50));
     const input: WorkoutInput = { performed_on: date, back_feeling: feeling, exercises: entries.map(entry => ({
       name: entry.name.trim(), category: entry.category, unit: entry.unit,
-      values: entry.unit === 'minutes' || entry.individual ? entry.values.map(Number)
+      values: entry.unit === 'minutes' || entry.individual ? entry.values.map(value => Number(value.replace(',', '.')))
         : Array.from({ length: Math.min(50, Math.max(0, Number(entry.count) || 0)) }, () => Number(entry.values[0])),
     })) };
     const validation = invalidCount ? 'Enter a whole number of sets between 1 and 50.' : validateWorkout(input);
     if (validation) { setError(validation); return; }
-    savingRef.current = true; setSaving(true); setError('');
+    savingRef.current = true; setSaving(true); setConfirmClose(false); setError('');
     try { await onSave(input); } catch { setError('Your workout could not be saved. Your entries are still here; please try again.'); }
     finally { savingRef.current = false; setSaving(false); }
   };
@@ -81,7 +82,7 @@ export function WorkoutForm({ initial, editing, history, onClose, onSave }: {
                 <Pressable key={exercise.name} accessibilityRole="button" onPress={() => add(exercise)} style={styles.option}>
                   <Text style={s.label}>{exercise.name}</Text><Text style={s.muted}>{exercise.unit === 'minutes' ? 'Minutes' : exercise.unit === 'seconds' ? 'Sets × seconds' : 'Sets × reps'}  +</Text>
                 </Pressable>)}
-              <Button label={category === 'strength' ? '+ Other strength exercise' : '+ Other activity'} secondary onPress={() => add({ name: query.trim(), category, unit: category === 'strength' ? 'reps' : 'minutes' })} />
+              <Button label={category === 'strength' ? '+ Other strength exercise' : '+ Other activity'} secondary onPress={() => add({ name: query.trim(), category, unit: category === 'strength' ? 'reps' : 'minutes' }, true)} />
             </View>)}
             <Button label="Back to workout" secondary onPress={() => { setPicker(false); setQuery(''); }} />
           </> : <>
@@ -91,16 +92,16 @@ export function WorkoutForm({ initial, editing, history, onClose, onSave }: {
               {calendar && <DateCalendar value={date} onChange={value => { setDate(value); setDirty(true); setCalendar(false); }} />}
             </View>
             {entries.map((entry, index) => {
-              const custom = !EXERCISES.some(exercise => exercise.name === entry.name && exercise.category === entry.category);
+              const custom = entry.custom;
               const previous = recent.find(exercise => exercise.name.toLowerCase() === entry.name.trim().toLowerCase() && exercise.unit === entry.unit);
               return <View key={index} style={styles.entry}>
-                <View style={s.between}><Text style={s.heading}>{index + 1}. {entry.name || 'Custom exercise'}</Text>
+                <View style={s.between}><Text style={[s.heading, { flex: 1 }]}>{index + 1}. {entry.name || 'Custom exercise'}</Text>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${entry.name || 'exercise'}`} onPress={() => { setEntries(current => current.filter((_, i) => i !== index)); setDirty(true); }} style={styles.close}><Text style={s.muted}>×</Text></Pressable>
                 </View>
                 {custom && <TextInput accessibilityLabel="Exercise name" placeholder="Exercise name" placeholderTextColor="#8A7E97" value={entry.name} maxLength={80} onChangeText={name => patch(index, { name })} style={s.input} />}
                 {custom && entry.category === 'strength' && <View style={s.row}>{(['reps', 'seconds'] as const).map(unit =>
                   <Button key={unit} label={unit === 'reps' ? 'Reps' : 'Seconds'} secondary selected={entry.unit === unit} onPress={() => patch(index, { unit, values: [''], individual: false, count: '1' })} />)}</View>}
-                {previous && <Pressable accessibilityRole="button" onPress={() => patch(index, draft(previous))} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={[s.label, { color: purple }]}>↺ Use last values</Text></Pressable>}
+                {previous && <Pressable accessibilityRole="button" onPress={() => patch(index, { ...draft(previous), custom: entry.custom })} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={[s.label, { color: purple }]}>↺ Use last values</Text></Pressable>}
                 {entry.individual ? <>
                   {entry.values.map((value, setIndex) => <View key={setIndex} style={s.row}>
                     <Text style={[s.muted, { width: 48 }]}>Set {setIndex + 1}</Text>

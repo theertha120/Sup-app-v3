@@ -16,7 +16,7 @@ export function DateCalendar({ value, onChange, marked = [] }: {
   return <View style={{ gap: 12 }}>
     <View style={s.between}>
       <Button label="‹" secondary onPress={() => move(-1)} disabled={month.getFullYear() <= 1900 && month.getMonth() === 0} />
-      <Text accessibilityRole="header" style={s.label}>{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
+      <Text accessibilityRole="header" style={[s.label, { flex: 1, textAlign: 'center' }]}>{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
       <Button label="›" secondary onPress={() => move(1)} disabled={toLocalDateKey(month).slice(0, 7) >= today.slice(0, 7)} />
     </View>
     <View style={{ flexDirection: 'row' }}>{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) =>

@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const vm = require('node:vm');
-function load(relative) {
+function load(relative, mocks = {}) {
   const filename = path.resolve(__dirname, relative);
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(source, { exports, Date, require: name => load(path.relative(__dirname, path.resolve(path.dirname(filename), name + '.ts'))) });
+  vm.runInNewContext(source, { exports, Date, require: name => mocks[name] ?? load(path.relative(__dirname, path.resolve(path.dirname(filename), name + '.ts'))), Error, Number });
   return exports;
 }
 const { validateWorkout, formatAmount, repeatWorkout } = load('../src/features/exercise/model.ts');
@@ -48,4 +48,58 @@ test('log again resets rating, uses today and makes an independent copy', () => 
   assert.equal(copy.performed_on, `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`);
   copy.exercises[0].values[0] = 90;
   assert.equal(original.exercises[0].values[0], 30);
+});
+
+function service(responses) {
+  const calls = [];
+  const client = { from(table) {
+    calls.push(['from', table]);
+    const query = {};
+    for (const method of ['select', 'eq', 'order', 'range', 'insert', 'update', 'delete', 'single']) {
+      query[method] = (...args) => { calls.push([method, ...args]); return query; };
+    }
+    query.then = (resolve, reject) => Promise.resolve(responses.shift()).then(resolve, reject);
+    return query;
+  }};
+  return { calls, ...load('../src/services/exercise/exerciseLogService.ts', {
+    '@/src/lib/supabase': { supabase: client },
+    '@/src/features/exercise/model': { validateWorkout: input => validate(input) },
+  }) };
+}
+test('history is account-scoped and loads beyond the first page', async () => {
+  const first = Array.from({length: 500}, (_, id) => ({id: String(id)}));
+  const api = service([{ data: first, error: null }, { data: [{id: '500'}], error: null }]);
+  assert.equal((await api.fetchWorkouts('user-a')).length, 501);
+  assert.equal(api.calls.filter(call => call[0] === 'eq' && call[1] === 'user_id' && call[2] === 'user-a').length, 2);
+  assert.deepEqual(api.calls.filter(call => call[0] === 'range'), [['range', 0, 499], ['range', 500, 999]]);
+});
+test('create normalizes names and preserves all exercise amounts', async () => {
+  const api = service([{ data: { id: 'new' }, error: null }]);
+  const input = workout(); input.exercises[0].name = '  Plank  ';
+  await api.saveWorkout('user-a', input);
+  const payload = api.calls.find(call => call[0] === 'insert')[1];
+  assert.equal(payload.user_id, 'user-a');
+  assert.equal(payload.exercises[0].name, 'Plank');
+  assert.equal(JSON.stringify(payload.exercises[0].values), '[30,30,30]');
+});
+test('edit and delete constrain both workout id and owner', async () => {
+  for (const operation of ['edit', 'delete']) {
+    const api = service([{ data: {id: 'existing'}, error: null }]);
+    if (operation === 'edit') await api.saveWorkout('user-a', workout(), 'existing');
+    else await api.deleteWorkout('user-a', 'existing');
+    assert.ok(api.calls.some(call => call[0] === 'eq' && call[1] === 'id' && call[2] === 'existing'));
+    assert.ok(api.calls.some(call => call[0] === 'eq' && call[1] === 'user_id' && call[2] === 'user-a'));
+  }
+});
+test('invalid workouts never reach storage', async () => {
+  const api = service([]);
+  await assert.rejects(api.saveWorkout('user-a', {...workout(), back_feeling: 0}));
+  assert.equal(api.calls.length, 0);
+});
+test('load, save and delete errors reach the caller for retry', async () => {
+  const failure = new Error('Connection failed');
+  for (const operation of ['load', 'save', 'delete']) {
+    const api = service([{ data: null, error: failure }]);
+    await assert.rejects(operation === 'load' ? api.fetchWorkouts('user-a') : operation === 'save' ? api.saveWorkout('user-a', workout()) : api.deleteWorkout('user-a', 'existing'), /Connection failed/);
+  }
 });
