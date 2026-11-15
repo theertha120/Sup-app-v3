@@ -98,6 +98,6 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
         })}
       </Animated.View>
     </View>
-    <Text style={[s.muted, { textAlign: 'center', fontSize: 11 }]}>swipe left for older data{addDaysToDateKey(monday, 7) <= today ? ' · right for newer' : ''}</Text>
+    <Text style={[s.muted, { textAlign: 'center', fontSize: 11 }]}>swipe left for older data</Text>
   </View>;
 }
