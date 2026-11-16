@@ -51,6 +51,11 @@ function localNow(now: Date, offsetMinutes: number | null): { hour: number; date
   return { hour: local.getUTCHours(), date: local.toISOString().slice(0, 10) };
 }
 
+/** Current date in SGT (UTC+8) as YYYY-MM-DD. Restored after merge 20328b4 dropped it. */
+function todayInSGT(now: Date = new Date()): string {
+  return localNow(now, DEFAULT_OFFSET_MINUTES).date;
+}
+
 /** Parse "HH:00" → hour number, returns null if malformed */
 function parseHour(dailyRun: string | null | undefined): number | null {
   if (!dailyRun) return null;
@@ -531,7 +536,8 @@ async function runInvocation(
        spawnContinuation(overflow, today, cronSecret))
     : Promise.resolve();
 
-  const results = await processBatch(thisBatch, today);
+  // processBatch takes per-user jobs; with the fixed SGT run every job shares today's SGT date.
+  const results = await processBatch(thisBatch.map((userId) => ({ userId, today })));
   await handoff;
 
   console.log(`[daily-summaries] done:`, results);
@@ -548,11 +554,11 @@ Deno.serve(async (req) => {
   // Read the body once (the old handler read it twice; the second read always
   // failed, so overflow invocations ignored their userIds).
   const body = await req.json().catch(() => ({}));
-  const sgtNow = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Singapore" })
-  );
-  const sgtHour: number = body?.hour ?? sgtNow.getHours();
-  const today = todayInSGT();
+  // Fixed UTC+8 offset rather than toLocaleString(), which is only right when
+  // the runtime itself is on UTC.
+  const now = new Date();
+  const sgtHour: number = body?.hour ?? localNow(now, DEFAULT_OFFSET_MINUTES).hour;
+  const today = todayInSGT(now);
   const targetDailyRun = `${String(DAILY_RUN_HOUR_SGT).padStart(2, "0")}:00`;
 
   if (sgtHour !== DAILY_RUN_HOUR_SGT) {
@@ -604,7 +610,7 @@ Deno.serve(async (req) => {
   // Fallback (e.g. local runtime without EdgeRuntime): process inline
   const results = await work;
   return new Response(
-    JSON.stringify({ users: thisBatch.length, ...results }),
+    JSON.stringify({ users: Math.min(userIds.length, SAFE_BATCH_LIMIT), ...results }),
     { headers: { "content-type": "application/json" } }
   );
 });

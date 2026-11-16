@@ -90,10 +90,12 @@ settings. Do each on both platforms when you can and note what you saw.
 
 - [ ] End a session → Desk shows the **summary** (replay with scrubber, highlights, comparison with the last session, s'kipper message).
 - [ ] Kill and reopen → the latest summary still shows in Desk mode.
+- [ ] Desk → under **recent history**, the session end summary and s'update history are separate cards, both collapsed by default (also after ending a new session); tapping each header expands/collapses it (the ⓘ on the summary still opens its info). While collapsed, the page scrolls normally.
 - [ ] Wait ~10s after ending, open **Daily** → today's s'up s'core and minutes updated.
 - [ ] **Stats week** → last bar is today; labels are the real weekdays.
 - [ ] **Stats month** → wk 1–4, plus wk 5 only if the month has a 29th; tap a bar → correct date range.
 - [ ] **Stats year** → each month's bar matches that month.
+- [ ] On each stats card, dragging **right** shows older data (the older page slides in from the left), dragging left goes back to newer; past the newest/oldest page the card only rubber-bands. Vertical scrolling still works.
 - [ ] A session that runs **past midnight** shows under the day it started.
 - [ ] **Leaderboard** → your score appears; ranks look right.
 

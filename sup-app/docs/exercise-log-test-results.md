@@ -1,17 +1,20 @@
 # Exercise Log pre-merge test record
 
-Date: 15 November 2026 (Singapore). Branch: `v3/exercise-log`.
+Updated: 16 November 2026 (Singapore). Branch: `v3/exercise-log`.
 
 ## Automated gate — passed
 
-- Ran `npm test` from `sup-app` using Node 26.11.1: **116 passed, 0 failed, 0 skipped, 0 TODO**.
+- Ran `npm test` from `sup-app` using Node 26.11.1: **262 passed, 0 failed, 0 skipped, 0 TODO** after merging `origin/main` (`1c595ed`).
+- Combined iOS and Android production bundles exported successfully after conflict resolution.
 - Exercise Log coverage: **41 tests** (15 model/storage tests and 26 form/calendar/screen/navigation callback tests).
-- Existing branch coverage: **75 tests** for signup, leaderboard, posture stability, press feedback, saved sensors, Sentry reporting, session stats and tutorial routing.
+- Combined non-Exercise Log coverage: **221 tests**, including Posture Stories/session replay support, summaries, BLE, calibration, reminders, scoring, authentication and the existing tests for signup, leaderboard, posture stability, press feedback, saved sensors, Sentry reporting, session stats and tutorial routing.
 - Regression sensitivity: five temporary, in-memory mutations were independently rejected by the UI suite: reversed swipe direction, removed duplicate-save guard, omitted back-rating validation, removed account-switch save guard, and removed day filtering. No mutation changed product files.
 - Lint passes for the added/updated test files.
-- Directly executed and verified the local pre-push hook; it runs `npm test` from `sup-app` and rejects a failing suite. No push or merge was performed.
+- Directly executed and verified the local pre-push hook; it runs `npm test` from `sup-app` and rejects a failing suite. No push or merge of the PR into main was performed.
 
-The shared harness and device-checklist template came from `aedbf4b` on the separate `origin/v3/postureStories` branch. That branch also has suites for product changes absent here; those suites and product changes were not merged. Two stale fixtures already on this branch (signup callback dependencies and removed tutorial props) were brought up to date without changing product behavior.
+The initial Exercise Log branch-only run on 15 November passed 116 tests. The 16 November conflict resolution brings in the full Posture Stories/main implementation and its test suites. All incoming test files are retained; `npm test` now discovers both `.test.mjs` and `.test.cjs` files recursively. Both sets of device-checklist entries are preserved. The pre-push hook retains its executable permission.
+
+The Desk session summary, replay, persisted summary store and Stats implementation match `origin/main` exactly. Conflict resolution was limited to the shared test command, hook permissions and testing documentation.
 
 These tests execute the actual component callbacks with mocked hooks, native UI and network/storage dependencies. They do not prove rendered layout, real touch gestures, OS keyboard behavior, actual Supabase persistence or deployed RLS policies.
 

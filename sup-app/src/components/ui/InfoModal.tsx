@@ -13,7 +13,7 @@ import PressFeedback from "@/src/components/ui/PressFeedback";
 
 import React from "react";
 import {
-  Modal, View, Text, StyleSheet, TouchableWithoutFeedback,
+  Modal, View, Text, StyleSheet, TouchableWithoutFeedback, ScrollView, Dimensions,
 } from "react-native";
 import { router } from "expo-router";
 import { colours } from "../../../theme/colours";
@@ -68,12 +68,16 @@ export function InfoModal({
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
         <View style={s.overlay}>
-          <TouchableWithoutFeedback>
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
             <View style={s.sheet}>
               <Text style={[s.title, { color: accentColor }]}>{info.title}</Text>
-              <Text style={s.body}>{info.body}</Text>
+              {/* Scrolls only when a long body would push the sheet off small screens */}
+              <ScrollView style={s.bodyScroll} bounces={false} persistentScrollbar>
+                <Text style={s.body}>{info.body}</Text>
+              </ScrollView>
 
               {info.stats && info.stats.length > 0 && (
                 <View style={s.statsWrap}>
@@ -100,9 +104,7 @@ export function InfoModal({
                 <Text style={s.closeBtnText}>got it</Text>
               </PressFeedback>
             </View>
-          </TouchableWithoutFeedback>
         </View>
-      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -149,6 +151,7 @@ const s = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
+  bodyScroll: { flexGrow: 0, maxHeight: Dimensions.get("window").height * 0.5 },
   body: {
     fontSize: 14,
     color: colours.textPrimary,

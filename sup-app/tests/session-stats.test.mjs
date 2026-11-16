@@ -94,9 +94,15 @@ function fixture({ failRead = false, failWrite = false } = {}) {
   });
   const provider = mount(() => context.SessionStatsProvider({ children: null }));
   const screen = () => mount(context.useSessionStats);
+  // One 5s stats tick, stepping 1s at a time so the 1s timeline sampler runs too.
   const tick = () => {
-    now += 5000;
-    for (const { fn, delay } of timers.values()) { assert.equal(delay, 5000); fn(); }
+    for (let step = 1; step <= 5; step++) {
+      now += 1000;
+      for (const { fn, delay } of timers.values()) {
+        assert.ok(delay === 1000 || delay === 5000, `unexpected interval ${delay}`);
+        if ((step * 1000) % delay === 0) fn();
+      }
+    }
     provider.render();
   };
   return { provider, screen, tick, imu, timers, writes, reports };
@@ -121,7 +127,7 @@ test('tracks before Desk opens, after it unmounts, and retains totals and timeli
   assert.deepEqual(stats.getSessionTimeline().map(segment => segment.state), ['upright', 'slouched']);
   assert.deepEqual(f.imu.totals, stats.sessionStats);
   assert.ok(f.writes.some(([, value]) => JSON.parse(value).slouched === 10000));
-  assert.equal(f.timers.size, 1);
+  assert.equal(f.timers.size, 2) // stats tick + timeline sampler, one shared provider;
   f.provider.unmount();
   assert.equal(f.timers.size, 0);
 });
@@ -136,7 +142,7 @@ test('multiple screens share one tracker and shared session end resets its total
   f.tick();
   assert.equal(first.render().sessionTotalMs, 5000);
   assert.equal(second.render().sessionTotalMs, 5000);
-  assert.equal(f.timers.size, 1);
+  assert.equal(f.timers.size, 2);
   first.unmount();
   f.tick();
   assert.equal(second.render().sessionTotalMs, 10000);
