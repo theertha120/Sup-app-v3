@@ -24,7 +24,9 @@ Items specific to what's new in the upcoming release. Add them here while a
 feature is in progress; when the release ships, move anything worth keeping
 into its feature section below and clear this list.
 
-- _(nothing pending)_
+- [ ] **Exercise Log release:** complete the Exercise Log section below on a dev-client/release build with the migration applied to the test database.
+- [ ] **Navigation regression:** all six tabs open the right screen; Exercise is fourth, immediately after Stats; the selection highlight fits a narrow phone.
+- [ ] Record actual device results in [exercise-log-test-results.md](exercise-log-test-results.md). Automated tests do not satisfy the manual items.
 
 ---
 
@@ -96,6 +98,24 @@ settings. Do each on both platforms when you can and note what you saw.
 - [ ] On each stats card, dragging **right** shows older data (the older page slides in from the left), dragging left goes back to newer; past the newest/oldest page the card only rubber-bands. Vertical scrolling still works.
 - [ ] A session that runs **past midnight** shows under the day it started.
 - [ ] **Leaderboard** → your score appears; ranks look right.
+
+## Exercise Log
+
+Use a test account and test database with `202611150001_exercise_log.sql` applied. Test on Android and iOS when available. All boxes below are intentionally unchecked until a person observes the result on a device.
+
+- [ ] **Page appearance:** open Exercise → the week card has space above it; no page title/subtitle or All/Strength/Other filter row. Fonts/colours match Sup. At larger text sizes and narrow widths, labels remain readable and the bottom bar does not cover history.
+- [ ] **Swipe feel:** swipe left → older week; right → newer week; right at this week → resists and stays put. Short drags snap back. Fast flicks advance one week. Vertical scrolling and tapping a day still work. Only “swipe left for older data” appears as the hint.
+- [ ] **Calendar:** open the calendar, move across a year boundary and select an older day → correct week and history. Future days cannot be selected. Logging an earlier workout stores the calendar date shown on the phone (also test shortly after local midnight).
+- [ ] **Manual entry and keyboard:** log plank (3 × 30 sec), glute bridge (3 × 12 reps), and yoga (20 min), choose a back rating → correct card and success feedback. Numeric keyboard, scrolling and Save remain usable with the keyboard open.
+- [ ] **Custom/varied sets:** log a custom strength exercise with different values per set, a long name, and another activity with fractional minutes → readable card and correct values after reopening.
+- [ ] **Saved history:** relaunch → the saved workout persists. Refresh → no duplicate cards. In Supabase, one workout row contains every exercise and the correct owner, date and rating.
+- [ ] **Reuse:** Use last values fills the matching exercise. Log again opens a draft dated today with no back rating, and creates no database row until Save is pressed.
+- [ ] **Edit/delete:** edit a saved workout → updates the same database row after relaunch. Cancel deletion → row remains. Confirm deletion → row is removed and stays absent after relaunch.
+- [ ] **Unsaved form:** change an amount, close → discard prompt. Keep editing retains the values. Discard closes without saving. Rapid Save taps create only one row.
+- [ ] **Connection interruption:** interrupt the network during a save → no false success; record whether the app-wide offline screen appears and whether unsaved form values survive reconnection. Restore the network and retry → one saved workout. Do not mark this passed solely from the mocked failure test.
+- [ ] **Account separation/RLS:** sign out and use a second test account → first account’s history is absent. Using authenticated test-user credentials, verify direct read/update/delete requests cannot access the other account’s workout. Dashboard administrator visibility does not prove RLS works.
+- [ ] **Accessibility:** VoiceOver/TalkBack can identify each date, selected day, rating, Save, workout options and tab. Older/Newer week accessibility actions navigate the correct way; offscreen week pages are not read out.
+- [ ] **Navigation while tracking:** with a real s’pot session active, open Exercise and save a manual workout → Desk tracking continues; Stats, Community and Daily still open normally. No squat/walk workout is automatically added by this feature.
 
 ## Reminders and notifications
 

@@ -10,7 +10,16 @@ npm run hooks:install                      # once per clone: run npm test before
 
 Requires Node 22.6+ (uses Node's built-in `node:test` runner and TypeScript type
 stripping). No extra npm dependencies, no device, no network, no real Supabase.
-Skip the pre-push hook in an emergency with `git push --no-verify`.
+The test command discovers both `.test.mjs` and `.test.cjs` files recursively,
+so the Posture Stories and Exercise Log suites run together. Run the tests on
+the final combined code before pushing or merging. The hook blocks a failing
+local push but does not replace manual device checks or enforce remote merges.
+
+To run just Exercise Log:
+
+```sh
+node --experimental-strip-types --no-warnings --test tests/exercise-log.test.cjs tests/exercise-ui.test.mjs
+```
 
 ## What's covered
 
@@ -27,6 +36,8 @@ Skip the pre-push hook in an emergency with `git push --no-verify`.
 | `reminder-engine.test.mjs` | Active hours, cooldowns, daily caps, re-engagement, encouragement spacing, no-repeat content |
 | `lib-helpers.test.mjs` | Date keys, formatting, QR/s'pot name parsing, session highlights/comparison, onboarding archetype, caches |
 | `architecture-guards.test.mjs` | CLAUDE.md "never reintroduce" rules: no client-side Anthropic calls, no secret `EXPO_PUBLIC_*` vars, no BLE name-prefix filter, provider order, BLE background mode |
+| `exercise-log.test.cjs` | Manual workout validation, repeat copies, account-scoped storage queries, pagination and failures |
+| `exercise-ui.test.mjs` | Form and history callbacks, custom exercises, per-set values, retry/double-save protection, edit/delete/repeat, account switching, date selection, weekly swipes and fourth-tab navigation |
 | older files | check-email, leaderboard, posture stabiliser, press feedback, saved devices, Sentry logging, Desk session stats, tutorial skip |
 
 Tests marked `# TODO` in the output are **known bugs** written as tests. They
@@ -46,3 +57,5 @@ Native), `imuPacket` (builds a real 20-byte s'pot packet), and
 These are logic tests. They don't render UI or talk to real hardware, so BLE
 behaviour on a phone still needs a device check: see
 [`docs/device-test-checklist.md`](../docs/device-test-checklist.md).
+
+See [the Exercise Log test record](../docs/exercise-log-test-results.md) for automated results and outstanding device/database checks.
