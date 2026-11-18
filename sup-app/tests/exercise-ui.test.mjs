@@ -143,30 +143,30 @@ function week(anchor = '2026-11-15') {
     terminate() { pan.onPanResponderTerminate(); },
   };
 }
-test('calendar swipes left to older weeks and right back to this week', () => {
-  const w = week(); w.move(-80); assert.equal(w.value(), -80); w.release(-80); w.finish();
+test('calendar swipes right to older weeks and left back to this week', () => {
+  const w = week(); w.move(80); assert.equal(w.value(), 80); w.release(80); w.finish();
   assert.deepEqual(w.changed, ['2026-11-02']); assert.equal(w.value(), 0);
-  w.release(80); w.finish(); assert.deepEqual(w.changed, ['2026-11-02', '2026-11-09']);
+  w.release(-80); w.finish(); assert.deepEqual(w.changed, ['2026-11-02', '2026-11-09']);
 });
-test('right swipe at the current week resists the drag and does not enter the future', () => {
-  const w = week(); w.move(80); assert.equal(w.value(), 20); w.release(80); w.finish();
+test('left swipe at the current week resists the drag and does not enter the future', () => {
+  const w = week(); w.move(-80); assert.equal(w.value(), -20); w.release(-80); w.finish();
   assert.deepEqual(w.changed, []); assert.equal(w.value(), 0);
 });
 test('short drags snap back, fast flicks advance, and vertical scrolling stays available', () => {
-  const w = week(); assert.equal(w.claim(4, 0), false); assert.equal(w.claim(15, 30), false); assert.equal(w.claim(-30, 5), true);
-  w.release(-20, -0.1); w.finish(); assert.deepEqual(w.changed, []);
-  w.release(-15, -0.5); w.finish(); assert.equal(w.changed[0], '2026-11-02');
+  const w = week(); assert.equal(w.claim(4, 0), false); assert.equal(w.claim(15, 30), false); assert.equal(w.claim(30, 5), true);
+  w.release(20, 0.1); w.finish(); assert.deepEqual(w.changed, []);
+  w.release(15, 0.5); w.finish(); assert.equal(w.changed[0], '2026-11-02');
 });
 test('interrupted swipes reset, and repeated gestures during animation do not skip weeks', () => {
-  const w = week(); w.move(-35); w.terminate(); w.finish(); assert.equal(w.value(), 0); assert.equal(w.changed.length, 0);
-  w.release(-60); assert.equal(w.claim(-60, 0), false); w.release(-60); w.finish(); assert.equal(w.changed.length, 1);
+  const w = week(); w.move(35); w.terminate(); w.finish(); assert.equal(w.value(), 0); assert.equal(w.changed.length, 0);
+  w.release(60); assert.equal(w.claim(60, 0), false); w.release(60); w.finish(); assert.equal(w.changed.length, 1);
 });
 test('week paging crosses year boundaries and clamps at the earliest supported date', () => {
-  const w = week('2026-01-01'); w.release(-80); w.finish(); assert.equal(w.changed[0], '2025-12-22');
-  const earliest = week('1900-01-01'); earliest.release(-80); earliest.finish(); assert.equal(earliest.changed.length, 0);
+  const w = week('2026-01-01'); w.release(80); w.finish(); assert.equal(w.changed[0], '2025-12-22');
+  const earliest = week('1900-01-01'); earliest.release(80); earliest.finish(); assert.equal(earliest.changed.length, 0);
 });
 test('calendar jumps reset swipe position and day selection remains interactive', () => {
-  const w = week(); w.move(-30); w.props.anchor = '2026-10-12'; w.render(); assert.equal(w.value(), 0);
+  const w = week(); w.move(30); w.props.anchor = '2026-10-12'; w.render(); assert.equal(w.value(), 0);
   const current = w.nodes().find(node => node.props.importantForAccessibility === 'auto');
   const day = nodes(current).find(node => node.props.accessibilityLabel === new Date(2026, 9, 12).toDateString());
   day.props.onPress(); assert.deepEqual(w.picked, ['2026-10-12']);
@@ -176,7 +176,7 @@ test('calendar jumps reset swipe position and day selection remains interactive'
 });
 test('visible hint stays concise and offscreen calendar pages are hidden from accessibility', () => {
   const w = week('2026-10-12');
-  assert.ok(w.text().includes('swipe left for older data')); assert.ok(!w.text().includes('right for newer'));
+  assert.ok(w.text().includes('swipe right for older data')); assert.ok(!w.text().includes('left for newer'));
   assert.equal(w.nodes().filter(node => node.props.accessibilityElementsHidden === true).length, 2);
 });
 test('month picker changes year, selects leap day and disables future dates', () => {

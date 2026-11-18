@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addDaysToDateKey, fromLocalDateKey, toLocalDateKey } from '@/src/lib/dateKey';
 import { purple, s } from './ui';
 
-/** Matches Stats: a left swipe reveals older data, a right swipe returns to newer data. */
+/** Matches Stats: a right swipe reveals older data (sliding in from the left), a left swipe returns to newer data. */
 export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSelectDay, onOpenCalendar }: {
   anchor: string; selectedDay: string | null; marked: Set<string>;
   onWeekChange: (day: string) => void; onSelectDay: (day: string | null) => void; onOpenCalendar: () => void;
@@ -27,7 +27,8 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
       const step = allowed(direction) ? direction : 0;
       animating.current = true;
       Animated.timing(offset, {
-        toValue: -step * latest.current.width, duration: 240,
+        // step 1 = older, which is the page on the left, so slide right to show it
+        toValue: step * latest.current.width, duration: 240,
         easing: Easing.out(Easing.cubic), useNativeDriver: true,
       }).start(({ finished }) => {
         if (finished && step) latest.current.onWeekChange(addDaysToDateKey(latest.current.monday, step * -7));
@@ -41,12 +42,12 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => offset.stopAnimation(),
       onPanResponderMove: (_, gesture) => {
-        const direction = gesture.dx < 0 ? 1 : -1;
+        const direction = gesture.dx > 0 ? 1 : -1;
         const drag = Math.max(-latest.current.width, Math.min(latest.current.width, gesture.dx));
         offset.setValue(allowed(direction) ? drag : drag * 0.25);
       },
       onPanResponderRelease: (_, gesture) => settle(
-        gesture.dx < -40 || gesture.vx < -0.3 ? 1 : gesture.dx > 40 || gesture.vx > 0.3 ? -1 : 0,
+        gesture.dx > 40 || gesture.vx > 0.3 ? 1 : gesture.dx < -40 || gesture.vx < -0.3 ? -1 : 0,
       ),
       onPanResponderTerminate: () => settle(0),
     }) };
@@ -62,7 +63,8 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
     <View style={{ overflow: 'hidden' }} onLayout={event => setWidth(event.nativeEvent.layout.width)} {...pager.responder.panHandlers}>
       <Animated.View style={{ flexDirection: 'row', width: width * 3, marginLeft: -width, transform: [{ translateX: offset }] }}>
         {[-1, 0, 1].map(position => {
-          const start = addDaysToDateKey(monday, position * -7);
+          // Left page (-1) = older week, right page (+1) = newer week
+          const start = addDaysToDateKey(monday, position * 7);
           const days = Array.from({ length: 7 }, (_, index) => addDaysToDateKey(start, index));
           const active = position === 0;
           const count = days.filter(day => marked.has(day)).length;
@@ -71,7 +73,7 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
             accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}>
             <View style={s.between}>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={s.heading} accessibilityRole="header" accessibilityHint="Swipe left for older weeks, right for newer weeks."
+                <Text style={s.heading} accessibilityRole="header" accessibilityHint="Swipe right for older weeks, left for newer weeks."
                   accessibilityActions={[{ name: 'olderWeek', label: 'Older week' }, ...(addDaysToDateKey(monday, 7) <= today ? [{ name: 'newerWeek', label: 'Newer week' }] : [])]}
                   onAccessibilityAction={event => pager.settle(event.nativeEvent.actionName === 'olderWeek' ? 1 : -1)}>{title}</Text>
                 <Text style={s.muted}>{count} {count === 1 ? 'day' : 'days'} with logged exercise</Text>
@@ -98,6 +100,6 @@ export function WeekCalendar({ anchor, selectedDay, marked, onWeekChange, onSele
         })}
       </Animated.View>
     </View>
-    <Text style={[s.muted, { textAlign: 'center', fontSize: 11 }]}>swipe left for older data</Text>
+    <Text style={[s.muted, { textAlign: 'center', fontSize: 11 }]}>swipe right for older data</Text>
   </View>;
 }
