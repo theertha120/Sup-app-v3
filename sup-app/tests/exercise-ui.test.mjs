@@ -191,7 +191,7 @@ test('month picker changes year, selects leap day and disables future dates', ()
 
 const checkin = (id, logged_at, posture = 'upright', back_feel = 4) =>
   ({ id, posture, back_feel, logged_at, notification_sent_at: null, source: 'notification' });
-function screen({ checkins = [] } = {}) {
+function screen({ checkins = [], cache } = {}) {
   let userId = 'user-a'; const history = [{ id: 'workout-a', user_id: userId, created_at: '2026-11-15T04:00:00Z', ...input() }];
   const calls = []; const notifications = []; const sentry = fakeSentry();
   const service = {
@@ -212,6 +212,7 @@ function screen({ checkins = [] } = {}) {
     '@/src/features/exercise/DateCalendar': { DateCalendar: 'DateCalendar' },
     '@/src/services/posture/postureCheckinService': checkinService, '@/src/lib/sentry': sentry.module,
     '@/src/features/exercise/PostureCheckinsCard': { PostureCheckinsCard: 'PostureCheckinsCard', checkinDay: (c, toKey) => toKey(new Date(c.logged_at)) },
+    ...(cache && { '@/src/services/exercise/exerciseLogCache': cache }),
   }) });
   return { ...mounted, service, checkinService, sentry, calls, notifications, history, setUser: id => userId = id };
 }
@@ -352,4 +353,98 @@ test('week card shows a separate check-in dot and count without changing the exe
   assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 11).toDateString()}, exercise logged, posture check-in logged`));
   assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 12).toDateString()}, posture check-in logged`));
   assert.ok(!week('2026-11-15').text().includes('posture check-ins'), 'no check-in line when there are none');
+});
+
+// ─── Loading the Exercise page at login ───────────────────────────────────────
+function exerciseCache({ fetchWorkouts, fetchPostureCheckins }) {
+  return loadTs('src/services/exercise/exerciseLogCache.ts', { globals: clock(), mocks: {
+    '@/src/services/exercise/exerciseLogService': { fetchWorkouts },
+    '@/src/services/posture/postureCheckinService': { fetchPostureCheckins },
+  } });
+}
+test('login prefetch fills the cache once, and opening the page joins a request still in flight', async () => {
+  const calls = []; let finish;
+  const c = exerciseCache({
+    fetchWorkouts: id => { calls.push(['workouts', id]); return new Promise(done => finish = done); },
+    fetchPostureCheckins: async id => { calls.push(['checkins', id]); return [checkin('c1', '2026-11-15T01:00:00Z')]; },
+  });
+  c.prefetchExerciseLog('user-a');
+  const opened = c.loadWorkouts('user-a');
+  assert.deepEqual(calls, [['workouts', 'user-a'], ['checkins', 'user-a']], 'no second request');
+  finish([{ id: 'w1' }]); assert.deepEqual(await opened, [{ id: 'w1' }]); await flush();
+  assert.deepEqual(c.getCachedWorkouts('user-a'), [{ id: 'w1' }]);
+  assert.equal(c.getCachedCheckins('user-a').length, 1);
+});
+test('pull-to-refresh (force) always makes a fresh request', async () => {
+  let n = 0;
+  const c = exerciseCache({ fetchWorkouts: () => new Promise(() => n++), fetchPostureCheckins: async () => [] });
+  c.loadWorkouts('user-a'); c.loadWorkouts('user-a', true);
+  assert.equal(n, 2);
+});
+test('cached rows belong to one account: another account never sees them, sign-out clears them', async () => {
+  const c = exerciseCache({ fetchWorkouts: async id => [{ id: `w-${id}` }], fetchPostureCheckins: async () => [] });
+  await c.loadWorkouts('user-a');
+  assert.equal(c.getCachedWorkouts('user-b'), null);
+  await c.loadWorkouts('user-b');
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+  c.clearExerciseLogCache();
+  assert.equal(c.getCachedWorkouts('user-b'), null);
+});
+test('a slow response for a previous account is not cached for the new one', async () => {
+  let finishA;
+  const c = exerciseCache({ fetchWorkouts: id => id === 'user-a' ? new Promise(done => finishA = done) : Promise.resolve([]), fetchPostureCheckins: async () => [] });
+  c.loadWorkouts('user-a'); await c.loadWorkouts('user-b');
+  finishA([{ id: 'a-secret' }]); await flush();
+  assert.deepEqual(c.getCachedWorkouts('user-b'), []);
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+});
+test('prefetch failures are swallowed (the page reports its own) and nothing is cached', async () => {
+  const c = exerciseCache({ fetchWorkouts: async () => { throw Error('offline'); }, fetchPostureCheckins: async () => { throw Error('offline'); } });
+  c.prefetchExerciseLog('user-a'); await flush();
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+  assert.equal(c.getCachedCheckins('user-a'), null);
+});
+test('the page shows the login cache immediately, with no loading spinner while it refreshes quietly', () => {
+  const pending = new Promise(() => {});
+  const f = screen({ cache: {
+    getCachedWorkouts: id => id === 'user-a' ? [{ id: 'cached', user_id: id, created_at: '2026-11-15T04:00:00Z', ...input() }] : null,
+    getCachedCheckins: () => [checkin('c1', new Date(2026, 10, 15, 9).toISOString())],
+    loadWorkouts: () => pending, loadCheckins: () => pending, setCachedWorkouts() {}, setCachedCheckins() {},
+  } });
+  assert.ok(f.text().includes('Plank'), 'cached workout on first render');
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1, 'cached check-ins too');
+  assert.equal(f.nodes().some(node => node.props.accessibilityLabel === 'Loading workouts'), false);
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+});
+test('only a pull-to-refresh shows the refresh spinner, and it fetches fresh', async () => {
+  const forced = []; let finish;
+  const f = screen({ cache: {
+    getCachedWorkouts: () => null, getCachedCheckins: () => null, setCachedWorkouts() {}, setCachedCheckins() {},
+    loadWorkouts: (_, force) => { forced.push(force); return new Promise(done => finish = done); }, loadCheckins: async () => [],
+  } });
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); f.render();
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, true);
+  assert.deepEqual(forced, [false, true], 'opening joins the prefetch; pulling forces a fresh fetch');
+  finish([]); await flush(); f.render();
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+});
+test('saves on the page update the login cache, so reopening shows them', async () => {
+  const stored = [];
+  const f = screen({ cache: {
+    getCachedWorkouts: () => null, getCachedCheckins: () => null, loadWorkouts: async () => [], loadCheckins: async () => [],
+    setCachedWorkouts: (id, rows) => stored.push([id, rows.map(row => row.id)]), setCachedCheckins() {},
+  } });
+  await flush(); f.render(); f.press('+ Log exercise');
+  await f.nodes().find(node => node.type === 'WorkoutForm').props.onSave(input()); f.render();
+  assert.deepEqual(stored.at(-1), ['user-a', ['workout-b']]);
+});
+test('ExerciseLogPrefetch warms the cache at sign-in and clears it at sign-out', () => {
+  let userId = 'user-a'; const calls = [];
+  const m = mountComponent('src/features/exercise/ExerciseLogPrefetch.tsx', 'default', {}, { mocks: () => ({
+    '@/src/contexts/AuthContext': { useAuth: () => ({ userId }) },
+    '@/src/services/exercise/exerciseLogCache': { prefetchExerciseLog: id => calls.push(['prefetch', id]), clearExerciseLogCache: () => calls.push(['clear']) },
+  }) });
+  userId = null; m.render(); userId = 'user-b'; m.render(); m.render();
+  assert.deepEqual(calls, [['prefetch', 'user-a'], ['clear'], ['prefetch', 'user-b']]);
 });

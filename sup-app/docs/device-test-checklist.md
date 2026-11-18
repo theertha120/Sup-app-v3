@@ -116,6 +116,7 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] **Account separation/RLS:** sign out and use a second test account → first account’s history is absent. Using authenticated test-user credentials, verify direct read/update/delete requests cannot access the other account’s workout. Dashboard administrator visibility does not prove RLS works.
 - [ ] **Accessibility:** VoiceOver/TalkBack can identify each date, selected day, rating, Save, workout options and tab. Older/Newer week accessibility actions navigate the correct way; offscreen week pages are not read out.
 - [ ] **Navigation while tracking:** with a real s’pot session active, open Exercise and save a manual workout → Desk tracking continues; Stats, Community and Daily still open normally. No squat/walk workout is automatically added by this feature.
+- [ ] **Loads at login:** sign in (or relaunch while signed in), wait a few seconds on Home, then open Exercise → workouts and posture check-ins are already there with no loading spinner. Log a workout, switch tabs and come back → it is still there. Sign out and in as another account → the first account’s history never appears, even briefly.
 
 ## Reminders and notifications
 

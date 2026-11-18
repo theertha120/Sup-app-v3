@@ -2,6 +2,17 @@
 
 The fourth bottom tab is Exercise, after Stats. Automatic squat/walk logging is intentionally not connected.
 
+## Loading at login
+
+`src/features/exercise/ExerciseLogPrefetch.tsx` (rendered in `app/_layout.tsx`) loads the signed-in user's workouts and posture check-ins in the background right after login, into an in-memory cache (`src/services/exercise/exerciseLogCache.ts`). The page then works like this:
+
+- It shows the cached rows instantly, with no loading spinner, and refreshes quietly whenever it's opened.
+- If the login load is still running when the page opens, the page waits for it rather than sending a second request.
+- Pull-to-refresh and Retry always fetch fresh, and only a pull shows the refresh spinner.
+- Saves and deletes on the page update the cache.
+- The cache holds one account at a time and is cleared on sign-out, so another account's rows are never shown.
+- Login-load errors are ignored; the page reports its own load errors as before.
+
 Answers to the "Quick check" posture notification also appear here, grouped by date with the workouts. See [the posture check-in doc](posture-checkin.md#on-the-exercise-log-page).
 
 ## Database setup

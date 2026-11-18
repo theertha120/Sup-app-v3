@@ -13,6 +13,7 @@ import { LeaderboardProvider } from "@/src/contexts/LeaderboardContext";
 import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
 import OfflineGate from "@/src/components/ui/OfflineGate";
 import PostureCheckinScheduler from "@/src/components/posture/PostureCheckinScheduler";
+import ExerciseLogPrefetch from "@/src/features/exercise/ExerciseLogPrefetch";
 
 // Must run at module load so native + JS crash handlers are installed before render.
 initSentry();
@@ -45,6 +46,8 @@ function RootLayout() {
       <SentryScreenSync />
       {/* Repeating "Quick check" posture notification (every 10 min while signed in) */}
       <PostureCheckinScheduler />
+      {/* Loads the Exercise page's workouts and check-ins at login so it opens instantly */}
+      <ExerciseLogPrefetch />
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>
