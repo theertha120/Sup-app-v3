@@ -330,10 +330,14 @@ function screen({ params = { sentAt: '2026-11-18T01:58:00.000Z', source: 'notifi
     globals: fakeClock(START),
     mocks: {
       react: hooks.react,
-      'react-native': { View: 'View', Text: 'Text', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: (v) => v } },
+      'react-native': { View: 'View', Text: 'Text', Pressable: 'RNPressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: (v) => v } },
       'expo-router': { router: { back: () => backs++ }, useLocalSearchParams: () => params },
+      'expo-font': { useFonts: () => [true, null] },
+      '../../assets/fonts/Agrandir-Regular.otf': '', '../../assets/fonts/Agrandir-TextBold.otf': '', '../../assets/fonts/Agrandir-GrandHeavy.otf': '',
+      '@expo/vector-icons': { Ionicons: 'Icon' },
       'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
       '@/src/components/ui/PressFeedback': { __esModule: true, default: 'Pressable' },
+      '@/src/components/ui/BackgroundBlobs': { __esModule: true, default: 'BackgroundBlobs' },
       '@/src/components/posture/PostureOptionFigure': { __esModule: true, default: 'Figure' },
       '@/src/contexts/ToastContext': { useToast: () => ({ showToast: (message, tone) => toasts.push([message, tone]) }) },
       '@/src/services/posture/postureCheckinService': { savePostureCheckin: async (input) => { saved.push(input); return save(input); } },
@@ -392,6 +396,15 @@ test('a failed save keeps the screen open with the error, and retry sends the sa
   await s.press('Log it');
   assert.deepEqual(s.saved[0], s.saved[1]);
   assert.equal(s.backs(), 1);
+});
+
+test('picking a back rating shows its word, matching the workout form', () => {
+  const s = screen();
+  assert.ok(!s.text().includes('A little stiff'));
+  s.control('2 of 5').props.onPress(); s.render();
+  assert.ok(s.text().includes('A little stiff'));
+  s.control('5 of 5').props.onPress(); s.render();
+  assert.match(s.text(), /1 · Stiff.*Great.*5 · Great/);
 });
 
 test('Not now closes without saving', async () => {
