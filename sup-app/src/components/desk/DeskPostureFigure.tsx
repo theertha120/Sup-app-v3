@@ -75,7 +75,7 @@ export const UPRIGHT: Joints = {
 
 // Kyphosis: mid-back bows BACKWARD (control points go LEFT / smaller x)
 // Head & shoulders roll FORWARD (larger x)
-const SLOUCHED: Joints = {
+export const SLOUCHED: Joints = {
   // Head drops forward and lower — chin-toward-chest look
   hx: 124, hy: 50,
   // n2 is at spine top; n1 is pulled well forward → neck kinks forward

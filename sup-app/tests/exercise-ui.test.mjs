@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { loadTs, miniReact, fakeClock, flush } from './helpers/harness.mjs';
+import { loadTs, miniReact, fakeClock, fakeSentry, flush } from './helpers/harness.mjs';
 
 // Run real component hooks and callbacks. Native rendering/animation is faked;
 // visual appearance and physical touch remain in the device checklist.
@@ -120,7 +120,7 @@ test('rapid double-save and closing while saving cannot submit twice or discard 
   finish(); await Promise.all([first, second]); f.render(); assert.equal(f.control('Save workout').props.disabled, false);
 });
 
-function week(anchor = '2026-11-15') {
+function week(anchor = '2026-11-15', extra = {}) {
   let pan; let value; let animation;
   const changed = []; const picked = [];
   class Value {
@@ -129,7 +129,7 @@ function week(anchor = '2026-11-15') {
     stopAnimation() { if (animation) { const previous = animation; animation = null; previous.callback({ finished: false }); } }
   }
   const props = { anchor, selectedDay: null, marked: new Set(['2026-11-11']),
-    onWeekChange: day => { changed.push(day); props.anchor = day; }, onSelectDay: day => picked.push(day), onOpenCalendar() {} };
+    onWeekChange: day => { changed.push(day); props.anchor = day; }, onSelectDay: day => picked.push(day), onOpenCalendar() {}, ...extra };
   const mounted = mountComponent('src/features/exercise/WeekCalendar.tsx', 'WeekCalendar', props, { mocks: () => ({
     'react-native': { ...native, Animated: { Value, View: 'AnimatedView', timing: (target, config) => ({ start: callback => { animation = { target, config, callback }; } }) },
       Easing: { cubic() {}, out: fn => fn }, PanResponder: { create: config => { pan = config; return { panHandlers: {} }; } } },
@@ -189,14 +189,17 @@ test('month picker changes year, selects leap day and disables future dates', ()
   year.press('‹'); assert.ok(year.text().includes('2025'));
 });
 
-function screen() {
+const checkin = (id, logged_at, posture = 'upright', back_feel = 4) =>
+  ({ id, posture, back_feel, logged_at, notification_sent_at: null, source: 'notification' });
+function screen({ checkins = [] } = {}) {
   let userId = 'user-a'; const history = [{ id: 'workout-a', user_id: userId, created_at: '2026-11-15T04:00:00Z', ...input() }];
-  const calls = []; const notifications = [];
+  const calls = []; const notifications = []; const sentry = fakeSentry();
   const service = {
     fetchWorkouts: async id => id === 'user-a' ? history : [],
     saveWorkout: async (id, value, existing) => { calls.push(['save', id, existing]); return { ...value, id: existing ?? 'workout-b', user_id: id, created_at: '2026-11-15T05:00:00Z' }; },
     deleteWorkout: async (id, workout) => calls.push(['delete', id, workout]),
   };
+  const checkinService = { fetchPostureCheckins: async id => id === 'user-a' ? checkins : [] };
   const mounted = mountComponent('app/(tabs)/exercise.tsx', 'default', {}, { mocks: react => ({
     'expo-router': { useFocusEffect: callback => react.useEffect(callback, [callback]) },
     'expo-font': { useFonts: () => [true, null] },
@@ -207,8 +210,10 @@ function screen() {
     '@/src/services/exercise/exerciseLogService': service,
     '@/src/features/exercise/WorkoutForm': { WorkoutForm: 'WorkoutForm' }, '@/src/features/exercise/WeekCalendar': { WeekCalendar: 'WeekCalendar' },
     '@/src/features/exercise/DateCalendar': { DateCalendar: 'DateCalendar' },
+    '@/src/services/posture/postureCheckinService': checkinService, '@/src/lib/sentry': sentry.module,
+    '@/src/features/exercise/PostureCheckinsCard': { PostureCheckinsCard: 'PostureCheckinsCard', checkinDay: (c, toKey) => toKey(new Date(c.logged_at)) },
   }) });
-  return { ...mounted, service, calls, notifications, history, setUser: id => userId = id };
+  return { ...mounted, service, checkinService, sentry, calls, notifications, history, setUser: id => userId = id };
 }
 test('history shows every exercise type without category controls and day selection filters it', async () => {
   const f = screen(); f.history.push({ ...f.history[0], id: 'yoga', performed_on: '2026-11-14', exercises: [{ name: 'Yoga', category: 'other', unit: 'minutes', values: [20] }] });
@@ -292,4 +297,59 @@ test('swiping a week clears a selected day so the old day filter does not linger
   f.nodes().find(node => node.type === 'WeekCalendar').props.onWeekChange('2026-11-02'); f.render();
   assert.equal(f.nodes().find(node => node.type === 'WeekCalendar').props.selectedDay, null);
   assert.ok(f.text().includes('Plank'));
+});
+
+// ─── Posture check-ins on the exercise log ────────────────────────────────────
+const at = (day, hour, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
+test('posture check-ins appear under their phone-local date, including days with no workout', async () => {
+  const f = screen({ checkins: [checkin('c3', at(15, 0, 30), 'slouched'), checkin('c2', at(14, 18)), checkin('c1', at(14, 9), 'severe', 2)] });
+  await flush(); f.render();
+  const cards = f.nodes().filter(node => node.type === 'PostureCheckinsCard');
+  assert.deepEqual(cards.map(card => [card.props.dayLabel, card.props.checkins.map(c => c.id)]), [['Today', ['c3']], ['Yesterday', ['c2', 'c1']]]);
+  assert.ok(f.text().includes('Plank'), 'workouts still shown');
+  const headings = f.nodes().filter(node => node.props.accessibilityRole === 'header').map(node => text(node));
+  assert.deepEqual(headings, ['Today', 'Yesterday'], 'days newest first, one heading per day');
+  const calendar = f.nodes().find(node => node.type === 'WeekCalendar');
+  assert.deepEqual([...calendar.props.checkins].sort(), ['2026-11-14', '2026-11-15']);
+  assert.deepEqual([...calendar.props.marked], ['2026-11-15'], 'workout dots stay workout-only');
+  assert.deepEqual([...f.nodes().find(node => node.type === 'DateCalendar').props.marked].sort(), ['2026-11-14', '2026-11-15']);
+});
+test('selecting a day filters check-ins too, and a check-in-only day is not shown as empty', async () => {
+  const f = screen({ checkins: [checkin('c1', at(14, 9))] });
+  await flush(); f.render();
+  f.nodes().find(node => node.type === 'WeekCalendar').props.onSelectDay('2026-11-14'); f.render();
+  assert.ok(!f.text().includes('Plank'));
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+  assert.ok(!f.text().includes('No workouts here yet'));
+  f.nodes().find(node => node.type === 'WeekCalendar').props.onSelectDay('2026-11-13'); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+  assert.ok(f.text().includes('No workouts here yet'));
+});
+test('a check-in load failure keeps workout history, shows a note and reports to Sentry', async () => {
+  const f = screen(); f.checkinService.fetchPostureCheckins = async () => { throw Error('relation "posture_checkins" does not exist'); };
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); await flush(); f.render();
+  assert.ok(f.text().includes('Plank')); assert.ok(!f.text().includes('couldn’t load your exercise history'));
+  assert.ok(f.text().includes('couldn’t load your posture check-ins'));
+  assert.equal(f.sentry.errors.at(-1).context, 'exercise-posture-checkins-load');
+  f.checkinService.fetchPostureCheckins = async () => [checkin('c1', at(15, 9))];
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); await flush(); f.render();
+  assert.ok(!f.text().includes('couldn’t load your posture check-ins'));
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+});
+test('switching accounts hides the previous account’s check-ins', async () => {
+  const f = screen({ checkins: [checkin('c1', at(15, 9))] });
+  await flush(); f.render(); assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+  f.setUser('user-b'); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+  await flush(); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+});
+test('week card shows a separate check-in dot and count without changing the exercise count', () => {
+  const w = week('2026-11-15', { checkins: new Set(['2026-11-11', '2026-11-12']) });
+  assert.ok(w.text().includes('1 day with logged exercise'));
+  assert.ok(w.text().includes('2 days with posture check-ins'));
+  const current = w.nodes().find(node => node.props.importantForAccessibility === 'auto');
+  assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 11).toDateString()}, exercise logged, posture check-in logged`));
+  assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 12).toDateString()}, posture check-in logged`));
+  assert.ok(!week('2026-11-15').text().includes('posture check-ins'), 'no check-in line when there are none');
 });

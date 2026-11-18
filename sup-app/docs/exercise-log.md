@@ -2,6 +2,8 @@
 
 The fourth bottom tab is Exercise, after Stats. Automatic squat/walk logging is intentionally not connected.
 
+Answers to the "Quick check" posture notification also appear here, grouped by date with the workouts. See [the posture check-in doc](posture-checkin.md#on-the-exercise-log-page).
+
 ## Database setup
 
 Apply `supabase/migrations/202611150001_exercise_log.sql` through the project's normal Supabase migration process before using this feature against a backend. It has not been applied to a remote database as part of this change. The migration adds a new table and validation function; it does not change existing session tables or records.

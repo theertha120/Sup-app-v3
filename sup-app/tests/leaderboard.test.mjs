@@ -57,7 +57,7 @@ test('ties keep competition ranks, alphabetical handles, and zero for no tracked
   assert.deepEqual(period.rankLeaderboard(users, rows, 'day', new Date(2026, 9, 26)).map((row) => [row.user.id, row.rank]), [['a', 1], ['z', 1], ['none', 3]]);
 });
 
-test('login creates no requests; summary fetches five and includes own rank independently', async () => {
+test('creating the store makes no requests; summary fetches five and includes own rank independently', async () => {
   const { store, calls } = fixture();
   assert.equal(calls.length, 0);
   await store.ensure(query, 5);
