@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { loadTs, miniReact, fakeClock, flush } from './helpers/harness.mjs';
+import { loadTs, miniReact, fakeClock, fakeSentry, flush } from './helpers/harness.mjs';
 
 // Run real component hooks and callbacks. Native rendering/animation is faked;
 // visual appearance and physical touch remain in the device checklist.
@@ -120,7 +120,7 @@ test('rapid double-save and closing while saving cannot submit twice or discard 
   finish(); await Promise.all([first, second]); f.render(); assert.equal(f.control('Save workout').props.disabled, false);
 });
 
-function week(anchor = '2026-11-15') {
+function week(anchor = '2026-11-15', extra = {}) {
   let pan; let value; let animation;
   const changed = []; const picked = [];
   class Value {
@@ -129,7 +129,7 @@ function week(anchor = '2026-11-15') {
     stopAnimation() { if (animation) { const previous = animation; animation = null; previous.callback({ finished: false }); } }
   }
   const props = { anchor, selectedDay: null, marked: new Set(['2026-11-11']),
-    onWeekChange: day => { changed.push(day); props.anchor = day; }, onSelectDay: day => picked.push(day), onOpenCalendar() {} };
+    onWeekChange: day => { changed.push(day); props.anchor = day; }, onSelectDay: day => picked.push(day), onOpenCalendar() {}, ...extra };
   const mounted = mountComponent('src/features/exercise/WeekCalendar.tsx', 'WeekCalendar', props, { mocks: () => ({
     'react-native': { ...native, Animated: { Value, View: 'AnimatedView', timing: (target, config) => ({ start: callback => { animation = { target, config, callback }; } }) },
       Easing: { cubic() {}, out: fn => fn }, PanResponder: { create: config => { pan = config; return { panHandlers: {} }; } } },
@@ -143,30 +143,30 @@ function week(anchor = '2026-11-15') {
     terminate() { pan.onPanResponderTerminate(); },
   };
 }
-test('calendar swipes left to older weeks and right back to this week', () => {
-  const w = week(); w.move(-80); assert.equal(w.value(), -80); w.release(-80); w.finish();
+test('calendar swipes right to older weeks and left back to this week', () => {
+  const w = week(); w.move(80); assert.equal(w.value(), 80); w.release(80); w.finish();
   assert.deepEqual(w.changed, ['2026-11-02']); assert.equal(w.value(), 0);
-  w.release(80); w.finish(); assert.deepEqual(w.changed, ['2026-11-02', '2026-11-09']);
+  w.release(-80); w.finish(); assert.deepEqual(w.changed, ['2026-11-02', '2026-11-09']);
 });
-test('right swipe at the current week resists the drag and does not enter the future', () => {
-  const w = week(); w.move(80); assert.equal(w.value(), 20); w.release(80); w.finish();
+test('left swipe at the current week resists the drag and does not enter the future', () => {
+  const w = week(); w.move(-80); assert.equal(w.value(), -20); w.release(-80); w.finish();
   assert.deepEqual(w.changed, []); assert.equal(w.value(), 0);
 });
 test('short drags snap back, fast flicks advance, and vertical scrolling stays available', () => {
-  const w = week(); assert.equal(w.claim(4, 0), false); assert.equal(w.claim(15, 30), false); assert.equal(w.claim(-30, 5), true);
-  w.release(-20, -0.1); w.finish(); assert.deepEqual(w.changed, []);
-  w.release(-15, -0.5); w.finish(); assert.equal(w.changed[0], '2026-11-02');
+  const w = week(); assert.equal(w.claim(4, 0), false); assert.equal(w.claim(15, 30), false); assert.equal(w.claim(30, 5), true);
+  w.release(20, 0.1); w.finish(); assert.deepEqual(w.changed, []);
+  w.release(15, 0.5); w.finish(); assert.equal(w.changed[0], '2026-11-02');
 });
 test('interrupted swipes reset, and repeated gestures during animation do not skip weeks', () => {
-  const w = week(); w.move(-35); w.terminate(); w.finish(); assert.equal(w.value(), 0); assert.equal(w.changed.length, 0);
-  w.release(-60); assert.equal(w.claim(-60, 0), false); w.release(-60); w.finish(); assert.equal(w.changed.length, 1);
+  const w = week(); w.move(35); w.terminate(); w.finish(); assert.equal(w.value(), 0); assert.equal(w.changed.length, 0);
+  w.release(60); assert.equal(w.claim(60, 0), false); w.release(60); w.finish(); assert.equal(w.changed.length, 1);
 });
 test('week paging crosses year boundaries and clamps at the earliest supported date', () => {
-  const w = week('2026-01-01'); w.release(-80); w.finish(); assert.equal(w.changed[0], '2025-12-22');
-  const earliest = week('1900-01-01'); earliest.release(-80); earliest.finish(); assert.equal(earliest.changed.length, 0);
+  const w = week('2026-01-01'); w.release(80); w.finish(); assert.equal(w.changed[0], '2025-12-22');
+  const earliest = week('1900-01-01'); earliest.release(80); earliest.finish(); assert.equal(earliest.changed.length, 0);
 });
 test('calendar jumps reset swipe position and day selection remains interactive', () => {
-  const w = week(); w.move(-30); w.props.anchor = '2026-10-12'; w.render(); assert.equal(w.value(), 0);
+  const w = week(); w.move(30); w.props.anchor = '2026-10-12'; w.render(); assert.equal(w.value(), 0);
   const current = w.nodes().find(node => node.props.importantForAccessibility === 'auto');
   const day = nodes(current).find(node => node.props.accessibilityLabel === new Date(2026, 9, 12).toDateString());
   day.props.onPress(); assert.deepEqual(w.picked, ['2026-10-12']);
@@ -176,7 +176,7 @@ test('calendar jumps reset swipe position and day selection remains interactive'
 });
 test('visible hint stays concise and offscreen calendar pages are hidden from accessibility', () => {
   const w = week('2026-10-12');
-  assert.ok(w.text().includes('swipe left for older data')); assert.ok(!w.text().includes('right for newer'));
+  assert.ok(w.text().includes('swipe right for older data')); assert.ok(!w.text().includes('left for newer'));
   assert.equal(w.nodes().filter(node => node.props.accessibilityElementsHidden === true).length, 2);
 });
 test('month picker changes year, selects leap day and disables future dates', () => {
@@ -189,14 +189,17 @@ test('month picker changes year, selects leap day and disables future dates', ()
   year.press('‹'); assert.ok(year.text().includes('2025'));
 });
 
-function screen() {
+const checkin = (id, logged_at, posture = 'upright', back_feel = 4) =>
+  ({ id, posture, back_feel, logged_at, notification_sent_at: null, source: 'notification' });
+function screen({ checkins = [], cache } = {}) {
   let userId = 'user-a'; const history = [{ id: 'workout-a', user_id: userId, created_at: '2026-11-15T04:00:00Z', ...input() }];
-  const calls = []; const notifications = [];
+  const calls = []; const notifications = []; const sentry = fakeSentry();
   const service = {
     fetchWorkouts: async id => id === 'user-a' ? history : [],
     saveWorkout: async (id, value, existing) => { calls.push(['save', id, existing]); return { ...value, id: existing ?? 'workout-b', user_id: id, created_at: '2026-11-15T05:00:00Z' }; },
     deleteWorkout: async (id, workout) => calls.push(['delete', id, workout]),
   };
+  const checkinService = { fetchPostureCheckins: async id => id === 'user-a' ? checkins : [] };
   const mounted = mountComponent('app/(tabs)/exercise.tsx', 'default', {}, { mocks: react => ({
     'expo-router': { useFocusEffect: callback => react.useEffect(callback, [callback]) },
     'expo-font': { useFonts: () => [true, null] },
@@ -207,8 +210,11 @@ function screen() {
     '@/src/services/exercise/exerciseLogService': service,
     '@/src/features/exercise/WorkoutForm': { WorkoutForm: 'WorkoutForm' }, '@/src/features/exercise/WeekCalendar': { WeekCalendar: 'WeekCalendar' },
     '@/src/features/exercise/DateCalendar': { DateCalendar: 'DateCalendar' },
+    '@/src/services/posture/postureCheckinService': checkinService, '@/src/lib/sentry': sentry.module,
+    '@/src/features/exercise/PostureCheckinsCard': { PostureCheckinsCard: 'PostureCheckinsCard', checkinDay: (c, toKey) => toKey(new Date(c.logged_at)) },
+    ...(cache && { '@/src/services/exercise/exerciseLogCache': cache }),
   }) });
-  return { ...mounted, service, calls, notifications, history, setUser: id => userId = id };
+  return { ...mounted, service, checkinService, sentry, calls, notifications, history, setUser: id => userId = id };
 }
 test('history shows every exercise type without category controls and day selection filters it', async () => {
   const f = screen(); f.history.push({ ...f.history[0], id: 'yoga', performed_on: '2026-11-14', exercises: [{ name: 'Yoga', category: 'other', unit: 'minutes', values: [20] }] });
@@ -292,4 +298,153 @@ test('swiping a week clears a selected day so the old day filter does not linger
   f.nodes().find(node => node.type === 'WeekCalendar').props.onWeekChange('2026-11-02'); f.render();
   assert.equal(f.nodes().find(node => node.type === 'WeekCalendar').props.selectedDay, null);
   assert.ok(f.text().includes('Plank'));
+});
+
+// ─── Posture check-ins on the exercise log ────────────────────────────────────
+const at = (day, hour, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
+test('posture check-ins appear under their phone-local date, including days with no workout', async () => {
+  const f = screen({ checkins: [checkin('c3', at(15, 0, 30), 'slouched'), checkin('c2', at(14, 18)), checkin('c1', at(14, 9), 'severe', 2)] });
+  await flush(); f.render();
+  const cards = f.nodes().filter(node => node.type === 'PostureCheckinsCard');
+  assert.deepEqual(cards.map(card => [card.props.dayLabel, card.props.checkins.map(c => c.id)]), [['Today', ['c3']], ['Yesterday', ['c2', 'c1']]]);
+  assert.ok(f.text().includes('Plank'), 'workouts still shown');
+  const headings = f.nodes().filter(node => node.props.accessibilityRole === 'header').map(node => text(node));
+  assert.deepEqual(headings, ['Today', 'Yesterday'], 'days newest first, one heading per day');
+  const calendar = f.nodes().find(node => node.type === 'WeekCalendar');
+  assert.deepEqual([...calendar.props.checkins].sort(), ['2026-11-14', '2026-11-15']);
+  assert.deepEqual([...calendar.props.marked], ['2026-11-15'], 'workout dots stay workout-only');
+  assert.deepEqual([...f.nodes().find(node => node.type === 'DateCalendar').props.marked].sort(), ['2026-11-14', '2026-11-15']);
+});
+test('selecting a day filters check-ins too, and a check-in-only day is not shown as empty', async () => {
+  const f = screen({ checkins: [checkin('c1', at(14, 9))] });
+  await flush(); f.render();
+  f.nodes().find(node => node.type === 'WeekCalendar').props.onSelectDay('2026-11-14'); f.render();
+  assert.ok(!f.text().includes('Plank'));
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+  assert.ok(!f.text().includes('No workouts here yet'));
+  f.nodes().find(node => node.type === 'WeekCalendar').props.onSelectDay('2026-11-13'); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+  assert.ok(f.text().includes('No workouts here yet'));
+});
+test('a check-in load failure keeps workout history, shows a note and reports to Sentry', async () => {
+  const f = screen(); f.checkinService.fetchPostureCheckins = async () => { throw Error('relation "posture_checkins" does not exist'); };
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); await flush(); f.render();
+  assert.ok(f.text().includes('Plank')); assert.ok(!f.text().includes('couldn’t load your exercise history'));
+  assert.ok(f.text().includes('couldn’t load your posture check-ins'));
+  assert.equal(f.sentry.errors.at(-1).context, 'exercise-posture-checkins-load');
+  f.checkinService.fetchPostureCheckins = async () => [checkin('c1', at(15, 9))];
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); await flush(); f.render();
+  assert.ok(!f.text().includes('couldn’t load your posture check-ins'));
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+});
+test('switching accounts hides the previous account’s check-ins', async () => {
+  const f = screen({ checkins: [checkin('c1', at(15, 9))] });
+  await flush(); f.render(); assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1);
+  f.setUser('user-b'); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+  await flush(); f.render();
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 0);
+});
+test('week card shows a separate check-in dot and count without changing the exercise count', () => {
+  const w = week('2026-11-15', { checkins: new Set(['2026-11-11', '2026-11-12']) });
+  assert.ok(w.text().includes('1 day with logged exercise'));
+  assert.ok(w.text().includes('2 days with posture check-ins'));
+  const current = w.nodes().find(node => node.props.importantForAccessibility === 'auto');
+  assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 11).toDateString()}, exercise logged, posture check-in logged`));
+  assert.ok(nodes(current).some(node => node.props.accessibilityLabel === `${new Date(2026, 10, 12).toDateString()}, posture check-in logged`));
+  assert.ok(!week('2026-11-15').text().includes('posture check-ins'), 'no check-in line when there are none');
+});
+
+// ─── Loading the Exercise page at login ───────────────────────────────────────
+function exerciseCache({ fetchWorkouts, fetchPostureCheckins }) {
+  return loadTs('src/services/exercise/exerciseLogCache.ts', { globals: clock(), mocks: {
+    '@/src/services/exercise/exerciseLogService': { fetchWorkouts },
+    '@/src/services/posture/postureCheckinService': { fetchPostureCheckins },
+  } });
+}
+test('login prefetch fills the cache once, and opening the page joins a request still in flight', async () => {
+  const calls = []; let finish;
+  const c = exerciseCache({
+    fetchWorkouts: id => { calls.push(['workouts', id]); return new Promise(done => finish = done); },
+    fetchPostureCheckins: async id => { calls.push(['checkins', id]); return [checkin('c1', '2026-11-15T01:00:00Z')]; },
+  });
+  c.prefetchExerciseLog('user-a');
+  const opened = c.loadWorkouts('user-a');
+  assert.deepEqual(calls, [['workouts', 'user-a'], ['checkins', 'user-a']], 'no second request');
+  finish([{ id: 'w1' }]); assert.deepEqual(await opened, [{ id: 'w1' }]); await flush();
+  assert.deepEqual(c.getCachedWorkouts('user-a'), [{ id: 'w1' }]);
+  assert.equal(c.getCachedCheckins('user-a').length, 1);
+});
+test('pull-to-refresh (force) always makes a fresh request', async () => {
+  let n = 0;
+  const c = exerciseCache({ fetchWorkouts: () => new Promise(() => n++), fetchPostureCheckins: async () => [] });
+  c.loadWorkouts('user-a'); c.loadWorkouts('user-a', true);
+  assert.equal(n, 2);
+});
+test('cached rows belong to one account: another account never sees them, sign-out clears them', async () => {
+  const c = exerciseCache({ fetchWorkouts: async id => [{ id: `w-${id}` }], fetchPostureCheckins: async () => [] });
+  await c.loadWorkouts('user-a');
+  assert.equal(c.getCachedWorkouts('user-b'), null);
+  await c.loadWorkouts('user-b');
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+  c.clearExerciseLogCache();
+  assert.equal(c.getCachedWorkouts('user-b'), null);
+});
+test('a slow response for a previous account is not cached for the new one', async () => {
+  let finishA;
+  const c = exerciseCache({ fetchWorkouts: id => id === 'user-a' ? new Promise(done => finishA = done) : Promise.resolve([]), fetchPostureCheckins: async () => [] });
+  c.loadWorkouts('user-a'); await c.loadWorkouts('user-b');
+  finishA([{ id: 'a-secret' }]); await flush();
+  assert.deepEqual(c.getCachedWorkouts('user-b'), []);
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+});
+test('prefetch failures are swallowed (the page reports its own) and nothing is cached', async () => {
+  const c = exerciseCache({ fetchWorkouts: async () => { throw Error('offline'); }, fetchPostureCheckins: async () => { throw Error('offline'); } });
+  c.prefetchExerciseLog('user-a'); await flush();
+  assert.equal(c.getCachedWorkouts('user-a'), null);
+  assert.equal(c.getCachedCheckins('user-a'), null);
+});
+test('the page shows the login cache immediately, with no loading spinner while it refreshes quietly', () => {
+  const pending = new Promise(() => {});
+  const f = screen({ cache: {
+    getCachedWorkouts: id => id === 'user-a' ? [{ id: 'cached', user_id: id, created_at: '2026-11-15T04:00:00Z', ...input() }] : null,
+    getCachedCheckins: () => [checkin('c1', new Date(2026, 10, 15, 9).toISOString())],
+    loadWorkouts: () => pending, loadCheckins: () => pending, setCachedWorkouts() {}, setCachedCheckins() {},
+  } });
+  assert.ok(f.text().includes('Plank'), 'cached workout on first render');
+  assert.equal(f.nodes().filter(node => node.type === 'PostureCheckinsCard').length, 1, 'cached check-ins too');
+  assert.equal(f.nodes().some(node => node.props.accessibilityLabel === 'Loading workouts'), false);
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+});
+test('only a pull-to-refresh shows the refresh spinner, and it fetches fresh', async () => {
+  const forced = []; let finish;
+  const f = screen({ cache: {
+    getCachedWorkouts: () => null, getCachedCheckins: () => null, setCachedWorkouts() {}, setCachedCheckins() {},
+    loadWorkouts: (_, force) => { forced.push(force); return new Promise(done => finish = done); }, loadCheckins: async () => [],
+  } });
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+  f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.onRefresh(); f.render();
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, true);
+  assert.deepEqual(forced, [false, true], 'opening joins the prefetch; pulling forces a fresh fetch');
+  finish([]); await flush(); f.render();
+  assert.equal(f.nodes().find(node => node.type === 'ScrollView').props.refreshControl.props.refreshing, false);
+});
+test('saves on the page update the login cache, so reopening shows them', async () => {
+  const stored = [];
+  const f = screen({ cache: {
+    getCachedWorkouts: () => null, getCachedCheckins: () => null, loadWorkouts: async () => [], loadCheckins: async () => [],
+    setCachedWorkouts: (id, rows) => stored.push([id, rows.map(row => row.id)]), setCachedCheckins() {},
+  } });
+  await flush(); f.render(); f.press('+ Log exercise');
+  await f.nodes().find(node => node.type === 'WorkoutForm').props.onSave(input()); f.render();
+  assert.deepEqual(stored.at(-1), ['user-a', ['workout-b']]);
+});
+test('ExerciseLogPrefetch warms the cache at sign-in and clears it at sign-out', () => {
+  let userId = 'user-a'; const calls = [];
+  const m = mountComponent('src/features/exercise/ExerciseLogPrefetch.tsx', 'default', {}, { mocks: () => ({
+    '@/src/contexts/AuthContext': { useAuth: () => ({ userId }) },
+    '@/src/services/exercise/exerciseLogCache': { prefetchExerciseLog: id => calls.push(['prefetch', id]), clearExerciseLogCache: () => calls.push(['clear']) },
+  }) });
+  userId = null; m.render(); userId = 'user-b'; m.render(); m.render();
+  assert.deepEqual(calls, [['prefetch', 'user-a'], ['clear'], ['prefetch', 'user-b']]);
 });

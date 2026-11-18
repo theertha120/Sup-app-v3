@@ -2,7 +2,9 @@
 
 Community opens a daily view with five entries and the viewer's own rank.
 The full leaderboard requests 50 entries per page. View caches are account-local
-and shared between both screens. The leaderboard provider does not fetch at login.
+and shared between both screens. After login (when online) the leaderboard provider
+prefetches the Community summary (everyone and friends, day, five entries) so both
+toggles open from cache; other periods are fetched only when a screen asks for them.
 Local avatar reads and profile updates are independent of ranking requests.
 Views revalidate after one minute when focused, on app resume, and after relevant
 realtime events. Realtime is subscribed only while Community is focused; polling

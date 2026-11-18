@@ -3,6 +3,10 @@ import { AppState, Platform } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { getReminderForUser, getReEngagementReminder } from "./reminderEngineService";
+import {
+  POSTURE_CHECKIN_INTERVAL_SECONDS,
+  POSTURE_CHECKIN_TYPE,
+} from "../posture/postureCheckinService";
 
 /**
  * LOCAL NOTIFICATION SERVICE
@@ -130,11 +134,19 @@ async function registerNotificationCategories(): Promise<void> {
   ]);
 }
 
+// Shared so every caller waits for the same permission prompt / channel setup
+let setupPromise: Promise<void> | null = null;
+
 /**
  * SETUP NOTIFICATIONS
- * Initialize notification handler
+ * Initialize notification handler. Safe to call more than once.
  */
-export async function setupNotifications(): Promise<void> {
+export function setupNotifications(): Promise<void> {
+  if (!setupPromise) setupPromise = doSetupNotifications();
+  return setupPromise;
+}
+
+async function doSetupNotifications(): Promise<void> {
   try {
     // Request permissions
     const { status, canAskAgain } =
@@ -293,6 +305,94 @@ export async function dismissBackgroundAlerts(kind: string): Promise<void> {
   } catch (error) {
     console.error("Error dismissing background alerts:", error);
   }
+}
+
+// ─── Posture check-in ("Quick check") ──────────────────────────────────────
+
+// Every check-in id starts with this. Earlier builds queued "posture-checkin-0…59"
+// (and before that "posture-checkin-repeating") with the OS, which delivered them
+// even with the app closed; those are cleared on startup.
+const POSTURE_CHECKIN_PREFIX = "posture-checkin-";
+// The one check-in shown at a time: a new one replaces the previous in the tray.
+const POSTURE_CHECKIN_ID = `${POSTURE_CHECKIN_PREFIX}current`;
+
+/**
+ * Shows a "Quick check" notification right now. Called by the app's own timer
+ * (PostureCheckinScheduler) every POSTURE_CHECKIN_INTERVAL_SECONDS, so — like
+ * the posture/session alerts — check-ins only arrive while the app is open or
+ * running in the background, never once it has been closed.
+ */
+export async function sendPostureCheckinNotification(): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") {
+      console.log("[notif] posture check-in: no permission, not sent");
+      return;
+    }
+    await Notifications.scheduleNotificationAsync({
+      identifier: POSTURE_CHECKIN_ID,
+      content: {
+        title: "Quick check",
+        body: "Catching your posture during the day is how habits change. How are you sitting right now?",
+        sound: "default",
+        data: { type: POSTURE_CHECKIN_TYPE },
+        ...(Platform.OS === "android" && { color: "#FF6B6B", autoDismiss: true }),
+      },
+      // Deliver immediately. expo-notifications 0.32 reads the Android channel
+      // from the trigger, not the content.
+      trigger: Platform.OS === "android" ? { channelId: CHANNEL_REMINDERS_HIGH } : null,
+    });
+    console.log(`[notif] posture check-in sent (next in ${POSTURE_CHECKIN_INTERVAL_SECONDS}s while the app runs)`);
+  } catch (error) {
+    console.error("Error sending posture check-in:", error);
+  }
+}
+
+/** Removes any check-ins still queued with the OS (left over from earlier builds). */
+export async function cancelPostureCheckinNotifications(): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => n.identifier.startsWith(POSTURE_CHECKIN_PREFIX))
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier).catch(() => {}))
+    );
+  } catch (error) {
+    console.error("Error cancelling posture check-in:", error);
+  }
+}
+
+/** Clears check-ins still sitting in the tray (they'd otherwise pile up). */
+async function dismissPresentedPostureCheckins(): Promise<void> {
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter((n) => n.request.content.data?.type === POSTURE_CHECKIN_TYPE)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier))
+    );
+  } catch (error) {
+    console.error("Error dismissing posture check-ins:", error);
+  }
+}
+
+// Same tap can arrive via the listener and getLastNotificationResponseAsync
+let lastHandledCheckinKey: string | null = null;
+
+/** True if the response was a posture check-in (and the screen was opened). */
+export function handlePostureCheckinResponse(response: Notifications.NotificationResponse): boolean {
+  const { notification } = response;
+  if (notification.request.content.data?.type !== POSTURE_CHECKIN_TYPE) return false;
+
+  const key = `${notification.request.identifier}:${notification.date}`;
+  if (key === lastHandledCheckinKey) return true;
+  lastHandledCheckinKey = key;
+
+  void dismissPresentedPostureCheckins();
+  const sent = new Date(notification.date);
+  const sentAt = Number.isNaN(sent.getTime()) ? "" : sent.toISOString();
+  router.navigate({ pathname: "/(modals)/posture-checkin", params: { sentAt, source: "notification" } });
+  return true;
 }
 
 async function maybeSendAnnoyingThresholdNotification(annoyingCount: number): Promise<void> {
@@ -517,6 +617,9 @@ export function setupNotificationListeners(): () => void {
         router.navigate("/(tabs)/desk");
         return;
       }
+
+      // Posture check-in isn't a reminder either — open the check-in screen
+      if (handlePostureCheckinResponse(response)) return;
 
       const { actionLabel } = response.notification.request.content.data;
 

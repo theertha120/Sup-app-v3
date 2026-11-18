@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useId, type ReactNode } from "react";
 import { AppState } from "react-native";
+import * as Network from "expo-network";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "./AuthContext";
 import { captureError } from "../lib/sentry";
@@ -14,6 +15,9 @@ import { getLocalSupsona, subscribeToProfileUpdates } from "../services/user/pro
 import type { LeaderboardEntry, LeaderboardPeriod } from "../services/social/leaderboardPeriodService";
 export type { LeaderboardScope } from "../services/social/leaderboardData";
 
+/** Must match what app/(tabs)/leaderboard.tsx requests on first open. */
+const SUMMARY_PREFETCH = { scopes: ["everyone", "friends"], period: "day", size: 5 } as const;
+
 function useAccountBoard() {
   const { userId, isAuthenticated } = useAuth();
   const [, render] = useState(0);
@@ -21,6 +25,27 @@ function useAccountBoard() {
   const store = useMemo(() => userId && isAuthenticated
     ? new LeaderboardStore(createLeaderboardSource(userId), () => render((n) => n + 1), Date.now, { reportError: (error) => captureError(error, "community-leaderboard") }) : null, [userId, isAuthenticated]);
   useEffect(() => { store?.activate(); return () => store?.dispose(); }, [store]);
+  // Warm the Community tab's summary (Everyone and Friends) right after login so
+  // both toggles open instantly. Same queries as the tab's
+  // useLeaderboard(scope, "day", 5), so the tab reuses these results (or joins
+  // a request that's still in flight).
+  useEffect(() => {
+    if (!store) return;
+    let cancelled = false;
+    // Skip when offline so a launch without signal doesn't log an error;
+    // the tab fetches normally when opened.
+    void Network.getNetworkStateAsync()
+      .then((state) => state.isConnected !== false && state.isInternetReachable !== false)
+      .catch(() => true)
+      .then((online) => {
+        if (cancelled || !online) return;
+        const dateKey = toLocalDateKey();
+        for (const scope of SUMMARY_PREFETCH.scopes) {
+          void store.ensure({ scope, period: SUMMARY_PREFETCH.period, dateKey }, SUMMARY_PREFETCH.size);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [store]);
   useEffect(() => {
     if (!userId || !isAuthenticated) return;
     let active = true;
@@ -44,7 +69,7 @@ function useAccountBoard() {
 }
 const LeaderboardContext = createContext<ReturnType<typeof useAccountBoard> | undefined>(undefined);
 
-/** Login creates a cache, but visible screens decide which period to fetch. */
+/** Login creates a cache and warms the daily summary; other periods load when a screen asks. */
 export function LeaderboardProvider({ children }: { children: ReactNode }) {
   const value = useAccountBoard();
   return <LeaderboardContext.Provider value={value}>{children}</LeaderboardContext.Provider>;

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Modal, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useFonts } from 'expo-font';
@@ -10,12 +10,18 @@ import { BrandAlert } from '@/src/components/ui/BrandAlert';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/contexts/ToastContext';
 import { toLocalDateKey, fromLocalDateKey, addDaysToDateKey } from '@/src/lib/dateKey';
-import { fetchWorkouts, saveWorkout, deleteWorkout } from '@/src/services/exercise/exerciseLogService';
+import { saveWorkout, deleteWorkout } from '@/src/services/exercise/exerciseLogService';
+import {
+  getCachedWorkouts, getCachedCheckins, loadWorkouts, loadCheckins, setCachedWorkouts, setCachedCheckins,
+} from '@/src/services/exercise/exerciseLogCache';
 import { formatAmount, repeatWorkout, FEELINGS, type Workout, type WorkoutInput } from '@/src/features/exercise/model';
 import { Button, s, purple, soft } from '@/src/features/exercise/ui';
 import { WeekCalendar } from '@/src/features/exercise/WeekCalendar';
 import { DateCalendar } from '@/src/features/exercise/DateCalendar';
 import { WorkoutForm } from '@/src/features/exercise/WorkoutForm';
+import { PostureCheckinsCard, checkinDay } from '@/src/features/exercise/PostureCheckinsCard';
+import type { PostureCheckin } from '@/src/services/posture/postureCheckinService';
+import { captureError } from '@/src/lib/sentry';
 export { default as ErrorBoundary } from '@/src/components/ui/ScreenErrorBoundary';
 
 type Editor = { id?: string; initial?: WorkoutInput };
@@ -26,9 +32,24 @@ export default function ExerciseLogScreen() {
   const owner = useRef(userId); owner.current = userId;
   const request = useRef(0);
   const [data, setData] = useState<{ owner: string; rows: Workout[] } | null>(null);
-  const workouts = data?.owner === userId ? data.rows : [];
+  // Until this screen's own load finishes, show what was loaded at login
+  // (ExerciseLogPrefetch) so the page opens instantly.
+  const cachedWorkouts = userId ? getCachedWorkouts(userId) : null;
+  const haveWorkouts = data?.owner === userId || cachedWorkouts !== null;
+  const workouts = data?.owner === userId ? data.rows : cachedWorkouts ?? [];
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // Only true for a pull-to-refresh, so background refreshes don't show a spinner.
+  const [pulling, setPulling] = useState(false);
+  // Posture check-ins (from the "Quick check" notification) load alongside
+  // workouts but separately: a failure here never hides the workout history.
+  const checkinRequest = useRef(0);
+  const [checkinData, setCheckinData] = useState<{ owner: string; rows: PostureCheckin[] } | null>(null);
+  const checkins = checkinData?.owner === userId ? checkinData.rows : (userId ? getCachedCheckins(userId) : null) ?? [];
+  const [checkinError, setCheckinError] = useState(false);
+  // Keep the login cache in step with saves/deletes made on this page.
+  useEffect(() => { if (data) setCachedWorkouts(data.owner, data.rows); }, [data]);
+  useEffect(() => { if (checkinData) setCachedCheckins(checkinData.owner, checkinData.rows); }, [checkinData]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -42,12 +63,20 @@ export default function ExerciseLogScreen() {
     'Agrandir-TextBold': require('../../assets/fonts/Agrandir-TextBold.otf'),
     'Agrandir-GrandHeavy': require('../../assets/fonts/Agrandir-GrandHeavy.otf'),
   });
-  const load = useCallback(async () => {
+  // force: a pull-to-refresh / Retry always fetches fresh; opening the page may
+  // join the login prefetch if it's still running.
+  const load = useCallback(async (force = false) => {
     const current = ++request.current;
-    setLoading(true); setLoadError(false);
-    if (!userId) { setData(null); setLoading(false); return; }
+    const currentCheckins = ++checkinRequest.current;
+    setLoading(true); setLoadError(false); setCheckinError(false);
+    if (!userId) { setData(null); setCheckinData(null); setLoading(false); return; }
+    const checkinsFresh = () => currentCheckins === checkinRequest.current && owner.current === userId;
+    loadCheckins(userId, force).then(
+      rows => { if (checkinsFresh()) setCheckinData({ owner: userId, rows }); },
+      error => { if (checkinsFresh()) { setCheckinError(true); captureError(error, 'exercise-posture-checkins-load'); } },
+    );
     try {
-      const rows = await fetchWorkouts(userId);
+      const rows = await loadWorkouts(userId, force);
       if (current === request.current && owner.current === userId) setData({ owner: userId, rows });
     } catch { if (current === request.current && owner.current === userId) setLoadError(true); }
     finally { if (current === request.current && owner.current === userId) setLoading(false); }
@@ -55,7 +84,7 @@ export default function ExerciseLogScreen() {
   useFocusEffect(useCallback(() => {
     setEditor(null); setActions(null); setDeleting(null);
     void load();
-    return () => { request.current++; };
+    return () => { request.current++; checkinRequest.current++; };
   }, [load]));
   const save = async (input: WorkoutInput) => {
     if (!userId) throw new Error('Sign in to save workouts.');
@@ -81,26 +110,35 @@ export default function ExerciseLogScreen() {
   };
   const today = toLocalDateKey();
   const activeDays = new Set(workouts.map(workout => workout.performed_on));
+  const checkinsByDay = new Map<string, PostureCheckin[]>();
+  for (const checkin of checkins) {
+    const day = checkinDay(checkin, toLocalDateKey);
+    checkinsByDay.set(day, [...(checkinsByDay.get(day) ?? []), checkin]);
+  }
+  const checkinDays = new Set(checkinsByDay.keys());
   const visible = workouts.filter(workout => !selectedDay || workout.performed_on === selectedDay);
-  const groups = [...new Set(visible.map(workout => workout.performed_on))];
+  const visibleCheckinDays = [...checkinDays].filter(day => !selectedDay || day === selectedDay);
+  const groups = [...new Set([...visible.map(workout => workout.performed_on), ...visibleCheckinDays])]
+    .sort((a, b) => b.localeCompare(a));
   const dateLabel = (date: string) => date === today ? 'Today' : date === addDaysToDateKey(today, -1) ? 'Yesterday' :
     fromLocalDateKey(date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   if (!fontsLoaded && !fontError) return <View style={styles.center}><ActivityIndicator color={purple} /></View>;
   return <View style={styles.page}>
     <BackgroundBlobs />
     <ScrollView showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={() => void load()} tintColor={purple} />}
+      refreshControl={<RefreshControl refreshing={pulling} onRefresh={() => { setPulling(true); void load(true).finally(() => setPulling(false)); }} tintColor={purple} />}
       contentContainerStyle={{ paddingTop: 8, paddingBottom: 125 + insets.bottom }}>
       <HeaderBar />
       <View style={{ paddingHorizontal: 20, paddingTop: 24, gap: 20 }}>
-        <WeekCalendar anchor={weekAnchor} selectedDay={selectedDay} marked={activeDays}
+        <WeekCalendar anchor={weekAnchor} selectedDay={selectedDay} marked={activeDays} checkins={checkinDays}
           onWeekChange={day => { setWeekAnchor(day); setSelectedDay(null); }}
           onSelectDay={setSelectedDay} onOpenCalendar={() => setCalendar(true)} />
         <Button label="+ Log exercise" onPress={() => setEditor({})} disabled={!userId || busy} />
         {selectedDay && <View style={s.between}><Text style={s.label}>{dateLabel(selectedDay)}</Text><Button label="Show all dates" secondary onPress={() => setSelectedDay(null)} /></View>}
-        {loadError ? <View style={s.card}><Text style={s.error}>We couldn’t load your exercise history. Please try again.</Text><Button label="Retry" secondary onPress={() => void load()} /></View> : null}
-        {loading && !data ? <ActivityIndicator color={purple} accessibilityLabel="Loading workouts" /> : null}
-        {!loading && !loadError && visible.length === 0 && <View style={[s.card, { alignItems: 'center', paddingVertical: 30 }]}>
+        {loadError ? <View style={s.card}><Text style={s.error}>We couldn’t load your exercise history. Please try again.</Text><Button label="Retry" secondary onPress={() => void load(true)} /></View> : null}
+        {checkinError && !loadError ? <Text style={[s.muted, { textAlign: 'center' }]}>We couldn’t load your posture check-ins. Pull down to try again.</Text> : null}
+        {loading && !haveWorkouts ? <ActivityIndicator color={purple} accessibilityLabel="Loading workouts" /> : null}
+        {!loading && !loadError && visible.length === 0 && visibleCheckinDays.length === 0 && <View style={[s.card, { alignItems: 'center', paddingVertical: 30 }]}>
           <View style={styles.emptyIcon}><Ionicons name="barbell" size={30} color={purple} /></View>
           <Text style={[s.heading, { textAlign: 'center' }]}>{!userId ? 'Sign in to keep your exercise log' : workouts.length ? 'No workouts here yet' : 'Your exercise history starts here'}</Text>
           <Text style={[s.muted, { textAlign: 'center' }]}>{workouts.length ? 'Try another day or log an exercise.' : 'Record what you trained and how your back felt, one workout at a time.'}</Text>
@@ -125,6 +163,7 @@ export default function ExerciseLogScreen() {
               </View>}
             </View>;
           })}
+          {checkinsByDay.has(day) && <PostureCheckinsCard key={`checkins-${day}`} checkins={checkinsByDay.get(day)!} dayLabel={dateLabel(day)} />}
         </View>)}
       </View>
     </ScrollView>
@@ -135,7 +174,7 @@ export default function ExerciseLogScreen() {
     <Modal visible={calendar} transparent animationType="fade" onRequestClose={() => setCalendar(false)}>
       <View style={styles.calendarOverlay}><View style={[s.card, { width: '100%', maxWidth: 420 }]}>
         <View style={s.between}><Text style={s.heading}>Exercise calendar</Text><Button label="Close" secondary onPress={() => setCalendar(false)} /></View>
-        <DateCalendar key={calendar ? 'open' : 'closed'} value={selectedDay ?? weekAnchor} marked={[...activeDays]} onChange={day => { setSelectedDay(day); setWeekAnchor(day); setCalendar(false); }} />
+        <DateCalendar key={calendar ? 'open' : 'closed'} value={selectedDay ?? weekAnchor} marked={[...new Set([...activeDays, ...checkinDays])]} onChange={day => { setSelectedDay(day); setWeekAnchor(day); setCalendar(false); }} />
       </View></View>
     </Modal>
   </View>;

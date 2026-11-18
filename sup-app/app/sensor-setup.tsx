@@ -579,15 +579,27 @@ export default function SensorSetupScreen() {
           </Text>
         </View>
 
-        {/* QR pairing — primary path for new s'pots */}
-        {!bothConnected && (
-          <PressFeedback
-            style={[styles.qrPairBtn, tutorialStep === "connect-tip" && styles.tutorialHighlight]}
-            onPress={() => setShowQRPairModal(true)}
-          >
-            <Ionicons name="qr-code-outline" size={18} color="#fff" />
-            <Text style={styles.qrPairBtnText}>s'can to pair</Text>
-          </PressFeedback>
+        {/* Pairing — QR (primary, filled) and manual (outlined), same size */}
+        {(!bothConnected || !bothSaved) && (
+          <View style={styles.pairButtons}>
+            {!bothConnected && (
+              <PressFeedback
+                style={[styles.qrPairBtn, tutorialStep === "connect-tip" && styles.tutorialHighlight]}
+                onPress={() => setShowQRPairModal(true)}
+              >
+                <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                <Text style={styles.qrPairBtnText}>s'can to pair</Text>
+              </PressFeedback>
+            )}
+            {!bothSaved && (
+              <PressFeedback style={styles.manualPairBtn} onPress={() => setShowManualSetup((v) => !v)}>
+                <Ionicons name="bluetooth-outline" size={18} color={colours.primary} />
+                <Text style={styles.manualPairBtnText}>
+                  {showManualSetup ? "hide manual setup" : "set up manually"}
+                </Text>
+              </PressFeedback>
+            )}
+          </View>
         )}
 
         {/* s'pots — treated as one thing to connect, not two separate rows */}
@@ -613,14 +625,6 @@ export default function SensorSetupScreen() {
               </PressFeedback>
             )}
           </View>
-
-          {!bothSaved && (
-            <PressFeedback onPress={() => setShowManualSetup((v) => !v)} style={styles.manualToggle}>
-              <Text style={styles.manualToggleText}>
-                {showManualSetup ? "hide manual setup" : "having trouble? set up manually"}
-              </Text>
-            </PressFeedback>
-          )}
 
           {showManualSetup && (
             <View style={styles.manualSetupWrap}>
@@ -934,15 +938,17 @@ const styles = StyleSheet.create({
   actionBtnDangerText: { fontSize: 12, fontWeight: "600", color: "#F44336", fontFamily: "Agrandir-Regular" },
 
   // Manual per-slot pairing fallback — collapsed by default (see showManualSetup)
-  manualToggle:     { alignSelf: "center", marginTop: 12, paddingVertical: 4 },
-  manualToggleText: { fontSize: 12, fontWeight: "600", color: colours.textSecondary, textDecorationLine: "underline" },
   manualSetupWrap:  { gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
 
   primaryBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 14, marginBottom: 16 },
   primaryBtnText: { fontSize: 15, color: "#fff", fontFamily: "Agrandir-Regular" },
 
-  qrPairBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderRadius: 30, paddingVertical: 16, marginBottom: 16 },
+  // QR and manual pairing buttons: same size and shape; QR filled, manual outlined.
+  pairButtons:    { gap: 10, marginBottom: 16 },
+  qrPairBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colours.primary, borderWidth: 1.5, borderColor: colours.primary, borderRadius: 30, paddingVertical: 16 },
   qrPairBtnText:  { fontSize: 16, fontWeight: "700", color: "#fff", fontFamily: "Agrandir-Regular" },
+  manualPairBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#fff", borderWidth: 1.5, borderColor: colours.primary, borderRadius: 30, paddingVertical: 16 },
+  manualPairBtnText: { fontSize: 16, fontWeight: "700", color: colours.primary, fontFamily: "Agrandir-Regular" },
 
   deviceRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   deviceName: { fontSize: 14, fontWeight: "600", color: colours.textPrimary, fontFamily: "Agrandir-Regular" },

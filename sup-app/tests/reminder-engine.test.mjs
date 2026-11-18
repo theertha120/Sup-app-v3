@@ -2,7 +2,7 @@
 // encouragement spacing, no-repeat content) against a fake Supabase.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { eqs, fakeClock, fakeSupabase, loadTs, opArg, quietConsole } from './helpers/harness.mjs';
+import { eqs, fakeClock, fakeSentry, fakeSupabase, loadTs, opArg, quietConsole } from './helpers/harness.mjs';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -174,6 +174,8 @@ function notificationService(options) {
       'react-native': { AppState: { currentState: 'background' }, Platform: { OS: 'android' } },
       'expo-router': { router: { navigate() {} } },
       '@/src/lib/supabase': e.db.module,
+      // via the posture check-in service, which reports save errors to Sentry
+      '@/src/lib/sentry': fakeSentry().module,
     },
     globals: { Date: e.clock.Date, console: quietConsole, Math: e.math },
   });

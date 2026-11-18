@@ -2,6 +2,19 @@
 
 The fourth bottom tab is Exercise, after Stats. Automatic squat/walk logging is intentionally not connected.
 
+## Loading at login
+
+`src/features/exercise/ExerciseLogPrefetch.tsx` (rendered in `app/_layout.tsx`) loads the signed-in user's workouts and posture check-ins in the background right after login, into an in-memory cache (`src/services/exercise/exerciseLogCache.ts`). The page then works like this:
+
+- It shows the cached rows instantly, with no loading spinner, and refreshes quietly whenever it's opened.
+- If the login load is still running when the page opens, the page waits for it rather than sending a second request.
+- Pull-to-refresh and Retry always fetch fresh, and only a pull shows the refresh spinner.
+- Saves and deletes on the page update the cache.
+- The cache holds one account at a time and is cleared on sign-out, so another account's rows are never shown.
+- Login-load errors are ignored; the page reports its own load errors as before.
+
+Answers to the "Quick check" posture notification also appear here, grouped by date with the workouts. See [the posture check-in doc](posture-checkin.md#on-the-exercise-log-page).
+
 ## Database setup
 
 Apply `supabase/migrations/202611150001_exercise_log.sql` through the project's normal Supabase migration process before using this feature against a backend. It has not been applied to a remote database as part of this change. The migration adds a new table and validation function; it does not change existing session tables or records.
@@ -20,7 +33,7 @@ Before release, check on a device with that database:
 2. Log plank (3 × 30 seconds), glute bridge (3 × 12 reps), and yoga (20 minutes) in one workout. Choose a back rating and save. Relaunch and confirm the workout persists.
 3. Enter different values per set, a custom strength exercise, and a fractional activity duration. Check the keyboard does not cover Save and that long exercise names wrap.
 4. Save with missing/zero/negative values or no back rating; confirm the form remains open with a helpful error. Cancel a dirty form and choose Keep editing, then Discard.
-5. Edit a date using the calendar, try a leap day, filter by day, and navigate across month/year boundaries. Swipe the weekly card left for older weeks and right for newer weeks, matching Stats; check short drags snap back, vertical scrolling and day taps still work, and swiping right at the current week stops at the boundary. Future dates must be disabled.
+5. Edit a date using the calendar, try a leap day, filter by day, and navigate across month/year boundaries. Swipe the weekly card right for older weeks and left for newer weeks, matching Stats; check short drags snap back, vertical scrolling and day taps still work, and swiping left at the current week stops at the boundary. Future dates must be disabled.
 6. Use last values and Log again. Confirm the copied workout is not saved automatically and the rating is unset.
 7. Edit and delete a workout, then reload. Delete must require confirmation.
 8. Interrupt the connection on save: no success message, form values retained. Restore connectivity and retry.

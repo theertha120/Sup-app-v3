@@ -104,7 +104,7 @@ settings. Do each on both platforms when you can and note what you saw.
 Use a test account and test database with `202611150001_exercise_log.sql` applied. Test on Android and iOS when available. All boxes below are intentionally unchecked until a person observes the result on a device.
 
 - [ ] **Page appearance:** open Exercise → the week card has space above it; no page title/subtitle or All/Strength/Other filter row. Fonts/colours match Sup. At larger text sizes and narrow widths, labels remain readable and the bottom bar does not cover history.
-- [ ] **Swipe feel:** swipe left → older week; right → newer week; right at this week → resists and stays put. Short drags snap back. Fast flicks advance one week. Vertical scrolling and tapping a day still work. Only “swipe left for older data” appears as the hint.
+- [ ] **Swipe feel:** swipe right → older week (slides in from the left); left → newer week; left at this week → resists and stays put. Short drags snap back. Fast flicks advance one week. Vertical scrolling and tapping a day still work. Only “swipe right for older data” appears as the hint.
 - [ ] **Calendar:** open the calendar, move across a year boundary and select an older day → correct week and history. Future days cannot be selected. Logging an earlier workout stores the calendar date shown on the phone (also test shortly after local midnight).
 - [ ] **Manual entry and keyboard:** log plank (3 × 30 sec), glute bridge (3 × 12 reps), and yoga (20 min), choose a back rating → correct card and success feedback. Numeric keyboard, scrolling and Save remain usable with the keyboard open.
 - [ ] **Custom/varied sets:** log a custom strength exercise with different values per set, a long name, and another activity with fractional minutes → readable card and correct values after reopening.
@@ -116,6 +116,7 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] **Account separation/RLS:** sign out and use a second test account → first account’s history is absent. Using authenticated test-user credentials, verify direct read/update/delete requests cannot access the other account’s workout. Dashboard administrator visibility does not prove RLS works.
 - [ ] **Accessibility:** VoiceOver/TalkBack can identify each date, selected day, rating, Save, workout options and tab. Older/Newer week accessibility actions navigate the correct way; offscreen week pages are not read out.
 - [ ] **Navigation while tracking:** with a real s’pot session active, open Exercise and save a manual workout → Desk tracking continues; Stats, Community and Daily still open normally. No squat/walk workout is automatically added by this feature.
+- [ ] **Loads at login:** sign in (or relaunch while signed in), wait a few seconds on Home, then open Exercise → workouts and posture check-ins are already there with no loading spinner. Log a workout, switch tabs and come back → it is still there. Sign out and in as another account → the first account’s history never appears, even briefly.
 
 ## Reminders and notifications
 
@@ -126,6 +127,33 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] Leave the app → log shows `Re-engagement reminder scheduled for <~48h later, inside active hours>`. Reopen and leave again → a new time is logged (it replaces the old one).
 - [ ] To see the re-engagement reminder fire without waiting 48h: in a dev build, temporarily shorten `RE_ENGAGEMENT_AFTER_MS` in `reminderEngineService.ts` (e.g. 2 minutes), leave the app and wait → notification arrives; tapping it adds a `reminder_log` row with `reminder_type = re_engagement`. **Revert afterwards.**
 - [ ] Sign out and leave the app → no re-engagement reminder arrives for the old account.
+
+## Posture check-in notification
+
+Use a test account. Test on Android and iOS when available. Leave every box unchecked until a person observes the result on a device.
+
+- [ ] **Starts on open:** open the app while signed in → Metro shows `[notif] posture check-in: signed in → every 600s while the app runs`.
+- [ ] **App open:** keep the app open → a "Quick check" notification (banner) arrives about every 10 minutes, the first about 10 minutes after opening.
+- [ ] **App in the background:** go to the home screen without closing the app → check-ins keep arriving about every 10 minutes. Record the phone model and how long they kept coming with the screen off. On iPhone, record the result both with and without a s'pot session running.
+- [ ] **App closed:** swipe the app away (or force-stop it) and wait 25+ minutes → **no** check-ins arrive.
+- [ ] **Only one in the tray:** leave two check-ins unanswered → only the latest is in the tray.
+- [ ] **Upgrade from an earlier build:** on a phone that ran the earlier queued version, install this build, open it once, then close it → no more check-ins arrive while it's closed.
+- [ ] **Tap from background:** tap one → the check-in screen opens over the current tab with 6 stick figures, a 1–5 rating and "Now · <time>". The check-in is cleared from the tray.
+- [ ] **Tap after closing:** with a check-in still in the tray, swipe the app away, then tap the check-in → the app starts, finishes its normal startup (home/onboarding), then opens the check-in screen once.
+- [ ] **Stick figures:** each of the 6 figures is clearly different and matches its label; Tilted L leans left, Tilted R leans right. The selected one is highlighted. Labels stay readable on a narrow phone and at large text sizes.
+- [ ] **Logging:** Log it is disabled until a figure and a rating are picked. Log it → "Posture logged!" message and the screen closes. In Supabase, one `posture_checkins` row with the right posture, `back_feel`, `logged_at` ≈ when you pressed Log it, `notification_sent_at` ≈ when the notification arrived, and `source = notification`.
+- [ ] **Not now:** closes without adding a row.
+- [ ] **Connection lost:** turn off the network and press Log it → error shown, screen stays open, no "Posture logged!". Turn it back on and retry → exactly one row.
+- [ ] **Not a reminder:** tapping a check-in does not change `behaviour_state` counts or add a `reminder_log` row. Yuh/Nuh/Ugh reminders still work as before.
+- [ ] **Signed out:** sign out → no more check-ins arrive (wait 15 min). Sign back in → they start again 10 minutes later.
+- [ ] **Permission denied:** deny notifications → no check-ins and no crash; Metro shows `no permission, not sent`.
+- [ ] **Account separation/RLS:** as a second test account, authenticated requests cannot read or insert the first account's check-ins. Dashboard admin visibility does not prove RLS works.
+- [ ] **Alongside a session:** with a s'pot session running, answer a check-in → Desk tracking continues uninterrupted.
+- [ ] **On the exercise log:** open Exercise → today shows a **Posture check-ins** card with the right count, most common posture, average back rating and the newest 5 entries. Show all / Show less work. A day with only check-ins has its own heading.
+- [ ] **Exercise calendar dots:** days with check-ins have a lighter second dot and the week card says "N days with posture check-ins". "Days with logged exercise" still counts workouts only. Tapping a day shows only that day's workouts and check-ins.
+- [ ] **Around midnight:** answer a check-in shortly after local midnight → it appears under the new day, not the day before.
+- [ ] **Refresh after answering:** with Exercise open, answer a check-in from the notification → after closing the check-in screen, the new entry is on the Exercise page.
+- [ ] **Load failure:** with the network off, Exercise still shows workouts with a "couldn’t load your posture check-ins" note. Pull to refresh once fixed → check-ins appear.
 
 ## s'kipper (AI coach)
 

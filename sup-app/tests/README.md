@@ -37,7 +37,8 @@ node --experimental-strip-types --no-warnings --test tests/exercise-log.test.cjs
 | `lib-helpers.test.mjs` | Date keys, formatting, QR/s'pot name parsing, session highlights/comparison, onboarding archetype, caches |
 | `architecture-guards.test.mjs` | CLAUDE.md "never reintroduce" rules: no client-side Anthropic calls, no secret `EXPO_PUBLIC_*` vars, no BLE name-prefix filter, provider order, BLE background mode |
 | `exercise-log.test.cjs` | Manual workout validation, repeat copies, account-scoped storage queries, pagination and failures |
-| `exercise-ui.test.mjs` | Form and history callbacks, custom exercises, per-set values, retry/double-save protection, edit/delete/repeat, account switching, date selection, weekly swipes and fourth-tab navigation |
+| `exercise-ui.test.mjs` | Form and history callbacks, custom exercises, per-set values, retry/double-save protection, edit/delete/repeat, account switching, date selection, weekly swipes and fourth-tab navigation; loading at login (shared in-flight request, forced refresh, one account at a time, no stale cross-account rows, instant cached render, pull-only spinner, saves update the cache, sign-in/out) |
+| `posture-checkin.test.mjs` | "Quick check" posture notification: saving to `posture_checkins` (signed-out/errors), immediate send while the app runs (nothing queued with the OS, one in the tray, permission, clearing old queued ones), the 10-minute in-app timer (sign-in/out, stops when closed, no burst after a pause), tap routing and de-duplication, not touching reminder stats, launch from the tray, check-in screen (disabled until answered, save, retry, Not now), stick figures, reading check-ins back (paging, errors) and the exercise-log day card. `exercise-ui.test.mjs` also covers check-ins on the Exercise page (grouping by local date, calendar dots/counts, day filter, load failure, account switch) |
 | older files | check-email, leaderboard, posture stabiliser, press feedback, saved devices, Sentry logging, Desk session stats, tutorial skip |
 
 Tests marked `# TODO` in the output are **known bugs** written as tests. They
@@ -58,4 +59,10 @@ These are logic tests. They don't render UI or talk to real hardware, so BLE
 behaviour on a phone still needs a device check: see
 [`docs/device-test-checklist.md`](../docs/device-test-checklist.md).
 
-See [the Exercise Log test record](../docs/exercise-log-test-results.md) for automated results and outstanding device/database checks.
+See [the Exercise Log test record](../docs/exercise-log-test-results.md) and [the posture check-in test record](../docs/posture-checkin-test-results.md) for automated results and outstanding device/database checks.
+
+To run just the posture check-in notification:
+
+```sh
+node --experimental-strip-types --no-warnings --test tests/posture-checkin.test.mjs
+```
