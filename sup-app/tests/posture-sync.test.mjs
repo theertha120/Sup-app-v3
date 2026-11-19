@@ -80,7 +80,10 @@ test('rebuildDailyFromSessions sums completed sessions for the local day (and no
   await sync.rebuildDailyFromSessions('user-1', '2026-11-13');
 
   const read = db.queries.find((q) => q.table === 'posture_sessions');
-  assert.equal(eqs(read).is_completed_session, true, 'in-progress snapshots are never folded in');
+  // v2 background-service work: sessions never marked completed (app killed,
+  // phone died) are included too, using their last 20s snapshot — the day is
+  // rebuilt from scratch each time, so nothing is counted twice.
+  assert.equal(eqs(read).is_completed_session, undefined, 'unfinished sessions are included');
   assert.equal(opArg(read, 'gte'), 'started_at');
   // Range is the phone-local day [midnight, next midnight).
   const from = read.ops.find(([m]) => m === 'gte')[2];
@@ -135,7 +138,7 @@ test('starting a session closes abandoned (>30 min, not completed) sessions and 
   const close = db.queries.find((q) => q.table === 'posture_sessions' && eqs(q).id === 'old');
   assert.deepEqual(opArg(close, 'update'), { ended_at: stale.ended_at, is_completed_session: true });
   // Rebuild runs for the stale session's own (local) start day.
-  const rebuild = db.queries.filter((q) => q.table === 'posture_sessions' && eqs(q).is_completed_session === true);
+  const rebuild = db.queries.filter((q) => q.table === 'posture_sessions' && String(opArg(q, 'select')).startsWith('total_duration_ms'));
   assert.equal(new Date(rebuild[0].ops.find(([m]) => m === 'gte')[2]).getTime(), new Date(2026, 10, 12).getTime());
 });
 

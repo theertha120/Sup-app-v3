@@ -6,7 +6,8 @@ import { fakeAsyncStorage, fakeClock, imuPacket, loadTs, miniReact, quietConsole
 export function setupImu({ userId = 'user-1', storage = fakeAsyncStorage() } = {}) {
   const clock = fakeClock(new Date(2026, 10, 13, 9, 0).getTime());
   const { react, mount } = miniReact();
-  const calls = { start: [], end: [], snapshot: [], rebuild: [], xp: [], alerts: [], dismissed: [], cancelReconnect: [], confirmReconnect: [] };
+  const calls = { start: [], end: [], snapshot: [], rebuild: [], xp: [], alerts: [], dismissed: [], cancelReconnect: [], confirmReconnect: [],
+    tracking: [], watchdog: [], orphaned: [] };
   let sessionSeq = 0;
   const ble = { callbacks: null };
   const bleService = {
@@ -17,18 +18,21 @@ export function setupImu({ userId = 'user-1', storage = fakeAsyncStorage() } = {
     cancelReconnect: (slot) => calls.cancelReconnect.push(slot),
     confirmReconnect: (device, slot) => calls.confirmReconnect.push(slot),
     calibrate: async () => {},
+    requestPermissions: async () => true,
+    sendHapticPulse: async () => {},
   };
   const postureSync = {
     startSession: async (uid) => { calls.start.push(uid); return `sess-${++sessionSeq}`; },
     endSession: async (id, agg) => { calls.end.push({ id, agg: structuredClone(agg) }); },
     snapshotSession: async (id, agg) => { calls.snapshot.push({ id, agg: structuredClone(agg) }); },
     rebuildDailyFromSessions: async (uid, dateKey) => { calls.rebuild.push([uid, dateKey]); },
+    closeOrphanedSession: async (id) => { calls.orphaned.push(id); return true; },
   };
   let appStateListener = null;
   const mod = loadTs('src/contexts/IMUContext.tsx', {
     mocks: {
       react,
-      'react-native': { AppState: { addEventListener: (_e, cb) => { appStateListener = cb; return { remove() {} }; } } },
+      'react-native': { AppState: { currentState: 'active', addEventListener: (_e, cb) => { appStateListener = cb; return { remove() {} }; } } },
       '../components/ui/BrandAlert': { BrandAlert: 'BrandAlert' },
       '@react-native-async-storage/async-storage': storage,
       'react-native-ble-plx': {},
@@ -36,10 +40,17 @@ export function setupImu({ userId = 'user-1', storage = fakeAsyncStorage() } = {
       './AuthContext': { useAuth: () => ({ userId }) },
       '../services/posture/postureSyncService': postureSync,
       '../services/xp/xpService': { syncDayXp: async (uid, dateKey) => { calls.xp.push([uid, dateKey]); return null; } },
-      '../lib/sentry': { sentryBreadcrumb() {} },
+      '../lib/sentry': { sentryBreadcrumb() {}, captureError() {} },
+      // Android foreground service (v2 background service work)
+      '../../modules/sup-foreground-service': {
+        startTrackingService: (...args) => { calls.tracking.push(['start', ...args]); },
+        stopTrackingService: () => { calls.tracking.push(['stop']); },
+      },
       '../services/reminder/pushNotificationService': {
         sendBackgroundAlert: async (kind, title, body) => { calls.alerts.push({ kind, title, body }); },
         dismissBackgroundAlerts: async (kind) => { calls.dismissed.push(kind); },
+        armSessionWatchdog: async (...args) => { calls.watchdog.push(['arm', ...args]); },
+        disarmSessionWatchdog: async () => { calls.watchdog.push(['disarm']); },
       },
     },
     globals: {

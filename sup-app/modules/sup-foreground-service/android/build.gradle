@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.supforegroundservice'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.supforegroundservice"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // HeadlessJsTaskContext for the keep-alive task
+  implementation 'com.facebook.react:react-android'
+  // ServiceCompat.startForeground(..., type) needs core 1.12+
+  implementation 'androidx.core:core:1.13.1'
+}

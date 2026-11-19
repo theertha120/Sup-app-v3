@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 import { supabase } from "../src/lib/supabase";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { captureError } from "../src/lib/sentry";
 
 export default function Index() {
@@ -15,6 +16,14 @@ export default function Index() {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
 
         if (!user) {
+          if (userError && isAuthRetryableFetchError(userError)) {
+            // Couldn't reach Supabase (offline, or the request was cut short
+            // during a background relaunch) — that says nothing about whether
+            // the saved login is valid, so keep it instead of signing out.
+            console.warn("[index] login check couldn't reach Supabase → home, keeping saved login");
+            setDestination("/(tabs)/home");
+            return;
+          }
           if (userError) {
             console.log("[index] saved login no longer valid → sign out, home:", userError.message);
             await supabase.auth.signOut({ scope: "local" });

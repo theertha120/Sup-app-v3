@@ -15,7 +15,8 @@
         "NSHealthShareUsageDescription": "Sup uses your step count to track your daily activity.",
         "NSHealthUpdateUsageDescription": "Sup uses your step count to track your daily activity.",
         "NSCameraUsageDescription": "Sup uses your camera to scan the QR code that pairs your s'pots.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true
       },
       "appleTeamId": "44T33LV95D"
     },
@@ -34,6 +35,9 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
+        "android.permission.WAKE_LOCK",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
@@ -91,7 +95,8 @@
           "healthSharePermission": "Sup uses your step count to track your daily activity."
         }
       ],
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true,

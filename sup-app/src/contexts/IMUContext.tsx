@@ -38,6 +38,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   useRef,
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
@@ -48,8 +49,14 @@ import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { useAuth } from "./AuthContext";
 import * as postureSync from "../services/posture/postureSyncService";
 import { syncDayXp } from "../services/xp/xpService";
-import { sentryBreadcrumb } from "../lib/sentry";
-import { sendBackgroundAlert, dismissBackgroundAlerts } from "../services/reminder/pushNotificationService";
+import { captureError, sentryBreadcrumb } from "../lib/sentry";
+import { startTrackingService, stopTrackingService } from "../../modules/sup-foreground-service";
+import {
+  sendBackgroundAlert,
+  dismissBackgroundAlerts,
+  armSessionWatchdog,
+  disarmSessionWatchdog,
+} from "../services/reminder/pushNotificationService";
 import {
   parseIMUPacket,
   createPostureStabilizer,
@@ -74,6 +81,9 @@ import { toLocalDateKey } from "../lib/dateKey";
 
 const BASELINE_STORAGE_KEY       = "sup_clinical_baseline_v2";
 const NEUTRAL_OFFSET_STORAGE_KEY = "sup_neutral_offset_v1";
+// The session currently being recorded. Removed when it's ended normally, so
+// one still here on launch belongs to an app process that died mid-session.
+const ACTIVE_SESSION_STORAGE_KEY = "sup_active_session_v1";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +105,22 @@ const READY_PACKET_THRESHOLD = 5;
 const NOTIF_INTERVENTION = "posture-intervention";
 const NOTIF_MOVEMENT     = "movement-nudge";
 const NOTIF_DISCONNECT   = "spot-disconnected"; // suffixed with the slot
+
+// Safety net for tracking that stops without the user ending the session.
+// While packets arrive, a notification is kept scheduled WATCHDOG_S seconds
+// ahead and pushed back every WATCHDOG_REARM_MS. If the app dies (iOS
+// terminating it, a crash) nothing pushes it back, so iOS delivers it. If the
+// app is alive but the data goes quiet for STALL_END_MS with no disconnect
+// event, the session is ended and saved here instead.
+const WATCHDOG_S        = 90;
+const WATCHDOG_REARM_MS = 20_000;
+// How often the running session's totals are saved on the phone, so a
+// relaunched app can carry on the same session (see ActiveSessionRecord).
+const SESSION_PERSIST_MS = 5_000;
+const STALL_END_MS      = 75_000;
+const STALL_CHECK_MS    = 5_000;
+const SESSION_STOPPED_TITLE = "your s'ession has ended";
+const SESSION_STOPPED_BODY  = "your s'pots stopped sending data, so we saved your s'ession up to that point. open s'up to start tracking again.";
 
 // How long posture must stay out of the alerted state before the s'train
 // notification is cleared — ignores ~10Hz classification flicker at a boundary.
@@ -135,6 +161,43 @@ const CPL_THRESHOLDS: Partial<Record<PostureState, number>> = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The running session, saved on the phone every SESSION_PERSIST_MS while
+ * data flows. If iOS terminates the app in the background, Bluetooth state
+ * restoration relaunches it when the s'pots next send data; the new process
+ * reads this and carries on the SAME session instead of starting a new one —
+ * as long as it's back before the "session ended" notification the old
+ * process left scheduled (watchdogFiresAt). Otherwise the user has already
+ * been told the session ended, so it's closed and a new one starts.
+ */
+interface ActiveSessionRecord {
+  sessionId: string;
+  userId: string | null;
+  startedAt: number;
+  savedAt: number;
+  watchdogFiresAt: number;
+  shs: number;
+  cpl: number;
+  shsSum: number;
+  shsTicks: number;
+  minShs: number;
+  maxCpl: number;
+  upperSumScoreMs: number;
+  upperSumMs: number;
+  gapMs: number;
+  stateTotals: postureSync.StateTotals;
+  interventionFired: boolean;
+}
+
+function isResumable(rec: Partial<ActiveSessionRecord> | null): rec is ActiveSessionRecord {
+  return !!rec &&
+    typeof rec.sessionId === "string" &&
+    typeof rec.startedAt === "number" &&
+    typeof rec.savedAt === "number" &&
+    typeof rec.watchdogFiresAt === "number" &&
+    Date.now() < rec.watchdogFiresAt;
+}
 
 export interface IMUSensorData {
   latest: ParsedIMU | null;
@@ -230,7 +293,17 @@ export interface IMUContextValue {
   dismissIntervention: (moved: boolean) => void;
   /** Called by useSessionStats each tick to keep state_totals current for endSession */
   setSessionStateTotals: (totals: postureSync.StateTotals) => void;
+  /** useSessionStats registers its tick here so packets can drive it while timers are stalled */
+  registerStatsTick: (fn: ((state: DeskPostureState) => void) | null) => void;
+  /**
+   * SessionLiveNotification registers here to get every packet's confirmed
+   * posture straight away — including in the background, where `posture`
+   * (React state) isn't updated. Refs only, no re-render.
+   */
+  registerLiveStatus: (fn: LiveStatusListener | null) => void;
 }
+
+export type LiveStatusListener = (update: { state: DeskPostureState; sessionStartTimeMs: number | null }) => void;
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -278,6 +351,8 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const [timeInCurrentStateMs, setTimeInCurrentStateMs] = useState(0);
   const [sessionDurationMs,    setSessionDurationMs]    = useState(0);
   const [sessionStartTimeMs,   setSessionStartTimeMs]   = useState<number | null>(null);
+  // State mirror of sessionEndedRef — drives the Android foreground service
+  const [sessionEnded,         setSessionEnded]         = useState(false);
   const [shouldNudge,          setShouldNudge]          = useState(false);
   const [activeIntervention,   setActiveIntervention]   = useState<InterventionAlert | null>(null);
   const [neckAlignmentPercent, setNeckAlignmentPercent] = useState<number | null>(null);
@@ -338,6 +413,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const sessionMinShsRef        = useRef<number>(100);
   const sessionMaxCplRef        = useRef<number>(0);
   const sessionStateTotalsRef   = useRef<postureSync.StateTotals>({});
+  const statsTickRef            = useRef<((state: DeskPostureState) => void) | null>(null);
+  const liveStatusRef           = useRef<LiveStatusListener | null>(null);
+  const lastSnapshotAtRef       = useRef(0);
   const shsIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastShsTickAtRef        = useRef<number>(Date.now());
   const lastDisplayTickAtRef    = useRef<number>(Date.now());
@@ -350,6 +428,31 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   const upperSumScoreMsRef      = useRef<number>(0);
   const upperSumMsRef           = useRef<number>(0);
   const lastPacketTimestampRef  = useRef<number | null>(null);
+  // Live percents, computed per packet but only pushed to React state on the
+  // UI throttle while the app is on screen.
+  const neckPctRef              = useRef<number | null>(null);
+  const shoulderPctRef          = useRef<number | null>(null);
+  // Whether the app is on screen. All per-packet / per-tick React state
+  // updates are skipped while false — see the packet handler.
+  const appActiveRef            = useRef(AppState.currentState === "active");
+  // Last time a packet from BOTH s'pots fed the session, and last time the
+  // session watchdog notification was pushed back.
+  const lastSessionPacketAtRef  = useRef<number | null>(null);
+  const lastWatchdogArmAtRef    = useRef(0);
+  const watchdogFiresAtRef      = useRef(0);
+  const lastPersistAtRef        = useRef(0);
+  // True once calibration and any session left by a previous app process
+  // have been loaded. Packets are ignored until then, so a background
+  // relaunch can't start classifying with no calibration, or start a fresh
+  // session before it has had the chance to resume the old one.
+  const bootReadyRef            = useRef(false);
+  const bootStartedRef          = useRef(false);
+  // A session left by a previous process that can still be resumed.
+  const resumableRef            = useRef<ActiveSessionRecord | null>(null);
+  // Serialises the active-session record's writes and removal so a late
+  // write can't resurrect a session that was just ended.
+  const sessionStoreChainRef    = useRef<Promise<unknown>>(Promise.resolve());
+  const sessionRowPendingRef    = useRef(false);
 
   const captureRef = useRef<{
     neutral: NeutralOffset | null;
@@ -373,36 +476,186 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
 
+  // Pushes the ref-held live readings into React state. Called on the UI
+  // throttle while on screen, and once on returning to the foreground.
+  const publishLiveMetrics = useCallback(() => {
+    setTopData((prev) => (prev.latest === topLatestRef.current ? prev : { ...prev, latest: topLatestRef.current }));
+    setBottomData((prev) => (prev.latest === bottomLatestRef.current ? prev : { ...prev, latest: bottomLatestRef.current }));
+    if (upperSumMsRef.current > 0) {
+      const pct = upperSumScoreMsRef.current / upperSumMsRef.current;
+      setUpperBackPercent(Math.round(Math.max(0, Math.min(100, pct))));
+    }
+    if (neckPctRef.current !== null) setNeckAlignmentPercent(neckPctRef.current);
+    if (shoulderPctRef.current !== null) setShoulderBalancePercent(shoulderPctRef.current);
+  }, []);
+
+  // Catches the screen up with everything that was tracked on refs while the
+  // app was in the background.
+  const flushUIFromRefs = useCallback(() => {
+    publishLiveMetrics();
+    setShs(Math.round(shsRef.current));
+    setCpl(Math.round(cplRef.current));
+    setTimeInCurrentStateMs(Date.now() - stateStartTimeRef.current);
+    if (sessionStartTimeRef.current !== null) {
+      setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
+    }
+    lastUIUpdateRef.current = 0; // next packet refreshes posture immediately
+  }, [publishLiveMetrics]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      const active = next === "active";
+      if (active && !appActiveRef.current) flushUIFromRefs();
+      appActiveRef.current = active;
+    });
+    return () => sub.remove();
+  }, [flushUIFromRefs]);
+
+  // ── Load persisted data on mount ──────────────────────────────────────────
+
+  // ── Active-session record (resume after relaunch) ───────────────────────
+
+  const queueSessionStore = useCallback((op: () => Promise<unknown>) => {
+    sessionStoreChainRef.current = sessionStoreChainRef.current.then(op).catch(() => {});
+    return sessionStoreChainRef.current;
+  }, []);
+
+  const persistActiveSession = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    const startedAt = sessionStartTimeRef.current;
+    if (!sessionId || startedAt === null) return;
+    lastPersistAtRef.current = Date.now();
+    const rec: ActiveSessionRecord = {
+      sessionId,
+      userId:            userIdRef.current,
+      startedAt,
+      savedAt:           Date.now(),
+      watchdogFiresAt:   watchdogFiresAtRef.current,
+      shs:               shsRef.current,
+      cpl:               cplRef.current,
+      shsSum:            sessionShsSumRef.current,
+      shsTicks:          sessionShsTickCountRef.current,
+      minShs:            sessionMinShsRef.current,
+      maxCpl:            sessionMaxCplRef.current,
+      upperSumScoreMs:   upperSumScoreMsRef.current,
+      upperSumMs:        upperSumMsRef.current,
+      gapMs:             sessionGapMsRef.current,
+      stateTotals:       sessionStateTotalsRef.current,
+      interventionFired: interventionFiredRef.current,
+    };
+    queueSessionStore(() => AsyncStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, JSON.stringify(rec)));
+  }, [queueSessionStore]);
+
+  const clearActiveSession = useCallback(() => {
+    queueSessionStore(() => AsyncStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY));
+  }, [queueSessionStore]);
+
+  // A session left by a process that died, and that can't (or didn't) get
+  // resumed. Its data is already in Supabase from the last snapshot — mark it
+  // completed so it counts as a finished session, and rebuild that day.
+  const closeOrphanedRecord = useCallback((rec: Partial<ActiveSessionRecord>) => {
+    const sessionId = rec.sessionId;
+    if (!sessionId) return;
+    sentryBreadcrumb("closing session orphaned by app termination", { sessionId });
+    (async () => {
+      const closed = await postureSync.closeOrphanedSession(sessionId);
+      if (!closed) return; // keep the record so the next launch retries
+      await queueSessionStore(async () => {
+        const raw = await AsyncStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+        const current = raw ? JSON.parse(raw) : null;
+        if (current?.sessionId === sessionId) await AsyncStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      });
+      if (rec.userId) {
+        const dateKey = toLocalDateKey(new Date(rec.startedAt ?? Date.now()));
+        postureSync.rebuildDailyFromSessions(rec.userId, dateKey);
+      }
+    })().catch((e) => captureError(e, "posture-orphan-recover"));
+  }, [queueSessionStore]);
+
+  // Creates the Supabase row for the running session if it doesn't have one
+  // yet. Retried from the snapshot tick, since on a background relaunch the
+  // first packets can arrive before the login has loaded (or the network is
+  // briefly unavailable) and the first attempt then has nothing to attach to.
+  const ensureSessionRow = useCallback(() => {
+    if (sessionIdRef.current || sessionRowPendingRef.current) return;
+    const startedAt = sessionStartTimeRef.current;
+    const uid = userIdRef.current;
+    if (startedAt === null || !uid) return;
+    sessionRowPendingRef.current = true;
+    postureSync.startSession(uid, startedAt).then((id) => {
+      sessionRowPendingRef.current = false;
+      if (sessionStartTimeRef.current !== startedAt || !id) return; // session changed meanwhile
+      sessionIdRef.current = id;
+      sentryBreadcrumb("posture session started", { sessionId: id });
+      persistActiveSession();
+    });
+  }, [persistActiveSession]);
+
   // ── Load persisted data on mount ──────────────────────────────────────────
 
   useEffect(() => {
-    AsyncStorage.getItem(BASELINE_STORAGE_KEY).then((raw) => {
-      if (!raw) return;
-      const saved: ClinicalBaseline = JSON.parse(raw);
-      baselineRef.current      = saved;
-      neutralOffsetRef.current = saved.neutral;
-      resetPostureStability();
-      setClinicalBaseline(saved);
-      setIsNeutralCalibrated(true);
-      setCalibration((prev) => ({
-        ...prev, stepComplete: [true, true, true, true, true], isComplete: true,
-      }));
-    }).catch((e) => console.warn("[IMUContext] Failed to load baseline:", e));
-
-    AsyncStorage.getItem(NEUTRAL_OFFSET_STORAGE_KEY).then((raw) => {
-      if (!raw) return;
-      const saved: NeutralOffset = JSON.parse(raw);
-      if (!neutralOffsetRef.current) {
-        neutralOffsetRef.current = saved;
-        resetPostureStability();
-        setIsNeutralCalibrated(true);
-        setCalibration((prev) => {
-          const updated = [...prev.stepComplete]; updated[0] = true;
-          return { ...prev, stepComplete: updated };
-        });
+    if (bootStartedRef.current) return;
+    bootStartedRef.current = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(BASELINE_STORAGE_KEY);
+        if (raw) {
+          const saved: ClinicalBaseline = JSON.parse(raw);
+          baselineRef.current      = saved;
+          neutralOffsetRef.current = saved.neutral;
+          resetPostureStability();
+          setClinicalBaseline(saved);
+          setIsNeutralCalibrated(true);
+          setCalibration((prev) => ({
+            ...prev, stepComplete: [true, true, true, true, true], isComplete: true,
+          }));
+        }
+      } catch (e) {
+        console.warn("[IMUContext] Failed to load baseline:", e);
       }
-    }).catch((e) => console.warn("[IMUContext] Failed to load neutral offset:", e));
-  }, [resetPostureStability]);
+
+      try {
+        const raw = await AsyncStorage.getItem(NEUTRAL_OFFSET_STORAGE_KEY);
+        if (raw && !neutralOffsetRef.current) {
+          const saved: NeutralOffset = JSON.parse(raw);
+          neutralOffsetRef.current = saved;
+          resetPostureStability();
+          setIsNeutralCalibrated(true);
+          setCalibration((prev) => {
+            const updated = [...prev.stepComplete]; updated[0] = true;
+            return { ...prev, stepComplete: updated };
+          });
+        }
+      } catch (e) {
+        console.warn("[IMUContext] Failed to load neutral offset:", e);
+      }
+
+      // A session still saved here belongs to an app process that died
+      // mid-session (iOS terminated it, a crash).
+      try {
+        const raw = await AsyncStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+        const rec: Partial<ActiveSessionRecord> | null = raw ? JSON.parse(raw) : null;
+        if (rec?.sessionId) {
+          if (isResumable(rec)) {
+            // Resumed by the first packet if the s'pots are back in time;
+            // past that point the user has been told it ended, so close it.
+            resumableRef.current = rec;
+            setTimeout(() => {
+              if (resumableRef.current !== rec) return;
+              resumableRef.current = null;
+              closeOrphanedRecord(rec);
+            }, Math.max(0, rec.watchdogFiresAt - Date.now()));
+          } else {
+            closeOrphanedRecord(rec);
+          }
+        }
+      } catch (e) {
+        captureError(e, "posture-orphan-recover");
+      }
+
+      bootReadyRef.current = true;
+    })();
+  }, [resetPostureStability, closeOrphanedRecord]);
 
   // ── SHS + CPL accumulation — ticks every second ───────────────────────────
   //
@@ -424,7 +677,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     if (rate > 0 || stateElapsed >= gracePeriod) {
       const newShs = Math.max(0, Math.min(100, shsRef.current + rate));
       shsRef.current = newShs;
-      setShs(Math.round(newShs));
+      if (appActiveRef.current) setShs(Math.round(newShs));
     }
 
     // ── CPL ──
@@ -435,7 +688,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
       newCpl = cplRef.current + (CPL_WEIGHTS[state] ?? 0);
     }
     cplRef.current = newCpl;
-    setCpl(Math.round(newCpl));
+    if (appActiveRef.current) setCpl(Math.round(newCpl));
     sessionShsSumRef.current += shsRef.current;
     sessionShsTickCountRef.current += 1;
     sessionMinShsRef.current = Math.min(sessionMinShsRef.current, shsRef.current);
@@ -462,12 +715,11 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
 
   const displayTick = useCallback(() => {
     // Current state duration
-    const elapsed = Date.now() - stateStartTimeRef.current;
-    setTimeInCurrentStateMs(elapsed);
-
-    // Session duration
-    if (sessionStartTimeRef.current !== null) {
-      setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
+    if (appActiveRef.current) {
+      setTimeInCurrentStateMs(Date.now() - stateStartTimeRef.current);
+      if (sessionStartTimeRef.current !== null) {
+        setSessionDurationMs(Date.now() - sessionStartTimeRef.current);
+      }
     }
 
     // Static movement nudge (any posture held too long)
@@ -575,6 +827,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     const uid     = userIdRef.current;
 
     postureSync.endSession(sessionId, computeSessionAggregates());
+    clearActiveSession();
 
     sessionIdRef.current          = null;
     sessionStateTotalsRef.current = {};
@@ -588,13 +841,14 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         void postureSync.rebuildDailyFromSessions(uid, todayDK).then(() => syncDayXp(uid, todayDK));
       }, 5000);
     }
-  }, [computeSessionAggregates]);
+  }, [computeSessionAggregates, clearActiveSession]);
 
   const snapshotCurrentSession = useCallback(() => {
+    lastSnapshotAtRef.current = Date.now();
     const sessionId = sessionIdRef.current;
-    if (!sessionId) return;
+    if (!sessionId) { ensureSessionRow(); return; }
     postureSync.snapshotSession(sessionId, computeSessionAggregates());
-  }, [computeSessionAggregates]);
+  }, [computeSessionAggregates, ensureSessionRow]);
 
   // Deliberate end of the current session: writes it to Supabase
   // (finalizeSession) AND clears the local session timer so a brand-new
@@ -604,10 +858,15 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
   // path deliberately leaves the timer running so "reconnect s'pot" resumes
   // the same session.
   const endCurrentSession = useCallback(() => {
+    resumableRef.current = null;
     finalizeSession();
     resetPostureStability();
+    disarmSessionWatchdog();
+    lastSessionPacketAtRef.current = null;
+    lastWatchdogArmAtRef.current   = 0;
     sessionStartTimeRef.current = null;
     sessionEndedRef.current = true;
+    setSessionEnded(true);
     setSessionStartTimeMs(null);
     setSessionDurationMs(0);
   }, [finalizeSession, resetPostureStability]);
@@ -638,11 +897,9 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         if (slot === "top") {
           topLatestRef.current = parsed;
           topPacketCountRef.current += 1;
-          setTopData((prev) => ({ ...prev, latest: parsed }));
         } else {
           bottomLatestRef.current = parsed;
           bottomPacketCountRef.current += 1;
-          setBottomData((prev) => ({ ...prev, latest: parsed }));
         }
 
         // Flip once, the first time both slots have enough packets — using a
@@ -666,6 +923,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // phantom session. Cleared when the s'pots make a fresh connection.
         if (sessionEndedRef.current) return;
 
+        // Calibration / a resumable session are still loading (the first
+        // fraction of a second after launch) — see bootReadyRef.
+        if (!bootReadyRef.current) return;
+
         // Both slots are streaming again after a mid-session disconnect —
         // bank the dead gap so it's excluded from total_duration_ms.
         if (disconnectedAtRef.current !== null) {
@@ -673,8 +934,35 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           disconnectedAtRef.current = null;
         }
 
-        // Start session timer on first packet
-        if (sessionStartTimeRef.current === null) {
+        // First packet of a session: carry on the one a previous app process
+        // was recording if it's still resumable, otherwise start a new one.
+        const resumable = sessionStartTimeRef.current === null ? resumableRef.current : null;
+        if (resumable) resumableRef.current = null;
+        if (resumable && isResumable(resumable)) {
+          const now = Date.now();
+          sessionStartTimeRef.current    = resumable.startedAt;
+          sessionIdRef.current           = resumable.sessionId;
+          setSessionStartTimeMs(resumable.startedAt);
+          shsRef.current                 = resumable.shs;
+          cplRef.current                 = resumable.cpl;
+          sessionShsSumRef.current       = resumable.shsSum;
+          sessionShsTickCountRef.current = resumable.shsTicks;
+          sessionMinShsRef.current       = resumable.minShs;
+          sessionMaxCplRef.current       = resumable.maxCpl;
+          upperSumScoreMsRef.current     = resumable.upperSumScoreMs;
+          upperSumMsRef.current          = resumable.upperSumMs;
+          sessionStateTotalsRef.current  = resumable.stateTotals ?? {};
+          interventionFiredRef.current   = resumable.interventionFired;
+          // Nothing was tracked between the last save and now.
+          sessionGapMsRef.current        = resumable.gapMs + Math.max(0, now - resumable.savedAt);
+          disconnectedAtRef.current      = null;
+          lastPacketTimestampRef.current = now;
+          if (appActiveRef.current) { setShs(Math.round(resumable.shs)); setCpl(Math.round(resumable.cpl)); }
+          sentryBreadcrumb("posture session resumed after relaunch", {
+            sessionId: resumable.sessionId, gapMs: now - resumable.savedAt,
+          });
+        } else if (sessionStartTimeRef.current === null) {
+          if (resumable) closeOrphanedRecord(resumable);
           sessionStartTimeRef.current = Date.now();
           setSessionStartTimeMs(sessionStartTimeRef.current);
           console.log("[IMUContext] session started at", new Date(sessionStartTimeRef.current).toISOString());
@@ -689,12 +977,19 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           sessionGapMsRef.current = 0;
           disconnectedAtRef.current = null;
 
-          postureSync.startSession(userIdRef.current).then((id) => {
-            if (sessionStartTimeRef.current !== null) {
-              sessionIdRef.current = id;
-              sentryBreadcrumb("posture session started", { sessionId: id });
-            }
-          });
+          ensureSessionRow();
+        }
+
+        // Data is flowing — keep the "session stopped" notification pushed out.
+        const pktAt = Date.now();
+        lastSessionPacketAtRef.current = pktAt;
+        if (pktAt - lastWatchdogArmAtRef.current >= WATCHDOG_REARM_MS) {
+          lastWatchdogArmAtRef.current = pktAt;
+          watchdogFiresAtRef.current   = pktAt + WATCHDOG_S * 1000;
+          armSessionWatchdog(WATCHDOG_S, SESSION_STOPPED_TITLE, SESSION_STOPPED_BODY);
+          persistActiveSession();
+        } else if (pktAt - lastPersistAtRef.current >= SESSION_PERSIST_MS) {
+          persistActiveSession();
         }
 
         // EMA smoothing
@@ -727,26 +1022,23 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           const instant = result.instantScore ?? 0; // 0-100
           upperSumScoreMsRef.current += instant * dt;
           upperSumMsRef.current += dt;
-          if (upperSumMsRef.current > 0) {
-            const pct = upperSumScoreMsRef.current / upperSumMsRef.current;
-            setUpperBackPercent(Math.round(Math.max(0, Math.min(100, pct))));
-          }
         } catch (e) {
           // defensive
         }
-        // Compute neck alignment and shoulder balance percents from live, offset-corrected angles
+        // Neck alignment and shoulder balance percents from live, offset-corrected
+        // angles — computed into refs here, published on the UI throttle below.
         try {
           const neutral = offsetToUse ? ("neutral" in offsetToUse ? offsetToUse.neutral : offsetToUse) : null;
           const topNeutralRoll = neutral ? neutral.topRoll : 0;
           const topRollDelta = smoothedTop.angle.roll - topNeutralRoll;
           const NECK_TOLERANCE_DEG = 12; // 12° maps to ~0% alignment
           const neckPct = Math.max(0, Math.min(100, 100 - (Math.abs(topRollDelta) / NECK_TOLERANCE_DEG) * 100));
-          setNeckAlignmentPercent(Math.round(neckPct));
+          neckPctRef.current = Math.round(neckPct);
 
           const rollDiffDeg = result.rollDiff ?? 0;
           const LATERAL_MAX_DEG = 8; // matches imuParser lateral threshold
           const shoulderPct = Math.max(0, Math.min(100, 100 - (Math.abs(rollDiffDeg) / LATERAL_MAX_DEG) * 100));
-          setShoulderBalancePercent(Math.round(shoulderPct));
+          shoulderPctRef.current = Math.round(shoulderPct);
         } catch (e) {
           // defensive: do not crash the BLE handler
         }
@@ -757,7 +1049,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
           stateStartTimeRef.current    = Date.now();
           staticStartTimeRef.current   = Date.now();
           staticNudgeFiredRef.current  = false;
-          setTimeInCurrentStateMs(0);
+          if (appActiveRef.current) setTimeInCurrentStateMs(0);
           setShouldNudge(false);
           // Clear the movement nudge notification after a confirmed posture change.
           clearNudgeNotifs();
@@ -780,11 +1072,28 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // Keeps SHS/CPL, alerts and the nudge running while backgrounded
         runDueTicks();
 
+        // Same for the per-state stats and the Supabase snapshot: their
+        // intervals stall in the background once the screen is off, but
+        // packets keep arriving (Android foreground service / iOS BLE mode).
+        statsTickRef.current?.(result.state as DeskPostureState);
+        if (Date.now() - lastSnapshotAtRef.current >= SNAPSHOT_TICK_MS) snapshotCurrentSession();
+        // Live session notification (Android): fed per packet so it updates
+        // instantly and keeps updating while backgrounded.
+        liveStatusRef.current?.({ state: result.state as DeskPostureState, sessionStartTimeMs: sessionStartTimeRef.current });
+
+        // Everything below only feeds the screen. While backgrounded nobody can
+        // see it, and re-rendering the app's whole context tree ~20×/s on the
+        // throttled background CPU is what got iOS to kill the app
+        // (cpu_resource_fatal: >80% CPU over 60s). Tracking above keeps
+        // running on refs; flushUIFromRefs() catches the UI up on foreground.
+        if (!appActiveRef.current) return;
+
         // UI throttle
         const now = Date.now();
         if (now - lastUIUpdateRef.current < UI_THROTTLE_MS) return;
         lastUIUpdateRef.current = now;
 
+        publishLiveMetrics();
         setPosture({
           state:        result.state as DeskPostureState,
           instantScore: result.instantScore,
@@ -807,6 +1116,7 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // post-end packet suppression so the next packet can start a session.
         if (state.connected) {
           sessionEndedRef.current = false;
+          setSessionEnded(false);
           // This s'pot is back, so its "disconnected" notifications no longer apply
           dismissBackgroundAlerts(`${NOTIF_DISCONNECT}-${slot}`);
         } else if (sessionStartTimeRef.current !== null && disconnectedAtRef.current === null) {
@@ -856,6 +1166,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         // session already ended) — a drop is just a drop, don't prompt.
         if (sessionStartTimeRef.current === null) return;
 
+        // Save what we have right away, and stand the watchdog down — this
+        // disconnect notification already tells the user tracking stopped.
+        snapshotCurrentSession();
+        disarmSessionWatchdog();
+        lastWatchdogArmAtRef.current = 0;
+
         const label = slot === "top" ? "top" : "bottom";
         const title = `${label} s'pot disconnected`;
         const message = "reconnect the s'pot to carry on, or end your session now; it'll be saved either way.";
@@ -878,7 +1194,10 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
         });
       }
     );
-  }, [endCurrentSession, resetPostureStability]);
+  }, [
+    endCurrentSession, resetPostureStability, snapshotCurrentSession, publishLiveMetrics,
+    ensureSessionRow, persistActiveSession, closeOrphanedRecord,
+  ]);
 
   // ── 5-position calibration ────────────────────────────────────────────────
 
@@ -1102,29 +1421,111 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     setPosture(null);
   }, [endCurrentSession]);
 
+  // ── Safety net: tracking that stopped without the user ending it ──────────
+
+  // The app is alive but no data has arrived from the s'pots for a while,
+  // with no disconnect event (e.g. a s'pot froze). End and save the session
+  // rather than leave it silently open, and tell the user.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const last = lastSessionPacketAtRef.current;
+      if (
+        last === null ||
+        sessionStartTimeRef.current === null ||
+        sessionEndedRef.current ||
+        disconnectedAtRef.current !== null || // a disconnect prompt already covers this
+        Date.now() - last < STALL_END_MS
+      ) return;
+      sentryBreadcrumb("s'pot data stalled — ending session", { sessionId: sessionIdRef.current });
+      endSessionKeepConnected();
+      sendBackgroundAlert("session-stopped", SESSION_STOPPED_TITLE, SESSION_STOPPED_BODY);
+      if (appActiveRef.current) {
+        setBrandAlert({
+          title: SESSION_STOPPED_TITLE,
+          message: SESSION_STOPPED_BODY,
+          buttons: [{ text: "ok" }],
+        });
+      }
+    }, STALL_CHECK_MS);
+    return () => clearInterval(id);
+  }, [endSessionKeepConnected]);
+
   // Lifts the post-end packet suppression; the next joint packet starts the session.
   const startNewSession = useCallback(() => {
     sessionEndedRef.current = false;
+    setSessionEnded(false);
+  }, []);
+
+  const registerStatsTick = useCallback((fn: ((state: DeskPostureState) => void) | null) => {
+    statsTickRef.current = fn;
+  }, []);
+
+  const registerLiveStatus = useCallback((fn: LiveStatusListener | null) => {
+    liveStatusRef.current = fn;
   }, []);
 
   const bothConnected = topData.state.connected && bottomData.state.connected;
 
+  // Android: a foreground service is the only thing that keeps the BLE
+  // stream, the JS session tracking and Supabase writes alive once the app is
+  // backgrounded. iOS: the same calls start/end the live s'ession Live Activity
+  // (iOS keeps tracking alive itself via bluetooth-central). Starts when both
+  // s'pots connect (in the foreground, which iOS requires to start a Live
+  // Activity), stays up through an unexpected drop the user may still reconnect
+  // through (session still running), and stops at session end.
+  const trackingActive = sessionStartTimeMs !== null || (bothConnected && !sessionEnded);
+  useEffect(() => {
+    if (!trackingActive) return;
+    try {
+      // Placeholder until the first live update: SessionLiveNotification then
+      // keeps this same notification updated with posture, time and XP.
+      startTrackingService("s'pots connected", "starting your s'ession…");
+      sentryBreadcrumb("tracking service started");
+    } catch (e) {
+      captureError(e, "tracking-service-start");
+    }
+    return () => {
+      try { stopTrackingService(); } catch (e) { captureError(e, "tracking-service-stop"); }
+    };
+  }, [trackingActive]);
+
+  const setSessionStateTotals = useCallback((totals: postureSync.StateTotals) => {
+    sessionStateTotalsRef.current = totals;
+  }, []);
+
+  // Memoised so consumers only re-render when something they could read
+  // actually changed — an inline object here re-rendered every screen using
+  // this context on every render of the provider.
+  const value = useMemo<IMUContextValue>(() => ({
+    topSensor: topData,
+    bottomSensor: bottomData,
+    posture,
+    bothConnected,
+    sensorsReady,
+    discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
+    endSessionKeepConnected, startNewSession,
+    calibration, clinicalBaseline, isNeutralCalibrated,
+    startCalibrationStep, resetCalibration,
+    shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
+    neckAlignmentPercent, shoulderBalancePercent, upperBackPercent,
+    shouldNudge, activeIntervention, confirmMovement, dismissIntervention,
+    setSessionStateTotals,
+    registerStatsTick,
+    registerLiveStatus,
+  }), [
+    topData, bottomData, posture, bothConnected, sensorsReady,
+    discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
+    endSessionKeepConnected, startNewSession,
+    calibration, clinicalBaseline, isNeutralCalibrated,
+    startCalibrationStep, resetCalibration,
+    shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
+    neckAlignmentPercent, shoulderBalancePercent, upperBackPercent,
+    shouldNudge, activeIntervention, confirmMovement, dismissIntervention,
+    setSessionStateTotals, registerStatsTick, registerLiveStatus,
+  ]);
+
   return (
-    <IMUContext.Provider value={{
-      topSensor: topData,
-      bottomSensor: bottomData,
-      posture,
-      bothConnected,
-      sensorsReady,
-      discoveredDevices, isScanning, scan, connect, disconnect, disconnectAll,
-      endSessionKeepConnected, startNewSession,
-      calibration, clinicalBaseline, isNeutralCalibrated,
-      startCalibrationStep, resetCalibration,
-      shs, cpl, timeInCurrentStateMs, sessionDurationMs, sessionStartTimeMs,
-      neckAlignmentPercent, shoulderBalancePercent, upperBackPercent,
-      shouldNudge, activeIntervention, confirmMovement, dismissIntervention,
-      setSessionStateTotals: (totals: postureSync.StateTotals) => { sessionStateTotalsRef.current = totals; },
-    }}>
+    <IMUContext.Provider value={value}>
       {children}
       <BrandAlert
         visible={brandAlert !== null}

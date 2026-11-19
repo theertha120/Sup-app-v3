@@ -66,6 +66,46 @@ into its feature section below and clear this list.
 - [ ] Sit still in one position **15 min** → "time to move" nudge.
 - [ ] Session runs **20+ min** without the app slowing down, heating up or the timer drifting.
 
+## Live s'ession notification (Android)
+
+The Android foreground service's pinned notification (see "Background tracking" below) shows the running session's time, posture and XP, like a ride-status notification. There is only **one** pinned notification: src/components/desk/SessionLiveNotification.tsx updates the service's own notification. Android only for now.
+
+- [ ] **Appears:** connect both s'pots → a silent "s'pots connected · starting your s'ession…" notification. Once the session starts it becomes "s'ession in progress · 0min" with "🟢 good alignment · 0 xp so far" (or your current posture). No second notification, and no sound, vibration or banner, including while the app is open.
+- [ ] **Updates in place, quickly:** lean forward / slouch / tilt → the line changes as soon as the app confirms the new posture (the same moment the Desk figure changes; nothing extra is added for the notification), in the same notification (not a new one). Check this with the app **in the background and the screen off** too — it should keep changing, not only when you reopen the app. Minutes tick up; XP goes up 5 every 10 minutes. Record how it behaves with the screen off and the app in the background for 10+ minutes.
+- [ ] **Swiping it away:** on Android 13+ the notification can be swiped away, but it should **come straight back** with the same text. On older Android it can't be swiped at all. After the session ends it must not come back. Tapping it opens the app (on the screen you were last on) and it stays pinned.
+- [ ] **Disconnect:** turn a s'pot off → "⚠️ a s'pot disconnected — open s'up to reconnect". Reconnect → posture line returns.
+- [ ] **Ends:** end the s'ession (button, disconnect, or "end session" on the prompt) → the notification disappears.
+- [ ] **App swiped away mid-session:** the notification goes away with the app (the service doesn't restart on its own).
+- [ ] **Notifications off** for the app → no crash; sessions still work (record whether Android still shows the service notification).
+- [ ] **Channel:** Android Settings → s'up → Notifications shows the "posture tracking" category. If you tried an earlier test build, the old "Live s'ession" category is gone after opening this one.
+
+## Live s'ession Live Activity (iPhone)
+
+The same live status on iPhone, as a Live Activity on the lock screen and in the Dynamic Island (iOS 16.2+; Dynamic Island on iPhone 14 Pro or later). Native code: modules/sup-foreground-service/ios + the widget in targets/sup-live-activity. Needs a **new EAS iOS build** — the first one creates a provisioning profile for the new widget bundle id (com.supapp.app.liveactivity), so run it interactively once.
+
+- [ ] **Appears:** connect both s'pots with the app open → a Live Activity "s'pots connected · starting your s'ession…" on the lock screen. Once the session starts: "s'ession in progress · 0min" / "🟢 good alignment · 0 xp so far", with a seconds timer in the corner that counts up by itself.
+- [ ] **Dynamic Island** (14 Pro+): compact shows the posture dot and the timer; long-press expands to the title and posture line.
+- [ ] **Updates in the background:** lock the phone, change posture → the lock-screen text changes about as fast as the Desk figure would. Leave it 10+ minutes → minutes and XP go up.
+- [ ] **Disconnect:** turn a s'pot off → "⚠️ a s'pot disconnected — open s'up to reconnect".
+- [ ] **Ends:** end the s'ession → the Live Activity disappears.
+- [ ] **App closed mid-session:** swipe the app away → within ~2 minutes it shows "open s'up to keep tracking" (stale), and the "your s'ession has ended" notification still arrives.
+- [ ] **Dismissed by the user:** swipe the Live Activity away on the lock screen → it comes back the next time the app is opened during that session (iOS doesn't allow starting one from the background).
+- [ ] **Live Activities turned off** (Settings → s'up → Live Activities) → nothing shows, no crash, the session still tracks.
+- [ ] **Older iPhone / iOS below 16.2** → app installs and runs normally, just without the Live Activity.
+
+## Background tracking (ported from v2)
+
+Android foreground service (`modules/sup-foreground-service`) and the iOS background fixes from the v2 repo (commits 3b42ae9, 0d1319b, 54c12d7, a704b80, 81ecd0a). Needs a **new native build** (EAS / `expo run`); a Metro reload isn't enough.
+
+- [ ] **Android foreground service:** connect both s'pots → the silent pinned notification appears ("s'pots connected · starting your s'ession…", then the live session status; Settings → s'up → Notifications shows a "posture tracking" channel). Lock the screen for 15+ minutes → the session keeps tracking and saving. End the session → the notification goes away.
+- [ ] **Android unexpected drop:** turn a s'pot off mid-session → the service stays up while the reconnect prompt is open; "end s'ession" stops it.
+- [ ] **iOS background:** start a session, lock the phone for 15+ minutes with the s'pots streaming → the app isn't killed (no cpu_resource_fatal in crash logs) and the session keeps its time.
+- [ ] **iOS relaunch (state restoration):** with a session running, let iOS end the app in the background (or relaunch it via Bluetooth) → the same session carries on, not a new one, if it's back within ~90 s; otherwise the old session is closed and saved and a new one starts.
+- [ ] **"Session ended" safety net:** force-close the app mid-session → about 90 s later a "session ended" notification arrives. Reopen → that session shows as completed and its day is rebuilt.
+- [ ] **Stalled data:** stop the s'pots sending data without disconnecting (e.g. out of range without a drop) → after ~75 s the session is ended and saved.
+- [ ] **Offline cold start:** with no connection, fully close and reopen the app → you stay signed in (no logged-out flash, no sign-out).
+- [ ] **Android: one pinned notification** during a session (the foreground service's, showing the live status). No separate "s'up is tracking your posture" notification.
+
 ## Screen locked / app in background
 
 Android and iOS behave differently here, and so do phone makers' battery

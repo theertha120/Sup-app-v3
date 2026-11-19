@@ -257,6 +257,7 @@ test('fetchLevelProgress reads profiles.xp_total and works out the level', async
 test('ending a session rebuilds the day, then syncs that day’s XP', async () => {
   const { setupImu } = await import('./helpers/imuProvider.mjs');
   const s = setupImu();
+  await flush(); // packets are ignored until saved calibration / session state has loaded
   s.connected('top'); s.connected('bottom');
   s.packets(); await flush(); s.rerender();
   s.stream(10_000);

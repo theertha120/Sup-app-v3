@@ -12,6 +12,9 @@ const SEC = 1000;
 const setup = setupImu;
 
 async function started(s, forward = 0) {
+  // Packets are ignored until saved calibration / the running-session record
+  // have loaded from storage (v2 background-service work), so let that finish.
+  await flush();
   s.connected('top'); s.connected('bottom');
   s.packets(forward);
   await flush();
@@ -207,5 +210,11 @@ test('no session row is created when signed out, and ending writes nothing', asy
   await started(s);
   s.stream(5 * SEC);
   await flush();
-  assert.deepEqual(s.calls.start, [null], 'startSession is asked, and returns null for no user in the real service');
+  // v2 background-service work: with no login the row isn't requested at all;
+  // ensureSessionRow retries from the snapshot tick once a user is known.
+  assert.deepEqual(s.calls.start, [], 'no session row is requested while signed out');
+  await s.ctx().disconnectAll();
+  s.clock.advance(5 * SEC); await flush();
+  assert.equal(s.calls.end.length, 0, 'ending writes nothing');
+  assert.equal(s.calls.rebuild.length, 0);
 });

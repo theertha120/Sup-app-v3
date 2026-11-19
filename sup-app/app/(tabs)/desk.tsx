@@ -20,7 +20,6 @@ import { useIMUContext } from "../../src/contexts/IMUContext";
 import { MOVEMENT_NUDGE } from "../../src/lib/imuParser";
 import CalibrationModal from "../../src/components/modals/CalibrationModal";
 import { formatDuration, StateTimeMap } from "../../src/hooks/useSessionStats";
-import { useFocusEffect } from "expo-router";
 import { aiProvider } from "../../src/services/ai";
 import { supabase } from "../../src/lib/supabase";
 import { useToast } from "../../src/contexts/ToastContext";
@@ -381,26 +380,18 @@ export default function DeskScreen() {
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   useEffect(() => { sessionActiveRef.current = sessionActive; }, [sessionActive]);
 
-  // --- Desk UI figure snapshot ---
-  const livePostureRef = useRef(posture);
-  const [displayPosture, setDisplayPosture] = useState(posture);
-
-  useEffect(() => { livePostureRef.current = posture; }, [posture]);
-
-  useFocusEffect(
-    useCallback(() => {
-      // immediate snap on focus
-      setDisplayPosture(livePostureRef.current);
-    }, [])
-  );
-
-  useEffect(() => {
-    // periodic snapshot for figure to reduce flicker
-    const id = setInterval(() => {
-      setDisplayPosture(livePostureRef.current);
-    });
-    return () => clearInterval(id);
-  }, []);
+  // --- Desk UI figure ---
+  // The figure follows `posture` directly. IMUContext already throttles it
+  // (at most every 500ms, and not at all while the app is backgrounded), so
+  // no extra timer is needed here.
+  //
+  // Do NOT reintroduce a polling setInterval here. One existed with its delay
+  // argument missing (= 0ms) — in the foreground it ran every screen refresh,
+  // and in the background iOS ran it back-to-back, pinning the JS thread at
+  // ~100% CPU until iOS killed the app (cpu_resource_fatal) a few minutes
+  // after the screen locked. That was the "s'pots stop after a few minutes
+  // in the background" bug.
+  const displayPosture = posture;
 
   // Load today's s'updates from Supabase on mount
   useEffect(() => {
@@ -457,7 +448,7 @@ export default function DeskScreen() {
   const currentDesc    = (displayPosture?.description ?? posture?.description) ?? "connect your s'pots via s'pot setup.";
 
   // Ensure the visible numeric 'score' shown on the avatar follows the
-  // throttled `displayPosture` (so it updates with the avatar every 3 seconds).
+  // `displayPosture` (so it updates together with the avatar).
   const displayScore = (
     (displayPosture?.state ?? posture?.state) === "upright"      ? 95 :
     (displayPosture?.state ?? posture?.state) === "transition"   ? 75 :
