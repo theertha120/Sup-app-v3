@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { View, Animated, StyleSheet, Easing } from "react-native";
+import { View, Animated, StyleSheet, Easing, AppState } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import {
   Joints, lerpJoints, UPRIGHT,
@@ -30,7 +30,15 @@ interface Props {
 }
 
 export default function CalibrationFigure({ target, color }: Props) {
-  const loop = target !== UPRIGHT;
+  // JS-driven animation (SVG path props can't use the native driver), so it
+  // must not run while backgrounded — RN keeps firing its frame timers there
+  // back-to-back, which burns CPU until iOS kills the app.
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => setAppActive(s === "active"));
+    return () => sub.remove();
+  }, []);
+  const loop = target !== UPRIGHT && appActive;
 
   const progress = useRef(new Animated.Value(0)).current;
   const [joints, setJoints] = useState<Joints>({ ...UPRIGHT });

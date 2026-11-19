@@ -117,9 +117,12 @@ test('daily rebuild reports failed queries and upserts with their stage', async 
 test('BLE connection failure reports slot once, retains disconnected state, and omits device identifiers', async () => {
   const f = fixture();
   const { bleService } = load('../src/services/BLEService.ts', {
-    'react-native-ble-plx': { BleManager: class { onStateChange() {} } },
+    // state()/connectedDevices(): v2 re-adopts s'pots the OS kept connected on launch.
+    'react-native-ble-plx': { BleManager: class { onStateChange() {} async state() { return 'PoweredOff'; } async connectedDevices() { return []; } } },
     'react-native': { Platform: { OS: 'ios' }, PermissionsAndroid: {} },
     '../lib/sentry': f.sentry,
+    // v2 background-service work: s'pot slots are saved for Bluetooth state restoration.
+    '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
   }, { setTimeout: callback => { callback(); }, console: { error() {}, log() {}, warn() {} } });
   const statuses = [];
   bleService.stopScan = () => {};

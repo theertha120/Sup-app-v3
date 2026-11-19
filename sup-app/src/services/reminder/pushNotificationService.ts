@@ -91,6 +91,10 @@ async function setupAndroidChannels(): Promise<void> {
     showBadge: false,
   });
 
+  // An earlier test build had a separate "Live s'ession" channel; the live
+  // session status now lives in the foreground service's notification.
+  await Notifications.deleteNotificationChannelAsync("session_live").catch(() => {});
+
   console.log("Android notification channels registered");
 }
 
@@ -287,6 +291,52 @@ export async function sendBackgroundAlert(kind: string, title: string, body: str
     });
   } catch (error) {
     console.error("Error sending background alert:", error);
+  }
+}
+
+// Fixed identifier, so re-arming replaces the pending one instead of stacking.
+const SESSION_WATCHDOG_ID = "sup-session-watchdog";
+
+/**
+ * SESSION WATCHDOG ("dead man's switch")
+ * Schedules a notification `seconds` from now saying the session stopped.
+ * IMUContext re-arms it while s'pot data keeps arriving and disarms it on a
+ * deliberate end, so it only ever fires if tracking stopped without the app
+ * getting a chance to say so — iOS terminating the app in the background,
+ * the phone killing it for memory, a crash, or the data just going silent.
+ * Because iOS delivers it, it fires even if the app is no longer running.
+ */
+export async function armSessionWatchdog(seconds: number, title: string, body: string): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: SESSION_WATCHDOG_ID,
+      content: {
+        title,
+        body,
+        sound: "default",
+        data: { type: SESSION_ALERT_TYPE, kind: "session-stopped" },
+        ...(Platform.OS === "android" && {
+          channelId: CHANNEL_SESSION_ALERTS,
+          color: "#FF6B6B",
+          autoDismiss: true,
+        }),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds,
+        repeats: false,
+      },
+    });
+  } catch (error) {
+    console.error("Error arming session watchdog:", error);
+  }
+}
+
+export async function disarmSessionWatchdog(): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(SESSION_WATCHDOG_ID);
+  } catch (error) {
+    console.error("Error disarming session watchdog:", error);
   }
 }
 

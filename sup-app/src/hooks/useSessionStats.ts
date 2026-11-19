@@ -39,6 +39,20 @@ export interface DayData {
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 const STATS_KEY_PREFIX = "sup_posture_stats_";
+// The running session's own per-state totals, saved alongside today's totals
+// on every tick. If the app is terminated and relaunched mid-session and
+// IMUContext resumes that session (same start time), these seed the session
+// accumulator again — and are taken back out of today's saved totals, which
+// already include them, so nothing is counted twice.
+const LIVE_SESSION_KEY = "sup_posture_session_live_v1";
+const LIVE_TIMELINE_MAX = 500; // most recent segments kept for highlights
+
+interface LiveSessionRecord {
+  sessionStartMs: number;
+  dateKey: string;
+  totals: StateTimeMap;
+  timeline: PostureSegment[];
+}
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function dateToKey(d: Date): string {
@@ -76,6 +90,15 @@ function mergeMaps(...maps: StateTimeMap[]): StateTimeMap {
   return result;
 }
 
+function subtractMap(from: StateTimeMap, sub: StateTimeMap): StateTimeMap {
+  const result: StateTimeMap = { ...from };
+  for (const [k, v] of Object.entries(sub)) {
+    const key = k as DeskPostureState;
+    result[key] = Math.max(0, (result[key] ?? 0) - (v ?? 0));
+  }
+  return result;
+}
+
 function totalMs(map: StateTimeMap): number {
   return Object.values(map).reduce((s, v) => s + (v ?? 0), 0);
 }
@@ -89,7 +112,7 @@ const reportPeriodicSaveError = createThrottledErrorReporter();
 
 // Mounted once by SessionStatsProvider, never by individual screens.
 export function useSessionStatsTracker(currentState: DeskPostureState | undefined) {
-  const { setSessionStateTotals, sessionStartTimeMs } = useIMUContext();
+  const { setSessionStateTotals, sessionStartTimeMs, registerStatsTick } = useIMUContext();
   const [sessionStats, setSessionStats] = useState<StateTimeMap>({});
   const [todayStats,   setTodayStats]   = useState<StateTimeMap>({});
   const [weekDays,     setWeekDays]     = useState<DayData[]>([]);
@@ -103,14 +126,47 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
   const sessionTimelineRef = useRef<PostureSegment[]>([]);
   const prevSessionStartRef = useRef<number | null>(sessionStartTimeMs);
   const lastTimelineTickRef = useRef<number | null>(null);
+  // Saved stats aren't written until they've been read back — a tick before
+  // that would overwrite today's saved totals with an empty base.
+  const loadedRef          = useRef(false);
+  const liveRecordRef      = useRef<LiveSessionRecord | null>(null);
 
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
+
+  // Once both the saved stats are loaded and the session start is known:
+  // if this is the same session a previous app process was recording,
+  // carry its per-state totals on; if it's a different one, the saved
+  // record is stale (its time already lives in today's totals).
+  const applyLiveRecord = useCallback(() => {
+    const live  = liveRecordRef.current;
+    const start = prevSessionStartRef.current;
+    if (!loadedRef.current || !live || start === null) return;
+    liveRecordRef.current = null;
+    if (live.sessionStartMs !== start) {
+      AsyncStorage.removeItem(LIVE_SESSION_KEY).catch(() => {});
+      return;
+    }
+    sessionRef.current         = { ...live.totals };
+    sessionTimelineRef.current = live.timeline ?? [];
+    if (live.dateKey === toLocalDateKey()) {
+      persistedTodayRef.current = subtractMap(persistedTodayRef.current, live.totals);
+    }
+    lastTickRef.current = Date.now();
+    setSessionStats({ ...sessionRef.current });
+    setSessionStateTotals(sessionRef.current);
+  }, [setSessionStateTotals]);
 
   // ── Load persisted data on mount ──────────────────────────────────────────
 
   useEffect(() => {
     const load = async () => {
       try {
+        try {
+          const rawLive = await AsyncStorage.getItem(LIVE_SESSION_KEY);
+          liveRecordRef.current = rawLive ? JSON.parse(rawLive) : null;
+        } catch {
+          liveRecordRef.current = null;
+        }
         const days   = last7Days();
         const raws   = await Promise.all(days.map((d) => AsyncStorage.getItem(d.key)));
         const dayMap: Record<string, StateTimeMap> = {};
@@ -138,16 +194,20 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
         console.warn("[useSessionStats] Failed to load:", e);
         captureError(e, "desk-stats-load");
       }
+      loadedRef.current = true;
+      applyLiveRecord();
     };
     load();
-  }, []);
+  }, [applyLiveRecord]);
 
   // ── Tick interval ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const tick = () => {
       const state = currentStateRef.current;
-      if (!state) return;
+      // Keep the clock moving while idle, or the first tick of the next
+      // session folds all the idle time into its first posture state.
+      if (!state) { lastTickRef.current = Date.now(); return; }
 
       const now     = Date.now();
       const elapsed = now - lastTickRef.current;
@@ -166,12 +226,26 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
       const todayLive = mergeMaps(persistedTodayRef.current, sessionRef.current);
       setTodayStats(todayLive);
 
-      // Persist today
+      // Persist today, plus the session's own totals (see LIVE_SESSION_KEY) —
+      // in one write so the two can never disagree.
+      // (v3: the timeline is filled by the 1s timeline sampler below, not by
+      // this tick, so it's only read here for the saved live-session record.)
+      const timeline = sessionTimelineRef.current;
       const todayDK = toLocalDateKey();
-      AsyncStorage.setItem(
-        STATS_KEY_PREFIX + todayDK,
-        JSON.stringify(todayLive)
-      ).catch((error) => reportPeriodicSaveError(error, "desk-stats-save"));
+      if (loadedRef.current) {
+        const entries: [string, string][] = [[STATS_KEY_PREFIX + todayDK, JSON.stringify(todayLive)]];
+        const start = prevSessionStartRef.current;
+        if (start !== null) {
+          const live: LiveSessionRecord = {
+            sessionStartMs: start,
+            dateKey: todayDK,
+            totals: sessionRef.current,
+            timeline: timeline.slice(-LIVE_TIMELINE_MAX),
+          };
+          entries.push([LIVE_SESSION_KEY, JSON.stringify(live)]);
+        }
+        AsyncStorage.multiSet(entries).catch((error) => reportPeriodicSaveError(error, "desk-stats-save"));
+      }
 
       // Keep IMUContext's state totals ref in sync so endSession can write them
       setSessionStateTotals(sessionRef.current);
@@ -187,10 +261,24 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
 
       // Week total
       setWeekStats((prev) => mergeMaps(prev, { [state]: elapsed } as StateTimeMap));
-    }, TICK_MS);
+    };
 
-    return () => clearInterval(interval);
-  }, []);
+    const interval = setInterval(tick, TICK_MS);
+
+    // JS timers stall in the background once the screen is off, so IMUContext
+    // also calls this on every s'pot packet. It carries the packet's posture
+    // state (React state may lag while backgrounded) and only ticks once the
+    // interval is overdue, so it's a no-op while the interval is healthy.
+    registerStatsTick((state) => {
+      if (currentStateRef.current !== undefined) currentStateRef.current = state;
+      if (Date.now() - lastTickRef.current >= TICK_MS) tick();
+    });
+
+    return () => {
+      clearInterval(interval);
+      registerStatsTick(null);
+    };
+  }, [registerStatsTick]);
 
   // ── Timeline sampler ──────────────────────────────────────────────────────
   // Ref-only (no re-render, no storage). Untracked time is left as a gap.
@@ -231,10 +319,12 @@ export function useSessionStatsTracker(currentState: DeskPostureState | undefine
       sessionRef.current = {};
       sessionTimelineRef.current = [];
       setSessionStats({});
+      AsyncStorage.removeItem(LIVE_SESSION_KEY).catch(() => {});
     }
 
     prevSessionStartRef.current = sessionStartTimeMs;
-  }, [sessionStartTimeMs]);
+    applyLiveRecord();
+  }, [sessionStartTimeMs, applyLiveRecord]);
 
   const getSessionTimeline = useCallback(
     () => sessionTimelineRef.current.map((s) => ({ ...s })),

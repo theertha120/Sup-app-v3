@@ -13,6 +13,8 @@ function fixture({ failRead = false, failWrite = false } = {}) {
   const imu = {
     posture: { state: 'upright' }, bothConnected: true, isNeutralCalibrated: true,
     sessionStartTimeMs: now, setSessionStateTotals: totals => { imu.totals = totals; },
+    // v2 background-service work: packets can drive the stats tick while timers are paused.
+    registerStatsTick: fn => { imu.statsTick = fn; },
   };
   const react = {
     createContext: value => {
@@ -45,7 +47,14 @@ function fixture({ failRead = false, failWrite = false } = {}) {
         });
       }
     },
-    useCallback: fn => fn,
+    // Memoised like React's (the tracker's load effect depends on a useCallback).
+    useCallback: (fn, deps) => {
+      const index = active.cursor++;
+      const previous = active.slots[index];
+      if (previous && deps && deps.every((dep, i) => dep === previous.deps[i])) return previous.fn;
+      active.slots[index] = { fn, deps };
+      return fn;
+    },
   };
   const mount = fn => {
     const owner = { cursor: 0, slots: [], effects: [] };
@@ -84,6 +93,9 @@ function fixture({ failRead = false, failWrite = false } = {}) {
     '@react-native-async-storage/async-storage': {
       getItem: async () => { if (failRead) throw new Error('local read failed'); return null; },
       setItem: async (...args) => { if (failWrite) throw new Error('local write failed'); writes.push(args); },
+      // v2 saves the live session's totals together with today's in one write.
+      multiSet: async (entries) => { if (failWrite) throw new Error('local write failed'); entries.forEach((entry) => writes.push(entry)); },
+      removeItem: async () => {},
     },
     '../contexts/AuthContext': { useAuth: () => ({ userId: 'user-a' }) },
     '../contexts/IMUContext': { useIMUContext: () => imu },
@@ -111,8 +123,8 @@ function fixture({ failRead = false, failWrite = false } = {}) {
 test('tracks before Desk opens, after it unmounts, and retains totals and timeline on return', async () => {
   const f = fixture();
   f.provider.render();
-  await Promise.resolve();
-  await Promise.resolve();
+  // Saving waits until saved stats have loaded (v2 background-service work).
+  await new Promise(resolve => setImmediate(resolve));
   f.tick();
   assert.equal(f.imu.totals.upright, 5000);
   const desk = f.screen();

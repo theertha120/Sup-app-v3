@@ -3,7 +3,7 @@
 // (user confirms), de-duped drop handling, and service-UUID-only scanning.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fakeClock, fakeSentry, flush, imuPacket, loadTs, quietConsole } from './helpers/harness.mjs';
+import { fakeAsyncStorage, fakeClock, fakeSentry, flush, imuPacket, loadTs, quietConsole } from './helpers/harness.mjs';
 
 const SERVICE_UUID = '0000ffe5-0000-1000-8000-00805f9a34fb';
 
@@ -49,6 +49,8 @@ function setup({ bleState = 'PoweredOn' } = {}) {
       'react-native-ble-plx': { BleManager: function BleManager() { return manager; } },
       'react-native': { Platform: { OS: 'ios' }, PermissionsAndroid: {} },
       '../lib/sentry': sentry.module,
+      // v2 background-service work: s'pot slots are saved for Bluetooth state restoration.
+      '@react-native-async-storage/async-storage': fakeAsyncStorage(),
     },
     globals: { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, Date: clock.Date, console: quietConsole },
   });

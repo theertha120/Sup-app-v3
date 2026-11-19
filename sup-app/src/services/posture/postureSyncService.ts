@@ -112,7 +112,7 @@ async function closeStaleSessions(userId: string): Promise<void> {
   }
 }
 
-export async function startSession(userId: string | null): Promise<string | null> {
+export async function startSession(userId: string | null, startedAtMs: number = Date.now()): Promise<string | null> {
   if (!userId) {
     console.warn("[postureSync] startSession skipped — no userId (not logged in, or auth not resolved yet)");
     return null;
@@ -122,7 +122,7 @@ export async function startSession(userId: string | null): Promise<string | null
 
     const { data, error } = await supabase
       .from("posture_sessions")
-      .insert({ user_id: userId, started_at: new Date().toISOString() })
+      .insert({ user_id: userId, started_at: new Date(startedAtMs).toISOString() })
       .select("id")
       .single();
 
@@ -198,6 +198,30 @@ export async function snapshotSession(
   } catch (e) {
     console.warn("[postureSync] snapshotSession threw", e);
     reportSnapshotError(e, "posture-session-snapshot", { sessionId });
+  }
+}
+
+/**
+ * Marks a session the app never got to end as completed, keeping the totals
+ * from its last snapshot (ended_at is the last snapshot time, so the
+ * duration stays honest). Used on launch for a session that was still
+ * running when the previous app process died.
+ */
+export async function closeOrphanedSession(sessionId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("posture_sessions")
+      .update({ is_completed_session: true })
+      .eq("id", sessionId)
+      .eq("is_completed_session", false);
+    if (error) {
+      captureError(error, "posture-orphan-close", { sessionId });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    captureError(e, "posture-orphan-close", { sessionId });
+    return false;
   }
 }
 
@@ -305,12 +329,13 @@ export async function upsertDailyRollup(
 
 /**
  * Rebuild posture_daily for a given date by aggregating every
- * is_completed_session posture_sessions row for that day — set only by a
- * deliberate endSession() or a closeStaleSessions() recovery, never by the
- * periodic snapshotSession() (see its own comment) — so a still-active or
- * not-yet-recovered session's in-progress numbers never get folded in as if
- * finished. Call this after a session ends (with a short delay so endSession
- * has time to write to the DB first).
+ * posture_sessions row for that day — including ones never marked
+ * is_completed_session (app killed, phone died), which still hold real
+ * tracked time up to their last 20s snapshot. Safe because the day is
+ * recomputed from scratch each time: a session that later completes just
+ * contributes its final numbers on the next rebuild, never twice. Call this
+ * after a session ends (with a short delay so endSession has time to write
+ * to the DB first).
  */
 export async function rebuildDailyFromSessions(
   userId: string,
@@ -326,8 +351,7 @@ export async function rebuildDailyFromSessions(
       .select("total_duration_ms, state_totals, avg_shs, min_shs, max_cpl")
       .eq("user_id", userId)
       .gte("started_at", startUtc.toISOString())
-      .lt("started_at",  endUtc.toISOString())
-      .eq("is_completed_session", true);
+      .lt("started_at",  endUtc.toISOString());
 
     if (error) {
       console.warn("[postureSync] rebuildDailyFromSessions query failed", error);

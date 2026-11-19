@@ -23,9 +23,10 @@
  * A manual disconnect (disconnectSlot()/disconnectAll()) never prompts.
  */
 
-import { BleManager, Device, Characteristic, BleError } from "react-native-ble-plx";
+import { BleManager, Device, Characteristic, BleError, BleRestoredState } from "react-native-ble-plx";
 import { Platform, PermissionsAndroid } from "react-native";
-import { captureError } from "../lib/sentry";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { captureError, sentryBreadcrumb } from "../lib/sentry";
 
 // ── UUIDs ─────────────────────────────────────────────────────────────────────
 const SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9a34fb";
@@ -38,6 +39,19 @@ const WRITE_UUID   = "0000ffe9-0000-1000-8000-00805f9a34fb";
 // connects top then bottom, awaited) freezes the second slot too and leaves
 // any "connecting…" UI spinner stuck forever with no way out.
 const CONNECT_TIMEOUT_MS = 15000;
+
+// iOS Core Bluetooth state restoration. With this identifier set, iOS keeps
+// the s'pot connections alive at the system level if it terminates the app
+// in the background (memory or CPU pressure), and relaunches the app in the
+// background when a s'pot next sends data. restoreStateFunction then hands
+// back the still-connected peripherals, which adoptConnected() re-subscribes
+// to. Must stay stable across releases — changing it orphans the saved state.
+const RESTORE_STATE_ID = "com.supapp.app.ble-central";
+
+// Which peripheral id was last connected in which slot, so a restored or
+// already-connected peripheral can be put back into the right slot. Written
+// on every successful connect, removed on a manual disconnect.
+const SLOT_MAP_KEY = "sup_ble_slot_map_v1";
 
 // ── BLE write commands (WT9011DCL protocol) ───────────────────────────────────
 // Unlock must be sent before any config write (valid for 10 seconds)
@@ -97,8 +111,22 @@ class BLEService {
   private onStatus?: StatusCallback;
   private onUnexpectedDisconnect?: UnexpectedDisconnectCallback;
 
+  // Peripherals iOS handed back via state restoration before the app had
+  // registered its callbacks — adopted as soon as setCallbacks() runs.
+  private pendingRestored: Device[] | null = null;
+  private restoreChecked = false;
+
   constructor() {
-    this.manager = new BleManager();
+    this.manager = new BleManager({
+      restoreStateIdentifier: RESTORE_STATE_ID,
+      restoreStateFunction: (restored: BleRestoredState | null) => {
+        const peripherals = restored?.connectedPeripherals ?? [];
+        sentryBreadcrumb("ble state restored", { count: peripherals.length });
+        if (peripherals.length === 0) return;
+        if (this.onData) this.adoptRestored(peripherals);
+        else this.pendingRestored = peripherals;
+      },
+    });
 
     // Reset internal state cleanly if Bluetooth is toggled off/on by the user
     this.manager.onStateChange((state) => {
@@ -124,6 +152,81 @@ class BLEService {
     this.onData                 = onData;
     this.onStatus               = onStatus;
     this.onUnexpectedDisconnect = onUnexpectedDisconnect;
+
+    // First time the app is ready for data: pick up s'pots that are still
+    // connected even though this JS instance never connected them — either
+    // handed back by iOS state restoration, or still held open by the OS
+    // after the previous app process was terminated.
+    if (!this.restoreChecked) {
+      this.restoreChecked = true;
+      const restored = this.pendingRestored;
+      this.pendingRestored = null;
+      if (restored) this.adoptRestored(restored);
+      else this.adoptSystemConnected();
+    }
+  }
+
+  // ── Restoration ───────────────────────────────────────────────────────────
+
+  private async readSlotMap(): Promise<Partial<Record<SensorSlot, string>>> {
+    try {
+      const raw = await AsyncStorage.getItem(SLOT_MAP_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  // Read-modify-write of one shared key — chained so a disconnect and the
+  // connect that follows it (or both slots at once) can't interleave and
+  // drop each other's update.
+  private slotMapWrites: Promise<void> = Promise.resolve();
+
+  private writeSlot(slot: SensorSlot, deviceId: string | null): Promise<void> {
+    this.slotMapWrites = this.slotMapWrites.then(async () => {
+      try {
+        const map = await this.readSlotMap();
+        if (deviceId) map[slot] = deviceId;
+        else delete map[slot];
+        await AsyncStorage.setItem(SLOT_MAP_KEY, JSON.stringify(map));
+      } catch (e) {
+        captureError(e, "ble-slot-map-save", { slot });
+      }
+    });
+    return this.slotMapWrites;
+  }
+
+  private async adoptRestored(peripherals: Device[]): Promise<void> {
+    await this.slotMapWrites;
+    const map = await this.readSlotMap();
+    for (const slot of ["top", "bottom"] as SensorSlot[]) {
+      const id = map[slot];
+      const device = id ? peripherals.find((p) => p.id === id) : undefined;
+      if (!device || this.devices[slot]) continue;
+      try {
+        // A restored peripheral may still be mid-connection — make sure it's
+        // actually connected and its services are known before subscribing.
+        const connected = (await device.isConnected())
+          ? device
+          : await device.connect({ timeout: CONNECT_TIMEOUT_MS });
+        await connected.discoverAllServicesAndCharacteristics();
+        this.adoptConnected(device, connected, slot);
+        sentryBreadcrumb("ble slot restored", { slot });
+      } catch (e) {
+        captureError(e, "ble-restore", { slot });
+      }
+    }
+  }
+
+  private async adoptSystemConnected(): Promise<void> {
+    try {
+      const state = await this.manager.state();
+      if (state !== "PoweredOn") return;
+      const connected = await this.manager.connectedDevices([SERVICE_UUID]);
+      if (connected.length > 0) await this.adoptRestored(connected);
+    } catch (e) {
+      captureError(e, "ble-adopt-connected");
+    }
   }
 
   // ── Permissions ───────────────────────────────────────────────────────────
@@ -256,43 +359,7 @@ class BLEService {
         return d;
       });
 
-      this.devices[slot] = connected;
-      // Fresh connection is live — a later drop on it is unexpected until
-      // proven otherwise, so clear both suppression flags now.
-      this.dropHandled[slot] = false;
-      this.manuallyDisconnected[slot] = false;
-      this.onStatus?.(slot, {
-        connected:  true,
-        deviceId:   connected.id,
-        deviceName: connected.name,
-      });
-
-      // Subscribe to IMU data notifications from the s'pot
-      this.subscriptions[slot] = connected.monitorCharacteristicForService(
-        SERVICE_UUID,
-        NOTIFY_UUID,
-        (error: BleError | null, characteristic: Characteristic | null) => {
-          if (error) {
-            console.warn(`[BLE] ${slot} s'pot notify error:`, error.message);
-            this.handleUnexpectedDrop(slot, device);
-            return;
-          }
-          if (characteristic?.value) {
-            // Decode base64 — use btoa/atob, NOT Buffer (not in RN JS runtime)
-            const binaryStr = atob(characteristic.value);
-            const bytes     = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-              bytes[i] = binaryStr.charCodeAt(i);
-            }
-            this.onData?.(slot, new DataView(bytes.buffer));
-          }
-        }
-      );
-
-      // Reconnect guard — see registerDisconnectHandler() below. Also
-      // re-registered after a successful reconnectDirect() so a *second*
-      // unexpected drop is caught too, not just the first.
-      this.registerDisconnectHandler(device, connected, slot);
+      this.adoptConnected(device, connected, slot);
 
     } catch (e: any) {
       console.error(`[BLE] Failed to connect ${slot} s'pot:`, e.message);
@@ -324,6 +391,8 @@ class BLEService {
     if (device) {
       try { await device.cancelConnection(); } catch {}
       this.devices[slot] = null;
+      // Deliberately disconnected — don't restore it into this slot later.
+      void this.writeSlot(slot, null);
     }
 
     this.onStatus?.(slot, {
@@ -536,16 +605,32 @@ class BLEService {
   private async reconnectDirect(device: Device, slot: SensorSlot): Promise<void> {
     const connected = await device.connect({ timeout: CONNECT_TIMEOUT_MS });
     await connected.discoverAllServicesAndCharacteristics();
+    this.adoptConnected(device, connected, slot);
+  }
 
+  /**
+   * Shared tail of every path that ends with a live, discovered connection
+   * in a slot: a fresh connect, a reconnect, and a peripheral handed back by
+   * iOS state restoration. Marks the slot connected, subscribes to the IMU
+   * notify characteristic and arms the disconnect listener.
+   *
+   * `device` is the original handle threaded through retries (used to start
+   * another reconnect attempt); `connected` is the live post-.connect() Device.
+   */
+  private adoptConnected(device: Device, connected: Device, slot: SensorSlot): void {
     this.devices[slot] = connected;
+    // Fresh connection is live — a later drop on it is unexpected until
+    // proven otherwise, so clear both suppression flags now.
     this.dropHandled[slot] = false;
     this.manuallyDisconnected[slot] = false;
+    void this.writeSlot(slot, connected.id);
     this.onStatus?.(slot, {
       connected:  true,
       deviceId:   connected.id,
       deviceName: connected.name,
     });
 
+    this.subscriptions[slot]?.remove();
     this.subscriptions[slot] = connected.monitorCharacteristicForService(
       SERVICE_UUID,
       NOTIFY_UUID,
@@ -556,6 +641,7 @@ class BLEService {
           return;
         }
         if (characteristic?.value) {
+          // Decode base64 — use btoa/atob, NOT Buffer (not in RN JS runtime)
           const binaryStr = atob(characteristic.value);
           const bytes     = new Uint8Array(binaryStr.length);
           for (let i = 0; i < binaryStr.length; i++) {
@@ -566,8 +652,8 @@ class BLEService {
       }
     );
 
-    // Re-arm the disconnect listener for this newly-reconnected device — see
-    // registerDisconnectHandler()'s doc comment for why this matters.
+    // Re-armed on every (re)connect so a *second* unexpected drop is caught
+    // too — see registerDisconnectHandler()'s doc comment.
     this.registerDisconnectHandler(device, connected, slot);
   }
 

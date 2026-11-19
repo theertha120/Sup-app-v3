@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/constants/env";
 import { supabase } from "@/src/lib/supabase";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { checkEmailRegistered as checkEmail, type EmailCheckResult } from "@/src/lib/checkEmail";
 import { captureError, captureFunctionError } from "@/src/lib/sentry";
 import { autoDetectAndSaveTimezone } from "@/src/services/user/timezoneService";
@@ -92,10 +93,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
     async function checkAuth() {
       try {
+        // Show the saved login straight away. getSession() only reads it from
+        // the phone, so it's instant — waiting on getUser()'s network round
+        // trip first is what flashed the logged-out screen for a second on
+        // every cold start (e.g. after iOS ended the app in the background).
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (session?.user) {
+          setIsAuthenticated(true);
+          setUserId(session.user.id);
+        }
+
+        // Then confirm it with Supabase. A login that's no longer valid
+        // (deleted account) is signed out by app/index.tsx, which clears this
+        // through onAuthStateChange below.
         const {
           data: { user },
+          error,
         } = await supabase.auth.getUser();
         if (!mounted) return;
+        // Offline: keep the saved login rather than showing a logged-out app.
+        if (!user && error && session?.user && isAuthRetryableFetchError(error)) return;
         setIsAuthenticated(!!user);
         setUserId(user?.id ?? null);
         if (user) await runStreakCheck(user.id);

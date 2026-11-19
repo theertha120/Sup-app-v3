@@ -150,6 +150,7 @@ test('resetting calibration clears it from state and storage', async () => {
 
 test('answering the s\'train pop-up: "moved" halves s\'train, "not now" costs 5 SHS', async () => {
   const s = setupImu();
+  await flush(); // packets are ignored until saved calibration / session state has loaded
   s.connected('top'); s.connected('bottom');
   s.stream(210 * SEC, 60);                // severe until the intervention fires
   assert.equal(s.ctx().activeIntervention?.state, 'severe');

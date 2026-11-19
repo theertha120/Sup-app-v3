@@ -15,6 +15,7 @@ import OfflineGate from "@/src/components/ui/OfflineGate";
 import PostureCheckinScheduler from "@/src/components/posture/PostureCheckinScheduler";
 import ExerciseLogPrefetch from "@/src/features/exercise/ExerciseLogPrefetch";
 import XpSync from "@/src/features/xp/XpSync";
+import SessionLiveNotification from "@/src/components/desk/SessionLiveNotification";
 
 // Must run at module load so native + JS crash handlers are installed before render.
 initSentry();
@@ -61,6 +62,8 @@ function RootLayout() {
         {/* IMUProvider wraps everything so sensor state persists across screens */}
         <IMUProvider>
         <SessionStatsProvider>
+          {/* Android: pinned "s'ession in progress" notification with live posture while a session runs */}
+          <SessionLiveNotification />
           {/* Offline popup over every screen; remounts the Stack on reconnect */}
           <OfflineGate>
           <Stack

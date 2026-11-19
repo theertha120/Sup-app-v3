@@ -10,6 +10,10 @@ import {
 const ENV = { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: 'anon-key' };
 
 /** Supabase auth stand-in: every call is recorded; results come from `results`. */
+// Same check as supabase-js: a network failure reaching Supabase, not a bad login.
+// Used by AuthContext / app/index.tsx to keep the saved login offline (v2 background-service work).
+const SUPABASE_JS = { isAuthRetryableFetchError: (e) => !!e && e.name === 'AuthRetryableFetchError' };
+
 function fakeAuth(results = {}) {
   const calls = [];
   let listener = null;
@@ -58,6 +62,7 @@ function authProvider({ results = {}, fetch } = {}) {
       '@react-native-async-storage/async-storage': storage,
       '@/constants/env': ENV,
       '@/src/lib/supabase': db.module,
+      '@supabase/supabase-js': SUPABASE_JS,
       '@/src/lib/sentry': sentry.module,
       '@/src/services/user/timezoneService': { autoDetectAndSaveTimezone: (uid) => timezoneSaves.push(uid) },
       '@/src/services/posture/postureSyncService': { checkStreakOnAppOpen: async (uid) => { streakChecks.push(uid); } },
@@ -296,7 +301,7 @@ async function startupDestination({ getUser, profile }) {
   const sentry = fakeSentry();
   const { react, mount } = miniReact();
   const { default: Index } = loadTs('app/index.tsx', {
-    mocks: { react, 'expo-router': { Redirect: 'Redirect' }, '../src/lib/supabase': db.module, '../src/lib/sentry': sentry.module },
+    mocks: { react, 'expo-router': { Redirect: 'Redirect' }, '../src/lib/supabase': db.module, '@supabase/supabase-js': SUPABASE_JS, '../src/lib/sentry': sentry.module },
     globals: { console: quietConsole },
   });
   const screen = mount(() => Index());
