@@ -22,7 +22,9 @@ import {
   updateCurrentUserProfile,
   isUsernameTaken,
 } from "../../../src/services/user/profileService";
-import { fetchWeeklySupScore } from "../../../src/services/social/leaderboardPeriodService";
+// [s'up s'core — RETIRED] import { fetchWeeklySupScore } from "../../../src/services/social/leaderboardPeriodService";
+import { fetchLevelProgress, subscribeToXpChanges } from "../../../src/services/xp/xpService";
+import { formatLevel, levelFor } from "../../../src/services/xp/xpRules";
 import { useToast } from "../../../src/contexts/ToastContext";
 import { useTutorial } from "../../../src/contexts/TutorialContext";
 import { colours } from "../../../theme/colours";
@@ -45,7 +47,7 @@ const HEADER_TIPS: Record<HeaderTipStep, {
   next: HeaderTipStep | null; // null = last tip, ends the tutorial
 }> = {
   "add-friends-tip": {
-    text: "tap your profile to add friends, see your average weekly points, edit your username or log out.",
+    text: "tap your profile to add friends, see your XP level, edit your username or log out.",
     slot: 0,
     next: "header-settings-tip",
   },
@@ -111,7 +113,8 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     : null;
 
   const [streakDays, setStreakDays] = useState(0);
-  const [weeklyPoints, setWeeklyPoints] = useState(0);
+  // Profile dropdown shows the XP level ("Level 3 - 21/500") instead of the retired weekly s'core.
+  const [levelText, setLevelText] = useState(formatLevel(levelFor(0)));
   const [username, setUsername] = useState("you");
  
   // Profile dropdown
@@ -142,10 +145,16 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
         console.error("[HeaderBar] Failed to load profile", err);
       });
     if (!userId) return;
-    fetchWeeklySupScore(userId)
-      .then(setWeeklyPoints)
+    // [s'up s'core — RETIRED]
+    // fetchWeeklySupScore(userId)
+    //   .then(setWeeklyPoints)
+    //   .catch((err: any) => {
+    //     console.error("[HeaderBar] Failed to load weekly points", err);
+    //   });
+    fetchLevelProgress(userId)
+      .then((progress) => setLevelText(formatLevel(progress)))
       .catch((err: any) => {
-        console.error("[HeaderBar] Failed to load weekly points", err);
+        console.error("[HeaderBar] Failed to load XP level", err);
       });
   };
  
@@ -154,7 +163,7 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     if (!isAuthenticated) {
       setUsername("you");
       setStreakDays(0);
-      setWeeklyPoints(0);
+      setLevelText(formatLevel(levelFor(0)));
       return;
     }
     loadProfile();
@@ -169,7 +178,18 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
     });
     return unsubscribe;
   }, [userId]);
- 
+
+  // Keep the XP level current when XP changes (session, check-in, workout, sign-in backfill).
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToXpChanges((changedUserId) => {
+      if (changedUserId !== userId) return;
+      fetchLevelProgress(userId)
+        .then((progress) => setLevelText(formatLevel(progress)))
+        .catch((err: any) => console.error("[HeaderBar] Failed to refresh XP level", err));
+    });
+  }, [userId]);
+
   const streakActive = streakDays > 1;
   const streakColor = streakActive ? STREAK_COLOUR : PRIMARY_TEXT;
  
@@ -375,10 +395,10 @@ export default function HeaderBar({ logoSize = 50 }: HeaderBarProps) {
  
                 <View style={styles.divider} />
  
-                {/* Weekly points */}
+                {/* XP level (replaced the retired average weekly points) */}
                 <View style={styles.dropdownRow}>
-                  <Text style={styles.dropdownLabel}>average weekly points</Text>
-                  <Text style={styles.dropdownPoints}>{weeklyPoints}</Text>
+                  <Text style={styles.dropdownLabel}>xp</Text>
+                  <Text style={styles.dropdownPoints}>{levelText}</Text>
                 </View>
  
                 <View style={styles.divider} />

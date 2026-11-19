@@ -14,6 +14,7 @@ import { PostureHistoryProvider } from "@/src/contexts/PostureHistoryContext";
 import OfflineGate from "@/src/components/ui/OfflineGate";
 import PostureCheckinScheduler from "@/src/components/posture/PostureCheckinScheduler";
 import ExerciseLogPrefetch from "@/src/features/exercise/ExerciseLogPrefetch";
+import XpSync from "@/src/features/xp/XpSync";
 
 // Must run at module load so native + JS crash handlers are installed before render.
 initSentry();
@@ -48,6 +49,8 @@ function RootLayout() {
       <PostureCheckinScheduler />
       {/* Loads the Exercise page's workouts and check-ins at login so it opens instantly */}
       <ExerciseLogPrefetch />
+      {/* Backfills / repairs XP (posture_daily.xp, profiles.xp_total) once per sign-in */}
+      <XpSync />
       <OnboardingProvider>
       <TutorialProvider>
       <ToastProvider>

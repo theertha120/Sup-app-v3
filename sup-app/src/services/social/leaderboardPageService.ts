@@ -7,7 +7,7 @@ import type { LeaderboardSource } from "./leaderboardStore";
 import type { LeaderboardPage } from "./leaderboardData";
 
 type Profile = { id: string; name: string; username: string | null; avatar_url: string | null };
-type Daily = { user_id: string; date: string; state_totals: PosturePageRow["stateTotals"] };
+type Daily = { user_id: string; date: string; state_totals: PosturePageRow["stateTotals"]; xp: number | null };
 type Friend = { from_user_id: string | null; to_user_id: string | null };
 type Ranked = Profile & { score: number; rank: number; days_counted: number };
 type Result<T> = { data: T[] | null; error: unknown };
@@ -25,7 +25,7 @@ export async function readLeaderboardPages<T>(fetch: (offset: number, size: numb
 }
 const userFrom = (row: Profile): User => ({ id: row.id, name: row.name, username: row.username ?? undefined, avatar: row.avatar_url ?? undefined,
   currentStreak: 0, weeklyAvgPoints: 0, lastActivityDate: "" });
-const entryFrom = (row: Ranked) => ({ user: userFrom(row), avgSupScore: Number(row.score), rank: Number(row.rank), sessionsCounted: Number(row.days_counted) });
+const entryFrom = (row: Ranked) => ({ user: userFrom(row), xp: Number(row.score), rank: Number(row.rank), sessionsCounted: Number(row.days_counted) });
 
 /** Server ranking and compatibility reads both preserve main's time-weighted score. */
 export function createLeaderboardSource(userId: string): LeaderboardSource {
@@ -55,7 +55,7 @@ export function createLeaderboardSource(userId: string): LeaderboardSource {
     if (!snapshot || snapshot.signal.aborted || force && !snapshot.pending) {
       const request = Promise.all([
         readLeaderboardPages<Profile>((offset, size) => cancel(supabase.from("profiles").select("id, name, username, avatar_url").order("id").range(offset, offset + size - 1)), signal),
-        readLeaderboardPages<Daily>((offset, size) => cancel(supabase.from("posture_daily").select("user_id, date, state_totals")
+        readLeaderboardPages<Daily>((offset, size) => cancel(supabase.from("posture_daily").select("user_id, date, state_totals, xp")
           .gte("date", start).lte("date", query.dateKey).order("user_id").order("date").range(offset, offset + size - 1)), signal),
         readLeaderboardPages<Friend>((offset, size) => cancel(supabase.from("friend_requests").select("from_user_id, to_user_id")
           .eq("status", "accepted").or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`).order("id").range(offset, offset + size - 1)), signal),
@@ -75,7 +75,7 @@ export function createLeaderboardSource(userId: string): LeaderboardSource {
       for (const row of daily) {
         const list = rows.get(row.user_id) ?? [];
         list.push({ date: row.date, stateTotals: row.state_totals, avgScore: null, goodPostureMinutes: null, badPostureMinutes: null,
-          totalMinutes: null, totalDeskMs: null, sessionCount: null, interventionCount: null, avgShs: null, minShs: null, maxCpl: null, supScore: null });
+          totalMinutes: null, totalDeskMs: null, sessionCount: null, interventionCount: null, avgShs: null, minShs: null, maxCpl: null, supScore: null, xp: Number(row.xp) || 0 });
         rows.set(row.user_id, list);
       }
       const entries = rankLeaderboard(roster, rows, query.period, new Date(`${query.dateKey}T12:00:00`));

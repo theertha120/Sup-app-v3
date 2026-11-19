@@ -22,7 +22,8 @@ interface StateTotals {
 interface PostureRow {
   date: string;
   state_totals: StateTotals;
-  sup_score: number;
+  // [s'up s'core — RETIRED] sup_score: number;
+  xp: number; // XP earned that day (docs/xp.md)
   total_desk_ms: number;
 }
 
@@ -96,7 +97,7 @@ function buildPrompt(rows: PostureRow[], today: string): string {
         .map((k) => `${STATE_LABEL[k]} ${mins(t[k])} min (${pct(t[k] ?? 0, total)}%)`)
         .join(", ");
       const weekday = new Date(`${r.date}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
-      return `- ${weekday} ${r.date}: tracked ${mins(total)} min, s'up s'core ${r.sup_score ?? 0}. ${parts || "no posture breakdown"}`;
+      return `- ${weekday} ${r.date}: tracked ${mins(total)} min, ${r.xp ?? 0} XP. ${parts || "no posture breakdown"}`;
     })
     .join("\n");
 
@@ -121,16 +122,21 @@ function buildPrompt(rows: PostureRow[], today: string): string {
     .sort((a, b) => b.cost - a.cost)[0];
 
   // Trend: good-alignment share on the earliest vs most recent tracked day
+  // Only days with tracked session time say anything about posture; days with
+  // just a check-in or workout now also have a row (with XP) but 0 minutes.
+  const tracked = days.filter((r) => (r.total_desk_ms ?? 0) > 0);
   const uprightShare = (r: PostureRow) => pct(r.state_totals?.upright ?? 0, r.total_desk_ms ?? 0);
-  const first = days[0];
-  const last = days[days.length - 1];
-  const trendLine = days.length >= 2
-    ? `good alignment went from ${uprightShare(first)}% on ${first.date} to ${uprightShare(last)}% on ${last.date}; s'up s'core went from ${first.sup_score ?? 0} to ${last.sup_score ?? 0}`
+  const first = tracked[0];
+  const last = tracked[tracked.length - 1];
+  // [s'up s'core — RETIRED] trend used to end with "; s'up s'core went from ${first.sup_score} to ${last.sup_score}"
+  const trendLine = tracked.length >= 2
+    ? `good alignment went from ${uprightShare(first)}% on ${first.date} to ${uprightShare(last)}% on ${last.date}; XP went from ${first.xp ?? 0} to ${last.xp ?? 0}`
     : "only one tracked day, no trend yet";
 
-  const byScore = [...days].sort((a, b) => (b.sup_score ?? 0) - (a.sup_score ?? 0));
+  // [s'up s'core — RETIRED] best/weakest day used to be by sup_score.
+  const byXp = [...days].sort((a, b) => (b.xp ?? 0) - (a.xp ?? 0));
   const bestWorst = days.length >= 2
-    ? `best day ${byScore[0].date} (s'core ${byScore[0].sup_score ?? 0}), weakest day ${byScore[byScore.length - 1].date} (s'core ${byScore[byScore.length - 1].sup_score ?? 0})`
+    ? `most XP ${byXp[0].date} (${byXp[0].xp ?? 0} XP), least XP ${byXp[byXp.length - 1].date} (${byXp[byXp.length - 1].xp ?? 0} XP)`
     : "n/a";
 
   return `
@@ -140,15 +146,15 @@ How s'up reads posture (two s'pots: between the shoulder blades and on the lower
 - good alignment: spine neutral, the goal state.
 - forward lean: back straight but hinged toward the screen. fix: move the screen or keyboard closer, or sit back against the chair.
 - slouched: upper back rounding. fix: sit tall, imagine a thread pulling the crown of the head up, set a check-in every 20 minutes.
-- severe slouch: deep rounding, the worst state for the s'core. fix: change position as soon as it happens, raise the screen to eye level.
+- severe slouch: deep rounding, the worst posture state. fix: change position as soon as it happens, raise the screen to eye level.
 - tilting left / right: weight on one side, often from an armrest, a mouse reach or crossed legs. fix: sit evenly on both sit bones, bring the mouse closer, uncross legs.
-- the s'up s'core (0 to 100) is based on how each day's tracked time is split across these posture states: more time in good alignment raises it, more time slouched, severe or tilted lowers it. so a change in s'core reflects a change in posture mix, and the percentages below are what drive it.
+- XP rewards showing up, not posture quality: each day earns 5 XP per full 10 minutes tracked (up to 150), 10 XP for logging a posture check-in and 10 XP for logging exercise. posture quality is shown by the percentages below, not by XP.
 
-Last 7 days (oldest first, days with no tracking are missing):
+Last 7 days (oldest first, days with no activity are missing):
 ${dayLines}
 
 Week at a glance:
-- days tracked: ${days.length} of 7
+- days tracked: ${tracked.length} of 7
 - total tracked: ${mins(weekMs)} min
 - share of tracked time: ${weekBreakdown || "no breakdown"}
 - habit costing the most: ${drag ? STATE_LABEL[drag.k] : "none"}
@@ -283,7 +289,7 @@ async function processUser(
 
   const { data: rows, error } = await supabase
     .from("posture_daily")
-    .select("date, state_totals, sup_score, total_desk_ms")
+    .select("date, state_totals, xp, total_desk_ms") // [s'up s'core — RETIRED] was: sup_score
     .eq("user_id", userId)
     .in("date", dates)
     .order("date", { ascending: false });

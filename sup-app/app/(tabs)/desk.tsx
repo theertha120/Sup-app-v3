@@ -28,7 +28,9 @@ import { useTutorial } from "../../src/contexts/TutorialContext";
 import { InfoButton, InfoModal, InfoModalEntry } from "../../src/components/ui/InfoModal";
 import { SKIPPER_DISCLAIMER } from "../../src/services/ai/aiProvider";
 import { sUpdatesService } from "../../src/services/posture/s_updatesService";
-import { computeSupScore, fetchPreviousSession } from "../../src/services/posture/postureSyncService";
+// [s'up s'core — RETIRED] import { computeSupScore, fetchPreviousSession } from "../../src/services/posture/postureSyncService";
+import { fetchPreviousSession } from "../../src/services/posture/postureSyncService";
+import { sessionXp } from "../../src/services/xp/xpRules";
 import {
   compareSessions, computeSessionHighlights, PostureSegment, SessionComparisonMetric, SessionHighlight,
 } from "../../src/lib/sessionHighlights";
@@ -126,8 +128,9 @@ const SUMMARY_INFO: Record<string, InfoModalEntry> = {
     title: "session end summary",
     body:
       "a recap of the session you just ended. it stays here until you start a new s'ession.\n\n" +
-      "• s'core: this session's score out of 100. it starts " +
-      "at 50, so short sessions stay close to 50.\n\n" +
+      "• xp earned: 5 xp for every full 10 minutes of this session (sessions can earn " +
+      "up to 150 xp a day).\n\n" +
+      // [s'up s'core — RETIRED] was: "• s'core: this session's score out of 100. it starts at 50, so short sessions stay close to 50."
       "• replay: your posture second by second. tap play, change the speed, or drag the bar " +
       "to jump to any moment.\n\n" +
       "• s'kipper's message: written based on this session's data. a " +
@@ -548,7 +551,9 @@ export default function DeskScreen() {
     const replay = {
       startMs: startedAt ?? timeline[0]?.startMs ?? endedAt,
       endMs: endedAt,
-      score: computeSupScore(sessionStats),
+      // XP this session earned (5 per full 10 min tracked, docs/xp.md).
+      // [s'up s'core — RETIRED] score: computeSupScore(sessionStats),
+      score: sessionXp({ sit: Object.values(sessionStats).reduce((sum, ms) => sum + (ms ?? 0), 0) }),
       timeline,
     };
     setSummaryReplay(replay);

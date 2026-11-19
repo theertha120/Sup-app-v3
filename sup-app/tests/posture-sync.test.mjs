@@ -67,7 +67,7 @@ test('snapshotSession saves progress but never marks the session completed', asy
 
 // ── daily rebuild ───────────────────────────────────────────────────────────
 
-test('rebuildDailyFromSessions sums completed sessions for the local day and writes the score', async () => {
+test('rebuildDailyFromSessions sums completed sessions for the local day (and no longer writes the retired s’core)', async () => {
   const sessions = [
     { total_duration_ms: 10 * MIN, state_totals: { upright: 10 * MIN }, avg_shs: 90, min_shs: 80, max_cpl: 50 },
     { total_duration_ms: 30 * MIN, state_totals: { upright: 20 * MIN, slouched: 10 * MIN }, avg_shs: 70, min_shs: 60, max_cpl: 200 },
@@ -100,9 +100,9 @@ test('rebuildDailyFromSessions sums completed sessions for the local day and wri
   assert.equal(row.good_posture_minutes, 30);
   assert.equal(row.bad_posture_minutes, 10);
 
-  const score = opArg(writesTo(db, 'posture_daily', 'update')[0], 'update');
-  // (100×30 + 25×10 + 50×10) / 50 = 75
-  assert.equal(score.sup_score, 75);
+  // [s'up s'core — RETIRED] It used to write sup_score = 75 here; XP is now saved by syncDayXp after the rebuild.
+  assert.equal(writesTo(db, 'posture_daily', 'update').length, 0, 'no sup_score write');
+  assert.equal('sup_score' in row, false);
 });
 
 test('rebuildDailyFromSessions writes nothing when the day has no completed sessions', async () => {
@@ -168,4 +168,16 @@ test('streak days use the local calendar day, not UTC, across month and year end
     { current_streak: 3, last_activity_date: '2027-01-01' });
   assert.deepEqual(await streakAfterOpen({ current_streak: 2, last_activity_date: '2028-02-28' }, new Date(2028, 1, 29, 23, 55).getTime()),
     { current_streak: 3, last_activity_date: '2028-02-29' });
+});
+
+// ── XP (docs/xp.md) ─────────────────────────────────────────────────────────
+
+test('posture_daily reads include each day’s XP (0 when missing), which every screen now shows as the score', async () => {
+  const { sync, db } = setup(() => ({ data: [
+    { date: '2026-11-17', total_desk_ms: 20 * MIN, sup_score: 70, xp: 25 },
+    { date: '2026-11-18', total_desk_ms: 0, sup_score: null, xp: null },
+  ], error: null }));
+  const rows = await sync.fetchAllPostureRows('user-1');
+  assert.deepEqual(rows.map((r) => [r.date, r.xp]), [['2026-11-17', 25], ['2026-11-18', 0]]);
+  assert.match(opArg(db.queries[0], 'select'), /\bxp\b/);
 });

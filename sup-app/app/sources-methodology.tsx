@@ -186,6 +186,37 @@ export default function SourcesMethodologyScreen() {
           </Text>
         </Section>
 
+        {/* XP replaced the s'up s'core (docs/xp.md). */}
+        <Section title="how xp and levels work">
+          <Text style={styles.body}>
+            xp rewards building the habit: the more you track and check in, the more you earn. it
+            adds up over every day and never goes down. each day you earn:
+          </Text>
+          <View style={styles.table}>
+            {[
+              ["s'pot sessions (s'it)", "5 per full 10 min, up to 150"],
+              ["posture check-in (at least one)", "10"],
+              ["exercise log (at least one)", "10"],
+            ].map(([label, xp]) => (
+              <View key={label} style={styles.tableRow}>
+                <Text style={styles.tableLabel}>{label}</Text>
+                <Text style={styles.tableValue}>{xp}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.body}>
+            your total xp sets your level. each level needs more xp than the last: 100 for level
+            1, then 200, 300, 500, 800 and so on (each step is the two before it added together).
+            so level 2 starts at 300 xp in total, level 3 at 600 and level 4 at 1,100. your profile
+            shows your level and how far you are into the next one, e.g. "level 3 - 21/500".
+          </Text>
+          <Text style={styles.body}>
+            xp measures effort, not posture quality — your posture is shown by your posture
+            breakdown and s'napshot. the leaderboard ranks by the xp earned in the period you pick.
+          </Text>
+        </Section>
+
+        {/* [s'up s'core — RETIRED] The s'core formula section, kept for reference / rollback:
         <Section title="the complete s'up s'core formula">
           <Text style={styles.body}>
             your daily s'up s'core (0–100) reflects how good your posture was across all the time
@@ -223,12 +254,13 @@ export default function SourcesMethodologyScreen() {
             same formula across all the time tracked in that period, so longer days count for more.
           </Text>
         </Section>
+        */}
 
         <Section title="s'up's calculations vs. external research">
           <Text style={styles.body}>
             to be clear about what's ours and what's cited evidence: the specific angle
             thresholds, point values, and formulas above (posture classification bands, the
-            s'core formula and its per-state credit values) are s'up's own product design choices,
+            xp values and level steps) are s'up's own product design choices,
             tuned by reasoning rather than a clinical study of this exact app. the underlying
             <Text style={{ fontWeight: "700" }}> design principle </Text>
             — that sustained poor posture accumulates strain that recovers more slowly than it
@@ -241,7 +273,7 @@ export default function SourcesMethodologyScreen() {
           <Text style={styles.body}>
             s'up is a general wellness and posture-awareness tool. it is not a medical device and
             is not intended to diagnose, treat, cure, or prevent any disease or medical condition.
-            the information in this app, including s'train and your s'up s'core, does not
+            the information in this app, including s'train and your xp, does not
             constitute medical advice. if you have pain, an existing spinal condition, or any
             health concern, please consult a qualified healthcare professional.
           </Text>

@@ -6,7 +6,7 @@ import { fakeAsyncStorage, fakeClock, imuPacket, loadTs, miniReact, quietConsole
 export function setupImu({ userId = 'user-1', storage = fakeAsyncStorage() } = {}) {
   const clock = fakeClock(new Date(2026, 10, 13, 9, 0).getTime());
   const { react, mount } = miniReact();
-  const calls = { start: [], end: [], snapshot: [], rebuild: [], alerts: [], dismissed: [], cancelReconnect: [], confirmReconnect: [] };
+  const calls = { start: [], end: [], snapshot: [], rebuild: [], xp: [], alerts: [], dismissed: [], cancelReconnect: [], confirmReconnect: [] };
   let sessionSeq = 0;
   const ble = { callbacks: null };
   const bleService = {
@@ -35,6 +35,7 @@ export function setupImu({ userId = 'user-1', storage = fakeAsyncStorage() } = {
       '../services/BLEService': { bleService },
       './AuthContext': { useAuth: () => ({ userId }) },
       '../services/posture/postureSyncService': postureSync,
+      '../services/xp/xpService': { syncDayXp: async (uid, dateKey) => { calls.xp.push([uid, dateKey]); return null; } },
       '../lib/sentry': { sentryBreadcrumb() {} },
       '../services/reminder/pushNotificationService': {
         sendBackgroundAlert: async (kind, title, body) => { calls.alerts.push({ kind, title, body }); },

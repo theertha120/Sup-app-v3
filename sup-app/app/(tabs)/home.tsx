@@ -41,7 +41,7 @@ const SKIPPER_INFO: Record<string, InfoModalEntry> = {
     title: "about your daily insight",
     body:
       "s'kipper writes this insight only once a day, at 8 am (singapore time).\n\n" +
-      "what goes in: your last 7 days of s'pot data, including your posture session data, plus your daily s'up s'core " +
+      "what goes in: your last 7 days of s'pot data, including your posture session data, plus your daily xp " +
       "and total tracked time. if you haven't tracked in the past 7 days, no new insight is made.\n\n" +
       "what it's for: to spot trends across your week and give you a personalised focus for today. ",
   },

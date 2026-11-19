@@ -1,5 +1,5 @@
 // Daily tab ("today:"): today's posture snapshot (share of time per state),
-// session time and s'up s'core, with % change badges against yesterday.
+// session time and today's XP (replaced the s'up s'core), with % change badges against yesterday.
 // Data is today's + yesterday's posture_daily row, refetched on every focus.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
@@ -243,11 +243,14 @@ export default function DailyScreen() {
 
   // Current day
   const totalDeskMs = today?.totalDeskMs ?? 0;
-  const supScore = today?.supScore ?? 0;
+  // The day's score is now the XP earned that day, added up through the day (docs/xp.md).
+  // [s'up s'core — RETIRED] const supScore = today?.supScore ?? 0;
+  const supScore = today?.xp ?? 0;
   const stateTotals = today?.stateTotals ?? {};
 
   // Previous day
-  const prevSupScore = previous?.supScore ?? 0;
+  // [s'up s'core — RETIRED] const prevSupScore = previous?.supScore ?? 0;
+  const prevSupScore = previous?.xp ?? 0;
   const prevTotalDeskMs = previous?.totalDeskMs ?? 0;
 
 
@@ -301,12 +304,16 @@ export default function DailyScreen() {
     },
     session: {
       title: "s'ession",
-      body: "total time tracked in active posture sessions today. the more you track, the more your s'core reflects your real posture.",
+      body: "total time tracked in active posture sessions today. every full 10 minutes you track earns 5 xp, up to 150 xp a day.",
     },
     score: {
-      title: "s'core",
+      title: "xp",
       body:
-        "your daily posture score out of 100, based on how good your posture was across all the time you tracked today.\n\n• every tracked minute earns credit: upright 100, transition 75, forward lean or tilted 50, slouched 25, severe 0.\n• your s'core starts at 50 each day and moves towards your real posture as you track — after 10 minutes your posture counts for half, after an hour it's almost all you.",
+        "the xp you've earned today. it adds up through the day and never goes down.\n\n• tracking: 5 xp for every full 10 minutes of s'pot sessions, up to 150 a day.\n• posture check-in: 10 xp for logging at least one today.\n• exercise: 10 xp for logging at least one workout today.\n\nyour xp adds up over every day to raise your level — see it in your profile.",
+        // [s'up s'core — RETIRED] was: "your daily posture score out of 100, based on how good your posture was across all
+        // the time you tracked today. • every tracked minute earns credit: upright 100, transition 75, forward lean or
+        // tilted 50, slouched 25, severe 0. • your s'core starts at 50 each day and moves towards your real posture as you
+        // track — after 10 minutes your posture counts for half, after an hour it's almost all you."
     },
   };
 
@@ -383,7 +390,7 @@ export default function DailyScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                here's your total session time and s'up score for today's s'pot sessions.
+                here's your total session time and the xp you've earned today.
               </Text>
               <TutorialActions>
                 <PressFeedback feedback="link" onPress={() => setTutorialStep("go-settings-tip")}>
@@ -414,7 +421,7 @@ export default function DailyScreen() {
             </Text>
           </View>
 
-          {/* S'core */}
+          {/* XP earned today */}
           <View
             style={[
               styles.card,
@@ -426,8 +433,8 @@ export default function DailyScreen() {
           >
             <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
             {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
-            <Text style={styles.statLabel}>s'core</Text>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
+            <Text style={styles.statLabel}>xp</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} xp</Text>
           </View>
         </View>
 

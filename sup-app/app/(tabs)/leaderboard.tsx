@@ -104,7 +104,7 @@ export default function LeaderboardScreen() {
             />
             <View style={styles.tutorialTipTextWrap}>
               <Text style={styles.tutorialTipText}>
-                see how your daily score stacks up against the community!
+                see how your xp stacks up against the community!
               </Text>
               <TutorialActions>
                 <PressFeedback feedback="link" onPress={() => setTutorialStep("add-friends-tip")}>

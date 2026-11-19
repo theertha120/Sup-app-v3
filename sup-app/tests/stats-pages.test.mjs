@@ -19,8 +19,8 @@ function pagesFor(history, range, today = new Date(2026, 10, 13, 15, 0)) {
   return buildPages(history, range);
 }
 
-const row = (date, uprightMin, slouchMin = 0) => ({
-  date, totalDeskMs: (uprightMin + slouchMin) * MIN, totalMinutes: uprightMin + slouchMin, supScore: 70,
+const row = (date, uprightMin, slouchMin = 0, xp = 0) => ({
+  date, totalDeskMs: (uprightMin + slouchMin) * MIN, totalMinutes: uprightMin + slouchMin, supScore: 70, xp,
   stateTotals: { upright: uprightMin * MIN, slouched: slouchMin * MIN },
 });
 
@@ -73,11 +73,19 @@ test('each day lands in exactly one month bucket and every array lines up', () =
   assert.equal(page.endDate, '30 nov');
 });
 
-test('month page score is the time-weighted period score, not an average of bars', () => {
-  const history = [row('2026-11-02', 60), row('2026-11-30', 0, 60)];
+// XP replaced the s'up s'core: a period's score is the XP added up (docs/xp.md).
+// [RETIRED] was: the time-weighted period s'core, (100×60 + 25×60 + 50×10) / 130 = 61.5.
+test('month page score is the XP earned that month, added up; each week bar is that week’s XP', () => {
+  const history = [row('2026-11-02', 60, 0, 40), row('2026-11-03', 10, 0, 15), row('2026-11-30', 0, 60, 30)];
   const page = monthPage(2026, 10, history);
-  // (100×60 + 25×60 + 50×10) / 130 = 61.5
-  assert.equal(page.periodScore, Math.round((100 * 60 + 25 * 60 + 50 * 10) / 130));
+  assert.equal(page.periodScore, 85);
+  assert.deepEqual(page.scores, [55, 0, 0, 0, 30]);
+});
+
+test('week bars show each day’s XP, not the retired s’core', () => {
+  const [page] = pagesFor([row('2026-11-12', 10, 0, 5), row('2026-11-13', 20, 0, 20)], 'week');
+  assert.deepEqual(page.scores.slice(-2), [5, 20]);
+  assert.equal(page.periodScore, 25);
 });
 
 // ── year ────────────────────────────────────────────────────────────────────

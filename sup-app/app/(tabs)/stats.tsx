@@ -1,4 +1,4 @@
-// Stats tab: s'core trend, s'ession time and posture breakdown over a week,
+// Stats tab: xp trend (replaced the s'up s'core), s'ession time and posture breakdown over a week,
 // month or year. All pages are built in memory from PostureHistoryContext's
 // full history (no per-page queries); each card swipes back through older pages.
 import PressFeedback from "@/src/components/ui/PressFeedback";
@@ -25,7 +25,7 @@ import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import RefreshButton from "@/src/components/ui/RefreshButton";
 import {
-  supScoreForRows,
+  // [s'up s'core — RETIRED] supScoreForRows,
   type PosturePageRow,
   type StateTotals,
 } from "../../src/services/posture/postureSyncService";
@@ -69,12 +69,15 @@ const SEGMENT_LABELS: Record<string, string> = {
 // the card shows, not the data itself.
 const STATS_METRIC_INFO: Record<string, InfoModalEntry> = {
   trend: {
-    title: "s'core trend",
-    body: "your daily s'up s'core over time, for the period you've selected. each bar is one day's (or the whole week's, or month's) score out of 100, weighted by how long you tracked; tap a bar to see that period's exact score.",
+    title: "xp trend",
+    body: "the xp you earned over time, for the period you've selected. each bar is one day's (or week's, or month's) xp added up; tap a bar to see the exact amount.\n\nyou earn 5 xp for every full 10 minutes tracked (up to 150 a day), 10 xp for a posture check-in and 10 xp for logging exercise.",
+    // [s'up s'core — RETIRED] was title "s'core trend", body: "your daily s'up s'core over time, for the period you've
+    // selected. each bar is one day's (or the whole week's, or month's) score out of 100, weighted by how long you
+    // tracked; tap a bar to see that period's exact score."
   },
   session: {
     title: "s'ession time",
-    body: "how long you tracked posture sessions in each period. the more you track, the more your s'up s'core reflects your real posture.",
+    body: "how long you tracked posture sessions in each period. every full 10 minutes earns 5 xp, up to 150 xp a day.",
   },
   breakdown: {
     title: "posture breakdown",
@@ -116,7 +119,7 @@ export interface PageData {
   sessionMins: number[];
   hasData:     boolean[];
   stateTotals: Record<string, number>;
-  periodScore: number | null; // time-weighted s'core for the whole page
+  periodScore: number | null; // XP earned over the whole page (added up)
   startDate:   string;
   endDate:     string;
   pointDates:  string[];
@@ -191,10 +194,14 @@ function accumulateStateTotals(target: FullStateTotals, row: PosturePageRow | un
   }
 }
 
-// Rounded time-weighted s'core across a set of days (docs/score-methodology.md §2); null if none tracked.
+// XP earned across a set of days, added up (docs/xp.md); null if there are no days.
 function periodScoreOf(rows: (PosturePageRow | undefined)[]): number | null {
-  const score = supScoreForRows(rows.filter((r): r is PosturePageRow => r !== undefined));
-  return score === null ? null : Math.round(score);
+  const days = rows.filter((r): r is PosturePageRow => r !== undefined);
+  if (!days.length) return null;
+  return days.reduce((sum, r) => sum + (r.xp ?? 0), 0);
+  // [s'up s'core — RETIRED] Was the rounded time-weighted s'core (docs/score-methodology.md §2):
+  // const score = supScoreForRows(rows.filter((r): r is PosturePageRow => r !== undefined));
+  // return score === null ? null : Math.round(score);
 }
 
 // A day's tracked minutes; prefers exact total_desk_ms, falls back to rounded total_minutes.
@@ -246,7 +253,8 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
       pages.push({
         // The window is the 7 days ending today, not Mon–Sun, so label each bar by its own weekday.
         labels:      days.map((d) => DAY_LABELS[d.getDay()]),
-        scores:      dayRows.map((r) => r?.supScore ?? 0),
+        // Each day's XP. [s'up s'core — RETIRED] was: dayRows.map((r) => r?.supScore ?? 0)
+        scores:      dayRows.map((r) => r?.xp ?? 0),
         sessionMins: dayRows.map((r) => sessionMinsOf(r)),
         hasData:     dayRows.map((r) => r !== undefined),
         stateTotals,
@@ -334,13 +342,16 @@ function buildPages(history: PosturePageRow[], range: Range): PageData[] {
   return pages;
 }
 
-// Active-bar colour band for a 0–100 score (green → yellow → orange → red).
-function scoreColor(s: number) {
-  if (s >= 75) return "#6DC96D";
-  if (s >= 55) return "#FFD600";
-  if (s >= 40) return "#F5A623";
-  return "#EC555E";
-}
+// Active-bar colour. XP measures effort, not posture quality, so there are no
+// good/bad colour bands: the tapped bar is just a darker green.
+const XP_ACTIVE_BAR = "#3E9E3E";
+// [s'up s'core — RETIRED] Active-bar colour band for a 0–100 score (green → yellow → orange → red).
+// function scoreColor(s: number) {
+//   if (s >= 75) return "#6DC96D";
+//   if (s >= 55) return "#FFD600";
+//   if (s >= 40) return "#F5A623";
+//   return "#EC555E";
+// }
 
 // Data popup
 
@@ -621,13 +632,14 @@ const swipeStyles = StyleSheet.create({
 
 // Shared helpers
 
-function avgLabel(range: Range): string {
-  if (range === "week")  return "daily avg";
-  if (range === "month") return "weekly avg";
-  return "monthly avg";
-}
+// [s'up s'core — RETIRED] the s'core popup said "avg"; XP bars are totals like session time (totalLabel).
+// function avgLabel(range: Range): string {
+//   if (range === "week")  return "daily avg";
+//   if (range === "month") return "weekly avg";
+//   return "monthly avg";
+// }
 
-// Session bars are totals, so their popup says "total" rather than "avg".
+// Session and XP bars are both totals, so their popups say "total".
 function totalLabel(range: Range): string {
   if (range === "week")  return "daily total";
   if (range === "month") return "weekly total";
@@ -636,8 +648,8 @@ function totalLabel(range: Range): string {
 
 // Bar chart
 
-// Session time is the page's total; score is the page's time-weighted s'core,
-// null when nothing was tracked (a 0 bar means "no score", not a bad one).
+// Session time is the page's total; score is the page's XP added up,
+// null when the page has no days at all.
 function summaryValue(page: PageData, type: string): number | null {
   if (type === "session") {
     return Math.round(page.sessionMins.reduce((a, b) => a + b, 0));
@@ -677,9 +689,9 @@ const BarChart = React.memo(function BarChart({
         y,
         // Session time is pre-formatted ("1h 5min"), so it carries its own unit
         value: type === "session" ? formatSessionMins(values[i]) : values[i],
-        unit: type === "session" ? "" : "pts",
+        unit: type === "session" ? "" : "xp",
         dateRange: data.pointDates[i] ?? data.labels[i],
-        avgLabel:  type === "session" ? totalLabel(range) : avgLabel(range),
+        avgLabel:  totalLabel(range),
       });
     });
   };
@@ -688,12 +700,12 @@ const BarChart = React.memo(function BarChart({
     <View>
       <View style={barStyles.statRow}>
         <Text style={barStyles.statText}>
-          {type === "session" ? `total ${formatSessionMins(curValue ?? 0)}` : `avg ${curValue ?? 0} pts`}
+          {type === "session" ? `total ${formatSessionMins(curValue ?? 0)}` : `total ${curValue ?? 0} xp`}
         </Text>
         {diff !== null && (
           <Text style={[barStyles.statText, { color: diff >= 0 ? "#6DC96D" : "#EC555E" }]}>
             {"  "}{diff >= 0 ? "↑" : "↓"}{" "}
-            {type === "session" ? formatSessionMins(Math.abs(diff)) : `${Math.abs(diff)} pts`}
+            {type === "session" ? formatSessionMins(Math.abs(diff)) : `${Math.abs(diff)} xp`}
           </Text>
         )}
       </View>
@@ -703,7 +715,7 @@ const BarChart = React.memo(function BarChart({
           const barH     = Math.max(3, Math.round((v / maxV) * maxBarH));
           const isActive = activeIndex === i;
           const barHasData  = hasData?.[i] !== false; // treat missing hasData as "has data"
-          const barColor    = !barHasData ? "#C4C4C4" : (isActive ? scoreColor(v) : "#6DC96D");
+          const barColor    = !barHasData ? "#C4C4C4" : (isActive ? XP_ACTIVE_BAR : "#6DC96D");
           const barOpacity  = !barHasData ? 1 : (isActive ? 1 : 0.85);
           return (
             <Pressable
@@ -999,14 +1011,14 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* S'CORE TREND */}
+        {/* XP TREND (replaced the s'core trend) */}
         <View style={[styles.card, styles.shadow]}>
           <InfoButton onPress={() => setActiveMetricInfo("trend")} color={PRIMARY_TEXT} />
 
           {pages && pages.length > 0 ? (
             <SwipeCard key={range} pages={pages} onPageChange={closePopup} renderPage={(p, prev) => (
               <>
-                <Text style={styles.cardTitle}>s'core trend</Text>
+                <Text style={styles.cardTitle}>xp trend</Text>
                 <BarChart
                   data={p} prevData={prev} range={range} type="score"
                   hasData={p.hasData}

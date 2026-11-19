@@ -25,7 +25,7 @@ function cron({
     if (q.table === 'daily_ai_summary') return { data: existing.includes(eqs(q).user_id) ? { user_id: eqs(q).user_id } : null, error: null };
     if (q.table === 'posture_daily') {
       const uid = eqs(q).user_id;
-      const rows = posture[uid] ?? [{ date: '2026-11-12', state_totals: { upright: 30 * MIN, slouched: 10 * MIN }, sup_score: 70, total_desk_ms: 40 * MIN }];
+      const rows = posture[uid] ?? [{ date: '2026-11-12', state_totals: { upright: 30 * MIN, slouched: 10 * MIN }, xp: 30, total_desk_ms: 40 * MIN }];
       return { data: rows, error: null };
     }
     return { data: null, error: null };
@@ -112,8 +112,23 @@ test('each summary reads the 7 days ending today and puts the real numbers in th
     ['2026-11-13', '2026-11-12', '2026-11-11', '2026-11-10', '2026-11-09', '2026-11-08', '2026-11-07']);
   const prompt = c.prompts[0];
   assert.match(prompt, /It is the morning of 2026-11-13/);
-  assert.match(prompt, /Thursday 2026-11-12: tracked 40 min, s'up s'core 70\. good alignment 30 min \(75%\), slouched 10 min \(25%\)/);
+  // XP replaced the s'up s'core in the prompt (docs/xp.md).
+  assert.match(prompt, /Thursday 2026-11-12: tracked 40 min, 30 XP\. good alignment 30 min \(75%\), slouched 10 min \(25%\)/);
   assert.match(prompt, /habit costing the most: slouched/);
+  assert.equal(q.ops.find(([m]) => m === 'select')[1], 'date, state_totals, xp, total_desk_ms');
+  assert.doesNotMatch(prompt, /s'core/, 'the retired s’core is no longer mentioned');
+});
+
+test('days with XP but no tracked session (check-in / workout only) are not counted as tracked days', async () => {
+  const c = cron({ users: ['u1'], posture: { u1: [
+    { date: '2026-11-11', state_totals: { upright: 20 * MIN }, xp: 10, total_desk_ms: 20 * MIN },
+    { date: '2026-11-12', state_totals: {}, xp: 20, total_desk_ms: 0 },
+  ] } });
+  await c.call();
+  const prompt = c.prompts[0];
+  assert.match(prompt, /days tracked: 1 of 7/);
+  assert.match(prompt, /only one tracked day, no trend yet/);
+  assert.match(prompt, /most XP 2026-11-12 \(20 XP\)/);
 });
 
 test('re-running the same day is idempotent; users with no tracking are skipped', async () => {

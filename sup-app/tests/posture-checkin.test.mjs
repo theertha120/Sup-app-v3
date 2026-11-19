@@ -325,7 +325,7 @@ function text(tree) {
 
 function screen({ params = { sentAt: '2026-11-18T01:58:00.000Z', source: 'notification' }, save = async () => ({ success: true }) } = {}) {
   const hooks = miniReact();
-  const saved = []; const toasts = []; let backs = 0;
+  const saved = []; const toasts = []; const xpSyncs = []; let backs = 0;
   const mod = loadTs('app/(modals)/posture-checkin.tsx', {
     globals: fakeClock(START),
     mocks: {
@@ -341,6 +341,8 @@ function screen({ params = { sentAt: '2026-11-18T01:58:00.000Z', source: 'notifi
       '@/src/components/posture/PostureOptionFigure': { __esModule: true, default: 'Figure' },
       '@/src/contexts/ToastContext': { useToast: () => ({ showToast: (message, tone) => toasts.push([message, tone]) }) },
       '@/src/services/posture/postureCheckinService': { savePostureCheckin: async (input) => { saved.push(input); return save(input); } },
+      '@/src/contexts/AuthContext': { useAuth: () => ({ userId: 'user-1' }) },
+      '@/src/services/xp/xpService': { syncDayXp: async (id) => { xpSyncs.push(id); return null; } },
     },
   });
   const mounted = hooks.mount(() => mod.default());
@@ -353,7 +355,7 @@ function screen({ params = { sentAt: '2026-11-18T01:58:00.000Z', source: 'notifi
     return found;
   };
   return {
-    saved, toasts, backs: () => backs, render, control, text: () => text(tree), nodes: () => nodes(tree),
+    saved, toasts, xpSyncs, backs: () => backs, render, control, text: () => text(tree), nodes: () => nodes(tree),
     async press(label) { const n = control(label); assert.ok(!n.props.disabled, `${label} is disabled`); await n.props.onPress(); render(); },
   };
 }
@@ -521,4 +523,13 @@ test('summary ties go to the most recent posture, and check-ins are dated by the
   const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   assert.equal(c.mod.checkinDay({ logged_at: new Date(2026, 10, 18, 0, 30).toISOString() }, key), '2026-11-18');
   assert.equal(c.mod.checkinDay({ logged_at: new Date(2026, 10, 18, 23, 30).toISOString() }, key), '2026-11-18');
+});
+
+test('a saved check-in re-syncs today’s XP; a failed save doesn’t', async () => {
+  const ok = screen();
+  await ok.press('Upright'); await ok.press('4 of 5'); await ok.press('Log it');
+  assert.deepEqual(ok.xpSyncs, ['user-1']);
+  const failed = screen({ save: async () => ({ success: false, error: 'offline' }) });
+  await failed.press('Upright'); await failed.press('4 of 5'); await failed.press('Log it');
+  assert.deepEqual(failed.xpSyncs, []);
 });

@@ -21,7 +21,9 @@ import {
   userProfileToUser,
   type ProfileUpdateInput,
 } from "../../services/user/profileService";
-import { fetchWeeklySupScore } from "../../services/social/leaderboardPeriodService";
+// [s'up s'core — RETIRED] import { fetchWeeklySupScore } from "../../services/social/leaderboardPeriodService";
+import { fetchLevelProgress, subscribeToXpChanges } from "../../services/xp/xpService";
+import { formatLevel, levelFor } from "../../services/xp/xpRules";
 import { UserSupsonaAvatar } from "../supsona/SupsonaAvatar";
 
 interface ProfileModalProps {
@@ -47,7 +49,8 @@ export default function ProfileModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [profileData, setProfileData] = useState<User | null>(user);
-  const [weeklyPoints, setWeeklyPoints] = useState(0);
+  // XP level ("Level 3 - 21/500") replaces the retired weekly s'core.
+  const [levelText, setLevelText] = useState(formatLevel(levelFor(0)));
 
   // Sync with user when modal opens or when parent passes updated user (e.g. after supsona save)
   useEffect(() => {
@@ -69,10 +72,27 @@ export default function ProfileModal({
         setError("Failed to load profile data");
       })
       .finally(() => setIsLoading(false));
-    setWeeklyPoints(0);
-    fetchWeeklySupScore(user.id)
-      .then(setWeeklyPoints)
-      .catch((err) => console.error("[ProfileModal] Failed to fetch weekly points", err));
+    // [s'up s'core — RETIRED]
+    // setWeeklyPoints(0);
+    // fetchWeeklySupScore(user.id)
+    //   .then(setWeeklyPoints)
+    //   .catch((err) => console.error("[ProfileModal] Failed to fetch weekly points", err));
+    setLevelText(formatLevel(levelFor(0)));
+    fetchLevelProgress(user.id)
+      .then((progress) => setLevelText(formatLevel(progress)))
+      .catch((err) => console.error("[ProfileModal] Failed to fetch XP level", err));
+  }, [visible, user?.id]);
+
+  // While open, keep this user's XP level current if their XP changes.
+  useEffect(() => {
+    if (!visible || !user?.id) return;
+    const id = user.id;
+    return subscribeToXpChanges((changedUserId) => {
+      if (changedUserId !== id) return;
+      fetchLevelProgress(id)
+        .then((progress) => setLevelText(formatLevel(progress)))
+        .catch((err) => console.error("[ProfileModal] Failed to refresh XP level", err));
+    });
   }, [visible, user?.id]);
 
   const loading = externalLoading || isLoading;
@@ -253,8 +273,8 @@ export default function ProfileModal({
                       </View>
 
                       <View style={styles.statBox}>
-                        <Text style={styles.statValue}>{weeklyPoints}</Text>
-                        <Text style={styles.statLabel}>Weekly Points</Text>
+                        <Text style={styles.statValue}>{levelText}</Text>
+                        <Text style={styles.statLabel}>XP</Text>
                       </View>
                     </View>
                   )}
