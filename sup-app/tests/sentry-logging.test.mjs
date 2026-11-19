@@ -97,8 +97,9 @@ test('startSession reports an insert failure once and still returns null', async
   assert.equal(f.reports[0][1].tags.context, 'posture-session-start');
 });
 
-test('daily rebuild reports failed queries, upserts and score writes with their stage', async () => {
-  for (const stage of ['sessions-read', 'daily-save', 'score-save']) {
+// 'score-save' stage removed: the retired s'up s'core is no longer written (docs/xp.md).
+test('daily rebuild reports failed queries and upserts with their stage', async () => {
+  for (const stage of ['sessions-read', 'daily-save']) {
     const f = fixture();
     f.respond((table, action) => {
       if (table === 'posture_sessions') return stage === 'sessions-read' ? { error: dbError } : { data: [{ total_duration_ms: 5000, state_totals: { upright: 5000 } }] };

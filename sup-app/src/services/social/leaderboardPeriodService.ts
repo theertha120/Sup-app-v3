@@ -11,7 +11,8 @@ export type LeaderboardPeriod = "day" | "week";
 
 export interface LeaderboardEntry {
   user: User;
-  avgSupScore: number; // rounded to 1 decimal place
+  /** XP earned in the period (docs/xp.md). Was `avgSupScore` (the retired s'up s'core). */
+  xp: number;
   sessionsCounted: number;
   rank: number; // 1-based, ties share the same rank (standard competition ranking)
 }
@@ -50,9 +51,10 @@ export function getDateRangeForPeriod(period: LeaderboardPeriod, today = new Dat
   }
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
+// [s'up s'core — RETIRED] Only used by the old time-weighted ranking (see rankLeaderboard).
+// function round1(n: number): number {
+//   return Math.round(n * 10) / 10;
+// }
 
 /**
  * Ties are broken by the name the viewer actually sees, so equal scores read as
@@ -64,17 +66,17 @@ function getDisplayName(user: User): string {
 
 /**
  * Assigns standard competition ranks (1, 2, 2, 4, ...) to a list already
- * sorted by avgSupScore descending. Users with identical scores share a rank.
+ * sorted by xp descending. Users with identical scores share a rank.
  */
 function assignRanks(sorted: Omit<LeaderboardEntry, "rank">[]): LeaderboardEntry[] {
   let currentRank = 0;
   let prevScore: number | null = null;
 
   return sorted.map((entry, idx) => {
-    if (prevScore === null || entry.avgSupScore !== prevScore) {
+    if (prevScore === null || entry.xp !== prevScore) {
       currentRank = idx + 1;
     }
-    prevScore = entry.avgSupScore;
+    prevScore = entry.xp;
     return { ...entry, rank: currentRank };
   });
 }
@@ -116,19 +118,22 @@ export function rankLeaderboard(
       (row) => row.date >= startDateKey && row.date <= endDateKey
     );
     if (!rows.length) {
-      return { user, avgSupScore: 0, sessionsCounted: 0 };
+      return { user, xp: 0, sessionsCounted: 0 };
     }
-    // Time-weighted across the period, not a mean of daily scores (docs/score-methodology.md §2).
+    // XP earned in the period replaces the s'up s'core (docs/xp.md).
+    // Days counted = days that earned XP.
+    // [s'up s'core — RETIRED] Was: time-weighted across the period (docs/score-methodology.md §2):
+    //   avgSupScore: round1(supScoreForRows(rows) ?? 0), sessionsCounted: rows.length,
     return {
       user,
-      avgSupScore: round1(supScoreForRows(rows) ?? 0),
-      sessionsCounted: rows.length,
+      xp: rows.reduce((sum, row) => sum + (row.xp ?? 0), 0),
+      sessionsCounted: rows.filter((row) => (row.xp ?? 0) > 0).length,
     };
   });
 
   const sorted = entries.sort((a, b) => {
-    if (b.avgSupScore !== a.avgSupScore) {
-      return b.avgSupScore - a.avgSupScore;
+    if (b.xp !== a.xp) {
+      return b.xp - a.xp;
     }
     return getDisplayName(a.user).localeCompare(getDisplayName(b.user));
   });
@@ -136,8 +141,12 @@ export function rankLeaderboard(
 }
 
 /**
+ * [s'up s'core — RETIRED] No longer called: the profile dropdown and modal now
+ * show the XP level instead (fetchLevelProgress in src/services/xp/xpService.ts).
+ * Kept for reference / rollback.
+ *
  * A user's time-weighted s'core over the last 7 days incl. today, rounded; 0 if
- * nothing tracked. Shown as "weekly points" in the profile dropdown and modal
+ * nothing tracked. Was shown as "weekly points" in the profile dropdown and modal
  * (replaces the never-updated profiles.weekly_avg_points column).
  */
 export async function fetchWeeklySupScore(userId: string): Promise<number> {

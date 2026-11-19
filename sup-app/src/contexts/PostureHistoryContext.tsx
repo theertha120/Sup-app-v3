@@ -15,6 +15,7 @@ import {
   fetchAllPostureRows,
   type PosturePageRow,
 } from "@/src/services/posture/postureSyncService";
+import { subscribeToXpChanges } from "@/src/services/xp/xpService";
 
 
 interface PostureHistorySnapshot {
@@ -61,6 +62,10 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
+  // A refresh asked for while a load is running (e.g. the sign-in XP backfill
+  // finishing during the first load) runs once more afterwards instead of
+  // being dropped, so the screen never keeps the older data.
+  const rerunRef = useRef(false);
   // Mirrors `snapshot` so the callbacks below can read it without taking it as
   // a dependency: a changing callback identity would re-fire a consumer
   // useFocusEffect and replay its entry animation on every refresh.
@@ -70,7 +75,8 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
   const load = useCallback(
     async (mode: "initial" | "refresh") => {
       const requestUserId = userId;
-      if (!requestUserId || inFlightRef.current) return;
+      if (!requestUserId) return;
+      if (inFlightRef.current) { rerunRef.current = true; return; }
 
       inFlightRef.current = true;
       activeUserRef.current = requestUserId;
@@ -101,10 +107,24 @@ export function PostureHistoryProvider({ children }: { children: ReactNode }) {
         inFlightRef.current = false;
         setIsLoading(false);
         setIsRefreshing(false);
+        if (rerunRef.current) {
+          rerunRef.current = false;
+          if (activeUserRef.current === requestUserId) void load("refresh");
+        }
       }
     },
     [userId]
   );
+
+  // XP is stored on posture_daily, so reload when an XP sync changed it
+  // (session ended, check-in, workout, or the sign-in backfill). Stats then
+  // shows the new XP without a manual refresh.
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToXpChanges((changedUserId) => {
+      if (changedUserId === userId && activeUserRef.current === userId) void load("refresh");
+    });
+  }, [userId, load]);
 
   // Load once on login; drop everything on logout so the next user starts clean.
   useEffect(() => {

@@ -1,6 +1,6 @@
 # Community loading
 
-Community opens a daily view with five entries and the viewer's own rank.
+Community opens a daily view with five entries and the viewer's own rank. Rankings are by XP earned in the period (day or week), which replaced the s'up s'core; see [xp.md](xp.md).
 The full leaderboard requests 50 entries per page. View caches are account-local
 and shared between both screens. After login (when online) the leaderboard provider
 prefetches the Community summary (everyone and friends, day, five entries) so both

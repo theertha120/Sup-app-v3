@@ -243,7 +243,7 @@ export default function SettingsScreen() {
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Sources & Methodology</Text>
             <Text style={styles.settingDescription}>
-              How s'train and your s'up s'core are calculated, and the research behind them
+              How s'train and your xp are calculated, and the research behind them
             </Text>
           </View>
           <Text style={styles.chevron}>›</Text>

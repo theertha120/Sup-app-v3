@@ -22,6 +22,7 @@ import { WorkoutForm } from '@/src/features/exercise/WorkoutForm';
 import { PostureCheckinsCard, checkinDay } from '@/src/features/exercise/PostureCheckinsCard';
 import type { PostureCheckin } from '@/src/services/posture/postureCheckinService';
 import { captureError } from '@/src/lib/sentry';
+import { syncDayXp } from '@/src/services/xp/xpService';
 export { default as ErrorBoundary } from '@/src/components/ui/ScreenErrorBoundary';
 
 type Editor = { id?: string; initial?: WorkoutInput };
@@ -89,6 +90,10 @@ export default function ExerciseLogScreen() {
   const save = async (input: WorkoutInput) => {
     if (!userId) throw new Error('Sign in to save workouts.');
     const saved = await saveWorkout(userId, input, editor?.id);
+    // The workout's day earns exercise XP; an edit that moved the date also changes the old day.
+    void syncDayXp(userId, saved.performed_on);
+    const previousDate = editor?.id ? editor.initial?.performed_on : undefined;
+    if (previousDate && previousDate !== saved.performed_on) void syncDayXp(userId, previousDate);
     if (owner.current !== userId) return;
     request.current++; setLoading(false);
     setData(current => ({ owner: userId, rows: [saved, ...(current?.owner === userId ? current.rows : []).filter(row => row.id !== saved.id)]
@@ -101,6 +106,7 @@ export default function ExerciseLogScreen() {
     busyRef.current = true; setBusy(true);
     try {
       await deleteWorkout(userId, workout.id);
+      void syncDayXp(userId, workout.performed_on); // that day may lose its exercise XP
       if (owner.current !== userId) return;
       request.current++; setLoading(false);
       setData(current => current?.owner === userId ? { ...current, rows: current.rows.filter(row => row.id !== workout.id) } : current);

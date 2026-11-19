@@ -190,7 +190,8 @@ const LeaderboardRow = React.memo(function LeaderboardRow({ rank, entry, isCurre
           {isCurrentUser && " (You)"}
         </Text>
         <Text style={[styles.stats, isCurrentUser && styles.currentUserStats]}>
-        s&apos;up score: {entry.avgSupScore.toFixed(1)}
+        {/* XP earned in the period. [s'up s'core — RETIRED] was: s'up score: {entry.avgSupScore.toFixed(1)} */}
+        {Math.round(entry.xp)} xp
         </Text>
       </View>
     </View>

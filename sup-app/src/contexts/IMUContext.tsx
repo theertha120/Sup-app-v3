@@ -47,6 +47,7 @@ import { Device } from "react-native-ble-plx";
 import { bleService, SensorSlot, SensorState } from "../services/BLEService";
 import { useAuth } from "./AuthContext";
 import * as postureSync from "../services/posture/postureSyncService";
+import { syncDayXp } from "../services/xp/xpService";
 import { sentryBreadcrumb } from "../lib/sentry";
 import { sendBackgroundAlert, dismissBackgroundAlerts } from "../services/reminder/pushNotificationService";
 import {
@@ -580,9 +581,12 @@ export function IMUProvider({ children }: { children: React.ReactNode }) {
     sessionGapMsRef.current       = 0;
     disconnectedAtRef.current     = null;
 
-    // Rebuild posture_daily after a short delay to ensure endSession has written to DB
+    // Rebuild posture_daily after a short delay to ensure endSession has written to DB,
+    // then recalculate that day's XP from the new session time (docs/xp.md).
     if (uid) {
-      setTimeout(() => postureSync.rebuildDailyFromSessions(uid, todayDK), 5000);
+      setTimeout(() => {
+        void postureSync.rebuildDailyFromSessions(uid, todayDK).then(() => syncDayXp(uid, todayDK));
+      }, 5000);
     }
   }, [computeSessionAggregates]);
 

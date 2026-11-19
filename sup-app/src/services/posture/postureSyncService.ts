@@ -30,7 +30,10 @@ export interface DailyPostureRow {
   avgShs: number | null;
   minShs: number | null;
   maxCpl: number | null;
+  /** Retired s'up s'core (no longer written; old rows keep their value). Replaced by `xp`. */
   supScore: number | null;
+  /** XP earned that day (docs/xp.md). This is what the app now shows as the day's score. */
+  xp: number;
   stateTotals: StateTotals | null;
 }
 
@@ -390,16 +393,20 @@ export async function rebuildDailyFromSessions(
       captureError(upsertError, "posture-daily-rebuild", { dateKey, stage: "daily-save" });
     } else {
       console.log(`[postureSync] daily rebuilt from ${sessions.length} sessions — totalDeskMs=${Math.round(totalDeskMs)}`);
-      // Score comes from the day's per-state time only (docs/score-methodology.md §2);
-      // streak and avg_shs are no longer inputs.
-      const supScore = computeSupScore(stateTotals);
-      const { error: scoreError } = await supabase
-        .from("posture_daily")
-        .update({ sup_score: supScore })
-        .eq("user_id", userId)
-        .eq("date", dateKey);
-      if (scoreError) captureError(scoreError, "posture-daily-rebuild", { dateKey, stage: "score-save" });
-      console.log(`[postureSync] sup_score=${supScore}`);
+      // [s'up s'core — RETIRED, replaced by XP (docs/xp.md)]
+      // The day's XP is now worked out and saved by syncDayXp (src/services/xp/xpService.ts),
+      // which the caller runs after this rebuild. Kept for reference / rollback:
+      //
+      // // Score comes from the day's per-state time only (docs/score-methodology.md §2);
+      // // streak and avg_shs are no longer inputs.
+      // const supScore = computeSupScore(stateTotals);
+      // const { error: scoreError } = await supabase
+      //   .from("posture_daily")
+      //   .update({ sup_score: supScore })
+      //   .eq("user_id", userId)
+      //   .eq("date", dateKey);
+      // if (scoreError) captureError(scoreError, "posture-daily-rebuild", { dateKey, stage: "score-save" });
+      // console.log(`[postureSync] sup_score=${supScore}`);
     }
   } catch (e) {
     console.warn("[postureSync] rebuildDailyFromSessions threw", e);
@@ -408,6 +415,10 @@ export async function rebuildDailyFromSessions(
 }
 
 // ── Sup Score helpers ─────────────────────────────────────────────────────────
+// [RETIRED] The s'up s'core has been replaced by XP (docs/xp.md, src/services/xp).
+// Nothing in the app calls these any more; the call sites are commented out.
+// The formula is kept (and still unit-tested in tests/scoring.test.mjs) for
+// reference and so the change can be rolled back.
 
 // Credit (0–100) earned per tracked minute in each posture state.
 const POSTURE_CREDIT: Record<DeskPostureState, number> = {
@@ -526,6 +537,7 @@ const DAILY_COLUMNS = [
   "min_shs",
   "max_cpl",
   "sup_score",
+  "xp",
   "state_totals",
 ].join(", ");
 
@@ -544,6 +556,7 @@ function mapRowToDailyPostureRow(row: Record<string, unknown> | null): DailyPost
     minShs: row.min_shs != null ? Number(row.min_shs) : null,
     maxCpl: row.max_cpl != null ? Number(row.max_cpl) : null,
     supScore: row.sup_score != null ? Number(row.sup_score) : null,
+    xp: Number(row.xp) || 0,
     stateTotals: isStateTotals(row.state_totals) ? row.state_totals : null,
   };
 }

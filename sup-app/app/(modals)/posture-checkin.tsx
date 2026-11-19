@@ -8,6 +8,8 @@ import PressFeedback from "@/src/components/ui/PressFeedback";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import PostureOptionFigure from "@/src/components/posture/PostureOptionFigure";
 import { useToast } from "@/src/contexts/ToastContext";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { syncDayXp } from "@/src/services/xp/xpService";
 // Same tokens as the Exercise page and workout form, so the check-in matches.
 import { s, purple, soft, ink } from "@/src/features/exercise/ui";
 import { FEELINGS } from "@/src/features/exercise/model";
@@ -37,6 +39,7 @@ function formatTime(d: Date): string {
 export default function PostureCheckinScreen() {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { userId } = useAuth();
   const { sentAt, source } = useLocalSearchParams<{ sentAt?: string; source?: string }>();
   // Opened straight from a notification, so the fonts may not be loaded yet.
   const [fontsLoaded, fontError] = useFonts({
@@ -65,6 +68,8 @@ export default function PostureCheckinScreen() {
     });
     setSaving(false);
     if (result.success) {
+      // Today's XP may have changed (first check-in of the day earns 10).
+      if (userId) void syncDayXp(userId);
       showToast("Posture logged!", "success");
       router.back();
     } else {

@@ -1,5 +1,7 @@
 # s'up s'core — scoring methodology
 
+> **Retired (Nov 2026):** the s'up s'core has been replaced by XP in the app (see [xp.md](xp.md)). The formula below is still in the code, commented out at its call sites, and still unit-tested, but nothing shows it any more. This document was written for App Store review; update it before the next submission if the review needs to describe what the app shows.
+
 Reference documentation for the daily "s'up s'core" shown in the app and everything that feeds
 into it. Written for App Store review (Guideline 2.1 information request) and as the source
 content for an in-app "how this is calculated" / citations page (Guideline 1.4.1). Every formula

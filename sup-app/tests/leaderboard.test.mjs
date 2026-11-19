@@ -27,7 +27,7 @@ const period = load('../src/services/social/leaderboardPeriodService.ts', {
 const data = load('../src/services/social/leaderboardData.ts');
 const { LeaderboardStore } = load('../src/services/social/leaderboardStore.ts', { './leaderboardData': data });
 const query = { scope: 'everyone', period: 'day', dateKey: '2026-10-26' };
-const entry = (i) => ({ user: { id: `u${i}`, name: `User ${i}` }, rank: i + 1, avgSupScore: 100 - i, sessionsCounted: 1 });
+const entry = (i) => ({ user: { id: `u${i}`, name: `User ${i}` }, rank: i + 1, xp: 100 - i, sessionsCounted: 1 });
 function fixture() {
   const entries = Array.from({ length: 123 }, (_, i) => entry(i));
   const calls = [];
@@ -40,20 +40,20 @@ function fixture() {
   return { store, calls, fail: (value) => { fail = value; } };
 }
 
-test('weekly ranking keeps main time-weighted scoring and counts its prior once', () => {
+test('weekly ranking sums the XP earned in the period (XP replaced the s’up s’core)', () => {
   const users = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }];
   const rows = new Map([
-    ['a', [{ date: '2026-10-20', stateTotals: { upright: 600000 } }, { date: '2026-10-26', stateTotals: { severe: 5400000 } }]],
-    ['b', [{ date: '2026-10-26', stateTotals: { forward_lean: 600000 } }]],
+    // 2026-10-19 is outside the 7 days ending 26 Oct, so it doesn't count.
+    ['a', [{ date: '2026-10-19', xp: 500 }, { date: '2026-10-20', xp: 30 }, { date: '2026-10-26', xp: 0 }]],
+    ['b', [{ date: '2026-10-25', xp: 20 }, { date: '2026-10-26', xp: 25 }]],
   ]);
   const ranked = period.rankLeaderboard(users, rows, 'week', new Date(2026, 9, 26));
-  assert.equal(ranked[0].user.id, 'b');
-  assert.equal(ranked[1].avgSupScore, 13.6); // mean of daily scores would incorrectly be 40
+  assert.deepEqual(ranked.map((e) => [e.user.id, e.xp, e.sessionsCounted, e.rank]), [['b', 45, 2, 1], ['a', 30, 1, 2]]);
 });
 
-test('ties keep competition ranks, alphabetical handles, and zero for no tracked data', () => {
+test('ties keep competition ranks, alphabetical handles, and zero for no XP', () => {
   const users = [{ id: 'z', name: 'Z' }, { id: 'a', name: 'A' }, { id: 'none', name: 'None' }];
-  const rows = new Map(['z', 'a'].map((id) => [id, [{ date: '2026-10-26', stateTotals: { upright: 600000 } }]]));
+  const rows = new Map(['z', 'a'].map((id) => [id, [{ date: '2026-10-26', xp: 15 }]]));
   assert.deepEqual(period.rankLeaderboard(users, rows, 'day', new Date(2026, 9, 26)).map((row) => [row.user.id, row.rank]), [['a', 1], ['z', 1], ['none', 3]]);
 });
 
@@ -114,7 +114,7 @@ function sourceFor(supabase) {
 }
 function fallbackDatabase() {
   const profiles = Array.from({ length: 1205 }, (_, i) => ({ id: `u${String(i).padStart(4, '0')}`, name: `User ${i}`, username: null, avatar_url: null }));
-  const rows = profiles.flatMap((p, i) => Array.from({ length: 7 }, (_, day) => ({ user_id: p.id, date: `2026-10-${20 + day}`, state_totals: i ? { upright: i * 60000 } : null })));
+  const rows = profiles.flatMap((p, i) => Array.from({ length: 7 }, (_, day) => ({ user_id: p.id, date: `2026-10-${20 + day}`, state_totals: i ? { upright: i * 60000 } : null, xp: i })));
   const tables = { profiles, posture_daily: rows, friend_requests: [{ id: 'f', from_user_id: 'u0000', to_user_id: 'u0001', status: 'accepted' }] };
   const calls = [];
   let rpcError = { code: 'PGRST202' };
@@ -143,20 +143,20 @@ test('pagination finishes even when server pages are shorter than requested', as
   await assert.rejects(readLeaderboardPages(async (offset) => offset ? { data: null, error: Error('offline') } : { data: [1], error: null }), /offline/);
 });
 
-test('compatibility reads preserve scoring and rank more than 1000 users completely', async () => {
+test('compatibility reads rank by XP earned in the period and rank more than 1000 users completely', async () => {
   const db = fallbackDatabase();
   const source = sourceFor(db.database).createLeaderboardSource('u0000');
   const signal = new AbortController().signal;
   const page = await source({ ...query, period: 'week' }, 0, 5, false, signal);
   assert.equal(page.total, 1205);
   assert.equal(page.ownEntry.rank, 1205);
-  assert.equal(page.entries[0].avgSupScore, 99.9);
+  assert.equal(page.entries[0].xp, 1204 * 7, 'week XP = sum of the 7 days');
   assert.equal(page.entries[0].sessionsCounted, 7);
   const before = db.calls.length;
   const friends = await source({ ...query, period: 'week', scope: 'friends' }, 0, 5, false, signal);
   assert.equal(friends.total, 2);
   assert.equal(db.calls.length, before);
-  assert.ok(db.calls.filter(([table]) => table === 'posture_daily').every(([, columns]) => columns === 'user_id, date, state_totals'));
+  assert.ok(db.calls.filter(([table]) => table === 'posture_daily').every(([, columns]) => columns === 'user_id, date, state_totals, xp'));
 });
 
 test('server requests are bounded and permission errors are not hidden by fallback', async () => {

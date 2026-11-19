@@ -4,7 +4,7 @@
  * End-of-session playback of the Desk Mode figure: replays the session's
  * posture timeline (from useSessionStats) through DeskPostureFigure, with
  * play/pause, a speed toggle and a draggable scrubber. Also renders the
- * summary header: "11 nov, 14:20 - 15:40 · 1h 20min" + the session s'core.
+ * summary header: "11 nov, 14:20 - 15:40 · 1h 20min" + the XP the session earned (replaced the session s'core).
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,10 +12,13 @@ import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent } from "react-n
 import { Ionicons } from "@expo/vector-icons";
 import PressFeedback from "../ui/PressFeedback";
 import DeskPostureFigure from "./DeskPostureFigure";
-import { DeskPostureState, getScoreColor } from "./mockDeskPostureData";
+import { DeskPostureState } from "./mockDeskPostureData"; // [s'up s'core — RETIRED] getScoreColor no longer used here
 import { PostureSegment } from "../../lib/sessionHighlights";
 import { formatSessionMins } from "../../lib/formatDuration";
 import { colours } from "../../../theme/colours";
+
+// Colour for the session's XP number (green when it earned any; grey for 0).
+const XP_COLOR = "#4CAF50";
 
 // At 1× the whole session plays back in this long; never slower than real time.
 const BASE_PLAYBACK_MS = 30_000;
@@ -156,10 +159,12 @@ export default function SessionReplay({
       <View style={st.header}>
         <Text style={st.headerText} numberOfLines={2}>{formatSessionHeader(startMs, endMs)}</Text>
         <View style={st.scoreBlock}>
-          <Text style={[st.scoreValue, score !== null && { color: getScoreColor(score) }]}>
+          {/* XP this session earned. [s'up s'core — RETIRED] was coloured by
+              getScoreColor(score) (0–100 bands) and labelled "s'core". */}
+          <Text style={[st.scoreValue, score !== null && score > 0 && { color: XP_COLOR }]}>
             {score ?? "–"}
           </Text>
-          <Text style={st.scoreLabel}>{"s'core"}</Text>
+          <Text style={st.scoreLabel}>{"xp earned"}</Text>
         </View>
       </View>
 

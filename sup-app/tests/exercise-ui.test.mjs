@@ -193,7 +193,7 @@ const checkin = (id, logged_at, posture = 'upright', back_feel = 4) =>
   ({ id, posture, back_feel, logged_at, notification_sent_at: null, source: 'notification' });
 function screen({ checkins = [], cache } = {}) {
   let userId = 'user-a'; const history = [{ id: 'workout-a', user_id: userId, created_at: '2026-11-15T04:00:00Z', ...input() }];
-  const calls = []; const notifications = []; const sentry = fakeSentry();
+  const calls = []; const notifications = []; const sentry = fakeSentry(); const xpSyncs = [];
   const service = {
     fetchWorkouts: async id => id === 'user-a' ? history : [],
     saveWorkout: async (id, value, existing) => { calls.push(['save', id, existing]); return { ...value, id: existing ?? 'workout-b', user_id: id, created_at: '2026-11-15T05:00:00Z' }; },
@@ -213,8 +213,9 @@ function screen({ checkins = [], cache } = {}) {
     '@/src/services/posture/postureCheckinService': checkinService, '@/src/lib/sentry': sentry.module,
     '@/src/features/exercise/PostureCheckinsCard': { PostureCheckinsCard: 'PostureCheckinsCard', checkinDay: (c, toKey) => toKey(new Date(c.logged_at)) },
     ...(cache && { '@/src/services/exercise/exerciseLogCache': cache }),
+    '@/src/services/xp/xpService': { syncDayXp: async (id, date) => { xpSyncs.push([id, date]); return null; } },
   }) });
-  return { ...mounted, service, checkinService, sentry, calls, notifications, history, setUser: id => userId = id };
+  return { ...mounted, service, checkinService, sentry, calls, notifications, history, xpSyncs, setUser: id => userId = id };
 }
 test('history shows every exercise type without category controls and day selection filters it', async () => {
   const f = screen(); f.history.push({ ...f.history[0], id: 'yoga', performed_on: '2026-11-14', exercises: [{ name: 'Yoga', category: 'other', unit: 'minutes', values: [20] }] });
@@ -447,4 +448,19 @@ test('ExerciseLogPrefetch warms the cache at sign-in and clears it at sign-out',
   }) });
   userId = null; m.render(); userId = 'user-b'; m.render(); m.render();
   assert.deepEqual(calls, [['prefetch', 'user-a'], ['clear'], ['prefetch', 'user-b']]);
+});
+
+// ─── XP (docs/xp.md) ──────────────────────────────────────────────────────────
+test('saving, re-dating and deleting a workout re-syncs XP for every affected day', async () => {
+  const f = screen(); await flush(); f.render();
+  f.press('+ Log exercise');
+  await f.nodes().find(node => node.type === 'WorkoutForm').props.onSave(input()); f.render();
+  assert.deepEqual(f.xpSyncs, [['user-a', '2026-11-15']], 'new workout → its day');
+  f.nodes().find(node => node.props.accessibilityLabel?.startsWith('Options for')).props.onPress(); f.render(); f.press('Edit');
+  await f.nodes().find(node => node.type === 'WorkoutForm').props.onSave({ ...input(), performed_on: '2026-11-14' }); f.render();
+  assert.deepEqual(f.xpSyncs.slice(1), [['user-a', '2026-11-14'], ['user-a', '2026-11-15']], 'moved date → new day and old day');
+  f.nodes().find(node => node.props.accessibilityLabel?.startsWith('Options for')).props.onPress(); f.render(); f.press('Delete');
+  f.nodes().find(node => node.type === 'BrandAlert').props.buttons.find(button => button.text === 'Delete').onPress(); await flush();
+  assert.equal(f.xpSyncs.at(-1)[0], 'user-a');
+  assert.equal(f.xpSyncs.length, 4, 'delete → that day');
 });

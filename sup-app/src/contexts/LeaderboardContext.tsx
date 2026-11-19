@@ -8,6 +8,7 @@ import { toLocalDateKey } from "../lib/dateKey";
 import { createLeaderboardSource } from "../services/social/leaderboardPageService";
 import { supabase } from "../lib/supabase";
 import { subscribeToFriendChanges } from "../services/social/friendService";
+import { subscribeToXpChanges } from "../services/xp/xpService";
 import { startCommunityFreshness } from "../services/social/communityFreshness";
 import { COMMUNITY_STALE_MS, EMPTY_BOARD, LeaderboardStore } from "../services/social/leaderboardStore";
 import { LEADERBOARD_PAGE_SIZE, type LeaderboardScope } from "../services/social/leaderboardData";
@@ -63,7 +64,11 @@ function useAccountBoard() {
     const unsubscribeFriends = subscribeToFriendChanges((changedUserId) => {
       if (changedUserId === userId) store?.invalidate();
     });
-    return () => { active = false; unsubscribe(); unsubscribeFriends(); };
+    // Rankings are by XP: when your XP changes, refetch what's on screen and mark the rest stale.
+    const unsubscribeXp = subscribeToXpChanges((changedUserId) => {
+      if (changedUserId === userId) store?.invalidate();
+    });
+    return () => { active = false; unsubscribe(); unsubscribeFriends(); unsubscribeXp(); };
   }, [userId, isAuthenticated, store]);
   return { store, userId, avatar: avatar?.userId === userId ? avatar : null };
 }
