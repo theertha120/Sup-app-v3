@@ -34,8 +34,7 @@ function skip(tutorialStep, options = {}) {
 // Every page is reached from the header or navbar: skipping shows the
 // "go to" prompt and the user navigates themselves.
 for (const [steps, prompt] of [
-  [['goals-tip', 'data-tip'], 'go-daily-tip'],
-  [['snapshot-tip', 'snapshot-tip-stats'], 'go-settings-tip'],
+  [['goals-tip', 'data-tip', 'snapshot-tip', 'snapshot-tip-stats'], 'go-settings-tip'],
   [['settings-tip', 'coaching-tip'], 'go-sensor-tip'],
   [['figure-tip', 'supdate-tip', 'end-session-tip'], 'go-stats-tip'],
   [['stats-tip'], 'go-community-tip'],
@@ -48,7 +47,7 @@ for (const [steps, prompt] of [
 }
 
 test('"go to" prompts have nothing to skip', () => {
-  for (const step of ['go-home-tip', 'go-daily-tip', 'go-settings-tip', 'go-sensor-tip', 'go-desk-tip', 'go-stats-tip', 'go-community-tip']) {
+  for (const step of ['go-home-tip', 'go-settings-tip', 'go-sensor-tip', 'go-desk-tip', 'go-stats-tip', 'go-community-tip']) {
     assert.deepEqual(skip(step), []);
   }
 });

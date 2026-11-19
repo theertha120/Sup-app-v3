@@ -22,10 +22,9 @@ export default function TutorialActions({ children, hideSkip = false }: Tutorial
     // Every page is reached via the header or navbar, so skipping shows the
     // "go to" prompt and the user opens the next page themselves.
     switch (tutorialStep) {
+      // Home's tips include today's data, so skipping any of them skips them all.
       case "goals-tip":
       case "data-tip":
-        setTutorialStep("go-daily-tip");
-        break;
       case "snapshot-tip":
       case "snapshot-tip-stats":
         setTutorialStep("go-settings-tip");
@@ -56,7 +55,6 @@ export default function TutorialActions({ children, hideSkip = false }: Tutorial
       case "connect-tip":
       case "calibrate-tip":
       case "go-home-tip":
-      case "go-daily-tip":
       case "go-settings-tip":
       case "go-sensor-tip":
       case "go-desk-tip":

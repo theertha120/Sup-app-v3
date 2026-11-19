@@ -1,28 +1,25 @@
-// Daily tab ("today:"): today's posture snapshot (share of time per state),
-// session time and s'up s'core, with % change badges against yesterday.
-// Data is today's + yesterday's posture_daily row, refetched on every focus.
+// Today's daily summary, shown in Home's collapsible "today's data" section:
+// today's posture snapshot (share of time per state), session time and
+// s'up s'core, with % change badges against yesterday.
+// Data is today's + yesterday's posture_daily row, fetched on mount (each
+// expand) and on every Home focus while expanded.
+// Fonts are loaded by the host screen (home.tsx).
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Dimensions,
   Image,
 } from "react-native";
-import { router, useFocusEffect } from "expo-router";
-import { useFonts } from "expo-font";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState, useEffect } from "react";
-import { Ionicons } from "@expo/vector-icons";
-import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
-import HeaderBar from "@/src/components/ui/HeaderBar";
 import { useAuth } from "@/src/contexts/AuthContext";
 import {
   fetchDailyPosturePair,
   type DailyPosturePair,
-} from "../../src/services/posture/postureSyncService";
+} from "@/src/services/posture/postureSyncService";
 import { getCachedDailyPair, setCachedDailyPair } from "@/src/services/posture/dailyPostureCache";
 import { useTutorial } from "@/src/contexts/TutorialContext";
 import { colours } from "@/theme/colours";
@@ -30,8 +27,6 @@ import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
 import { formatSessionMins } from "@/src/lib/formatDuration";
 import { captureError } from "@/src/lib/sentry";
-
-export { default as ErrorBoundary } from "@/src/components/ui/ScreenErrorBoundary";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -180,19 +175,11 @@ const breakdownStyles = StyleSheet.create({
   },
 });
 
-export default function DailyScreen() {
+export default function DailySummary() {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
-  const { bottom: bottomInset } = useSafeAreaInsets();
-  // Clears the floating navigation bar: 72 high, 25 above the safe area (same as stats.tsx).
-  const scrollPaddingBottom = 72 + 25 + bottomInset + 16;
 
   const [dailyPair, setDailyPair] = useState<DailyPosturePair>({ today: null, previous: null });
-
-  const [fontsLoaded] = useFonts({
-    "Agrandir-Regular":  require("../../assets/fonts/Agrandir-Regular.otf"),
-    "Agrandir-GrandHeavy": require("../../assets/fonts/Agrandir-GrandHeavy.otf"),
-  });
 
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
@@ -218,7 +205,7 @@ export default function DailyScreen() {
       })
       // On failure, keep whatever is on screen (cached pair) rather than zeroing the day.
       .catch((err) => {
-        console.error("[DailyScreen] fetchDailyPosturePair failed", err);
+        console.error("[DailySummary] fetchDailyPosturePair failed", err);
         captureError(err, "daily-posture-pair", { dateKey: TODAY_KEY, hadCache: cached != null });
       });
   }, [userId]);
@@ -231,7 +218,7 @@ export default function DailyScreen() {
     }
   }, [isAuthenticated]);
 
-  // Refetch every time the tab is focused, so a just-finished session shows up.
+  // Refetch every time Home is focused, so a just-finished session shows up.
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) return;
@@ -310,12 +297,8 @@ export default function DailyScreen() {
     },
   };
 
-  if (!fontsLoaded) return null;
-
   return (
-    <View style={{ flex: 1, backgroundColor: "rgba(211, 193, 231, 0.64)" }}>
-      <BackgroundBlobs />
-
+    <View style={styles.container}>
       <InfoModal
         metricKey={activeInfo}
         onClose={() => setActiveInfo(null)}
@@ -323,122 +306,109 @@ export default function DailyScreen() {
         accentColor={PRIMARY_TEXT}
       />
 
-      <ScrollView
-        style={styles.container}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
-      >
-        {/* Top bar */}
-        <HeaderBar />
+      {/* Section label */}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionLabel}>today:</Text>
+      </View>
 
-        {/* Section label with back arrow */}
-        <View style={styles.sectionRow}>
-          <PressFeedback feedback="scale" onPress={() => router.back()} style={styles.backArrow} hitSlop={8}>
-            <Ionicons name="arrow-back" size={20} color={PRIMARY_TEXT} />
-          </PressFeedback>
-          <Text style={styles.sectionLabel}>today:</Text>
-        </View>
-
-        {tutorialStep === "snapshot-tip" && (
-          <View style={styles.tutorialTip}>
-            <Image
-              source={require("../../assets/images/mascot_tutorial.png")}
-              style={styles.tutorialTipMascot}
-              resizeMode="contain"
-            />
-            <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                here's your snapshot, the % of time you spent in each posture state today.
-              </Text>
-              <TutorialActions>
-                <PressFeedback feedback="link" onPress={() => setTutorialStep("snapshot-tip-stats")}>
-                  <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
-                </PressFeedback>
-              </TutorialActions>
-            </View>
+      {tutorialStep === "snapshot-tip" && (
+        <View style={styles.tutorialTip}>
+          <Image
+            source={require("../../../assets/images/mascot_tutorial.png")}
+            style={styles.tutorialTipMascot}
+            resizeMode="contain"
+          />
+          <View style={styles.tutorialTipTextWrap}>
+            <Text style={styles.tutorialTipText}>
+              here's your snapshot, the % of time you spent in each posture state today.
+            </Text>
+            <TutorialActions>
+              <PressFeedback feedback="link" onPress={() => setTutorialStep("snapshot-tip-stats")}>
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
+              </PressFeedback>
+            </TutorialActions>
           </View>
-        )}
+        </View>
+      )}
 
-        {/* S'napshot card */}
+      {/* S'napshot card */}
+      <View
+        style={[
+          styles.card,
+          styles.shadow,
+          styles.highlightable,
+          tutorialStep === "snapshot-tip" && styles.highlighted,
+        ]}
+      >
+        <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
+        <Text style={styles.cardTitle}>s'napshot</Text>
+        <ScoreBar postureAverages={POSTURE_AVERAGES} />
+        <PostureBreakdown stats={POSTURE_STATS} />
+      </View>
+
+      {tutorialStep === "snapshot-tip-stats" && (
+        <View style={styles.tutorialTip}>
+          <Image
+            source={require("../../../assets/images/mascot_tutorial.png")}
+            style={styles.tutorialTipMascot}
+            resizeMode="contain"
+          />
+          <View style={styles.tutorialTipTextWrap}>
+            <Text style={styles.tutorialTipText}>
+              here's your total session time and s'up score for today's s'pot sessions.
+            </Text>
+            <TutorialActions>
+              <PressFeedback feedback="link" onPress={() => setTutorialStep("go-settings-tip")}>
+                <Text style={styles.tutorialTipNext}>got it</Text>
+              </PressFeedback>
+            </TutorialActions>
+          </View>
+        </View>
+      )}
+
+      {/* Stats grid */}
+      <View style={styles.grid}>
+        {/* S'ession */}
         <View
           style={[
             styles.card,
+            styles.gridCell,
             styles.shadow,
             styles.highlightable,
-            tutorialStep === "snapshot-tip" && styles.highlighted,
+            tutorialStep === "snapshot-tip-stats" && styles.highlighted,
           ]}
         >
-          <InfoButton onPress={() => setActiveInfo("snapshot")} color={PRIMARY_TEXT} />
-          <Text style={styles.cardTitle}>s'napshot</Text>
-          <ScoreBar postureAverages={POSTURE_AVERAGES} />
-          <PostureBreakdown stats={POSTURE_STATS} />
+          <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
+          {showBadges && sessionChange != null && <ChangeBadge value={sessionChange} />}
+          <Text style={styles.statLabel}>s'ession</Text>
+          <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+            {formatSessionMins(totalDeskMs / 60_000)}
+          </Text>
         </View>
 
-        {tutorialStep === "snapshot-tip-stats" && (
-          <View style={styles.tutorialTip}>
-            <Image
-              source={require("../../assets/images/mascot_tutorial.png")}
-              style={styles.tutorialTipMascot}
-              resizeMode="contain"
-            />
-            <View style={styles.tutorialTipTextWrap}>
-              <Text style={styles.tutorialTipText}>
-                here's your total session time and s'up score for today's s'pot sessions.
-              </Text>
-              <TutorialActions>
-                <PressFeedback feedback="link" onPress={() => setTutorialStep("go-settings-tip")}>
-                  <Text style={styles.tutorialTipNext}>got it</Text>
-                </PressFeedback>
-              </TutorialActions>
-            </View>
-          </View>
-        )}
-
-        {/* Stats grid */}
-        <View style={styles.grid}>
-          {/* S'ession */}
-          <View
-            style={[
-              styles.card,
-              styles.gridCell,
-              styles.shadow,
-              styles.highlightable,
-              tutorialStep === "snapshot-tip-stats" && styles.highlighted,
-            ]}
-          >
-            <InfoButton onPress={() => setActiveInfo("session")} color={PRIMARY_TEXT} />
-            {showBadges && sessionChange != null && <ChangeBadge value={sessionChange} />}
-            <Text style={styles.statLabel}>s'ession</Text>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {formatSessionMins(totalDeskMs / 60_000)}
-            </Text>
-          </View>
-
-          {/* S'core */}
-          <View
-            style={[
-              styles.card,
-              styles.gridCell,
-              styles.shadow,
-              styles.highlightable,
-              tutorialStep === "snapshot-tip-stats" && styles.highlighted,
-            ]}
-          >
-            <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
-            {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
-            <Text style={styles.statLabel}>s'core</Text>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
-          </View>
+        {/* S'core */}
+        <View
+          style={[
+            styles.card,
+            styles.gridCell,
+            styles.shadow,
+            styles.highlightable,
+            tutorialStep === "snapshot-tip-stats" && styles.highlighted,
+          ]}
+        >
+          <InfoButton onPress={() => setActiveInfo("score")} color={PRIMARY_TEXT} />
+          {showBadges && scoreChange != null && <ChangeBadge value={scoreChange} />}
+          <Text style={styles.statLabel}>s'core</Text>
+          <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
         </View>
-
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    alignSelf: "stretch",
   },
 
   sectionRow: {
@@ -448,12 +418,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
     gap: 8,
-  },
-  backArrow: {
-    width: 32,
-    height: 32,
-    justifyContent: "center",
-    alignItems: "center",
   },
   sectionLabel: {
     fontFamily: "Agrandir-GrandHeavy",

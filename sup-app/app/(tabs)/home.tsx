@@ -1,9 +1,10 @@
-// Home tab: s'kipper's greeting, today's AI insight and a link to today's data.
+// Home tab: s'kipper's greeting, today's AI insight and a collapsible view of today's data.
 // The three chat bubbles animate in one after another once the profile and fonts are ready.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
-import { View, Text, StyleSheet, ScrollView, Animated, Image } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { View, Text, StyleSheet, ScrollView, Animated, Image, type LayoutChangeEvent } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle } from "react";
@@ -18,6 +19,7 @@ import {
 } from "../../src/services/user/profileService";
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
+import DailySummary from "@/src/components/daily/DailySummary";
 import { fetchLatestDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
@@ -138,12 +140,39 @@ export default function HomeScreen() {
   // Match the floating navigation bar: 72 high, 25 above the safe area.
   const tutorialBottomClearance = 72 + 25 + bottomInset + 16;
 
+  // Collapsible "today's data" section below the insight bubble. Kept open
+  // while its tutorial tips are showing so they can't be hidden mid-step.
+  const [showToday, setShowToday] = useState(false);
+  const todayExpanded = showToday
+    || tutorialStep === "snapshot-tip"
+    || tutorialStep === "snapshot-tip-stats";
+  const bubblesYRef = useRef(0);
+  const scrollToTodayRef = useRef(false);
+
+  // After the user opens the section, scroll it into view once it has laid out.
+  const onTodayLayout = (e: LayoutChangeEvent) => {
+    if (!scrollToTodayRef.current) return;
+    scrollToTodayRef.current = false;
+    const y = bubblesYRef.current + e.nativeEvent.layout.y;
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true }));
+  };
+
   // Cancel a pending tutorial scroll when the step changes or the screen unmounts.
   useEffect(() => () => {
     if (tutorialScrollFrame.current !== null) {
       cancelAnimationFrame(tutorialScrollFrame.current);
       tutorialScrollFrame.current = null;
     }
+  }, [tutorialStep]);
+
+  // After the last today's-data tip ("got it" or "skip page"), scroll back up
+  // to the header, where the "go to settings" tip shows.
+  useEffect(() => {
+    if (tutorialStep !== "go-settings-tip") return;
+    tutorialScrollFrame.current = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      tutorialScrollFrame.current = null;
+    });
   }, [tutorialStep]);
 
   // Scrolls the "data-tip" tutorial bubble into view on the next frame (after layout).
@@ -330,7 +359,7 @@ export default function HomeScreen() {
         style={styles.container}
         contentContainerStyle={[
           styles.scrollContent,
-          tutorialStep === "data-tip" && { paddingBottom: tutorialBottomClearance },
+          (tutorialStep === "data-tip" || todayExpanded) && { paddingBottom: tutorialBottomClearance },
         ]}
         onContentSizeChange={revealDataTip}
         showsVerticalScrollIndicator={false}
@@ -338,10 +367,14 @@ export default function HomeScreen() {
         {/* Wordmark + icons */}
         <HeaderBar />
 
-        <View style={[
-          styles.bubblesContainer,
-          tutorialStep === "data-tip" && styles.bubblesWithTutorial,
-        ]}>
+        <View
+          style={[
+            styles.bubblesContainer,
+            tutorialStep === "data-tip" && styles.bubblesWithTutorial,
+            todayExpanded && styles.bubblesExpanded,
+          ]}
+          onLayout={(e) => { bubblesYRef.current = e.nativeEvent.layout.y; }}
+        >
           {/* Greeting bubble */}
           <Animated.View style={[styles.bubble, styles.bubbleLeft, styles.shadow, greetingStyle]}>
             <TypedGreeting ref={greetingRef} name={displayName(currentUser)} />
@@ -394,7 +427,7 @@ export default function HomeScreen() {
             accentColor={PRIMARY_TEXT}
           />
 
-          {/* Action bubble — navigate to daily summary */}
+          {/* Action bubble — expands/collapses today's data below */}
           <View style={styles.actionBubbleWrap}>
             <Animated.View style={actionStyle}>
               <PressFeedback
@@ -405,17 +438,29 @@ export default function HomeScreen() {
                   styles.highlightable,
                   tutorialStep === "data-tip" && styles.highlighted,
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: todayExpanded }}
                 onPress={() => {
-                  logNavbarClick(userId, "today_summary");
+                  const expanding = !todayExpanded;
+                  if (expanding) {
+                    logNavbarClick(userId, "today_summary");
+                    scrollToTodayRef.current = true;
+                  }
                   if (tutorialStep === "data-tip") {
                     setTutorialStep("snapshot-tip");
-                  } else {
-                    dismissTutorial();
+                    setShowToday(true);
+                    return;
                   }
-                  router.push("/daily");
+                  dismissTutorial();
+                  setShowToday(expanding);
                 }}
               >
-                <Text style={styles.bubbleActionText}>see today's data {'>>'}</Text>
+                <View style={styles.bubbleActionRow}>
+                  <Text style={styles.bubbleActionText}>
+                    {todayExpanded ? "hide today's data" : "see today's data"}
+                  </Text>
+                  <Ionicons name={todayExpanded ? "chevron-up" : "chevron-down"} size={18} color="white" />
+                </View>
               </PressFeedback>
             </Animated.View>
 
@@ -445,12 +490,18 @@ export default function HomeScreen() {
                   resizeMode="contain"
                 />
                 <View style={styles.tutorialTipTextWrap}>
-                  <Text style={styles.tutorialTipText}>click on the "see today's data" button to see your posture data for today</Text>
+                  <Text style={styles.tutorialTipText}>click on the "see today's data" button to open your posture data for today</Text>
                   <TutorialActions />
                 </View>
               </View>
             )}
           </View>
+
+          {todayExpanded && (
+            <View style={styles.todaySection} onLayout={onTodayLayout}>
+              <DailySummary />
+            </View>
+          )}
         </View>
       </ScrollView>
     </Animated.View>
@@ -474,6 +525,13 @@ const styles = StyleSheet.create({
   bubblesWithTutorial: {
     flexBasis: "auto",
     flexShrink: 0,
+  },
+  // Today's data is open: the page scrolls, so drop the centring gap below.
+  bubblesExpanded: {
+    paddingBottom: 0,
+  },
+  todaySection: {
+    marginTop: 8,
   },
 
   bubble: {
@@ -536,6 +594,11 @@ const styles = StyleSheet.create({
     color: PRIMARY_TEXT,
     opacity: 0.85,
     lineHeight: 20,
+  },
+  bubbleActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   bubbleActionText: {
     fontFamily: "Agrandir-Regular",

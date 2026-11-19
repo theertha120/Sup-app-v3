@@ -23,7 +23,6 @@ export type TutorialStep =
   // (navbar tab or header icon) so they learn how to get there; tapping the
   // highlighted target starts that page's tips.
   | "go-home-tip"
-  | "go-daily-tip"
   | "go-settings-tip"
   | "go-sensor-tip"
   | "go-desk-tip"

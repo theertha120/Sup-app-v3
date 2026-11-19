@@ -25,7 +25,7 @@ feature is in progress; when the release ships, move anything worth keeping
 into its feature section below and clear this list.
 
 - [ ] **Exercise Log release:** complete the Exercise Log section below on a dev-client/release build with the migration applied to the test database.
-- [ ] **Navigation regression:** all six tabs open the right screen; Exercise is fourth, immediately after Stats; the selection highlight fits a narrow phone.
+- [ ] **Navigation regression:** all five tabs open the right screen (there is no separate Daily tab); Exercise is fourth, immediately after Stats; the selection highlight fits a narrow phone.
 - [ ] Record actual device results in [exercise-log-test-results.md](exercise-log-test-results.md). Automated tests do not satisfy the manual items.
 
 ---
@@ -91,7 +91,7 @@ settings. Do each on both platforms when you can and note what you saw.
 - [ ] End a session → Desk shows the **summary** (replay with scrubber, highlights, comparison with the last session, s'kipper message).
 - [ ] Kill and reopen → the latest summary still shows in Desk mode.
 - [ ] Desk → under **recent history**, the session end summary and s'update history are separate cards, both collapsed by default (also after ending a new session); tapping each header expands/collapses it (the ⓘ on the summary still opens its info). While collapsed, the page scrolls normally.
-- [ ] Wait ~10s after ending, open **Daily** → today's s'up s'core and minutes updated.
+- [ ] Wait ~10s after ending, open **Home** and expand **see today's data** → today's s'up s'core and minutes updated.
 - [ ] **Stats week** → last bar is today; labels are the real weekdays.
 - [ ] **Stats month** → wk 1–4, plus wk 5 only if the month has a 29th; tap a bar → correct date range.
 - [ ] **Stats year** → each month's bar matches that month.
@@ -132,6 +132,8 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] During a session, a live s'kipper insight appears.
 - [ ] At the end of a session, the s'kipper message appears in the summary.
 - [ ] Home shows today's daily insight (or yesterday's if today's isn't generated yet).
+- [ ] Home → **see today's data** below the insight expands today's s'napshot, s'ession and s'core and scrolls them into view above the navbar; tap again (**hide today's data**) to collapse. ⓘ popups and % badges work as before.
+- [ ] Tutorial on Home: the "see today's data" tip opens the section and shows the s'napshot tips in place; "got it" scrolls back up to the settings prompt in the header; "skip page" on any Home tip goes straight to the settings prompt.
 
 ## Offline
 

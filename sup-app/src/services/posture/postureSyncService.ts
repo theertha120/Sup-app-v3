@@ -480,7 +480,7 @@ function getLocalDateKeys(): { todayLocal: string; yesterdayLocal: string } {
  * Idempotent within a day, so repeated opens are safe.
  *
  * Dates are the device's local calendar day, matching how "today" is defined
- * elsewhere in the app (daily.tsx, home.tsx) — not UTC.
+ * elsewhere in the app (home.tsx) — not UTC.
  */
 export async function checkStreakOnAppOpen(userId: string): Promise<void> {
   try {
