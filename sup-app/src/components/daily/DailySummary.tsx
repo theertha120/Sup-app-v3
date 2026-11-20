@@ -190,7 +190,7 @@ function CompletedGoalsCard({ goals, highlighted, onInfo }: {
       <InfoButton onPress={onInfo} color={PRIMARY_TEXT} />
       <Text style={styles.cardTitle}>{"s'goals completed"}</Text>
       {goals.length === 0 ? (
-        <Text style={styles.goalsEmpty}>{"no goals completed yet today. tick one off in \"your goals\" below."}</Text>
+        <Text style={styles.goalsEmpty}>{"no goals completed yet today. goals you pick below complete themselves as you go."}</Text>
       ) : (
         goals.map((goal) => (
           <View key={goal.id} style={styles.goalRow}>
@@ -439,7 +439,7 @@ export default function DailySummary({ completedGoals = [], onTipLayout }: {
 
       {tutorialStep === "goals-completed-tip" && (
         <GoalsTutorialTip
-          text="goals you tick off today show up here."
+          text="goals you complete today show up here. the app checks your check-ins, workouts and desk sessions for you."
           next="goals-pick-tip"
           onLayout={onTipLayout}
         />

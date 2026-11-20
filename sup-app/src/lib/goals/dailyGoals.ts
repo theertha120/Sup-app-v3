@@ -1,6 +1,8 @@
 // Picks each day's goal offers from the hardcoded bank. The pick is a hash of
 // user + day, so offers stay the same all day (and across devices) without
-// storing them, and change each new local day.
+// storing them, and change each new local day. Check-in goals the user's
+// reminder settings can't deliver are left out before picking.
+import { ruleFeasible, type CheckInSettings } from "./goalRules";
 import {
   GOAL_BANK,
   type GoalDifficulty,
@@ -14,7 +16,7 @@ export type { GoalDifficulty, GoalSection, GoalSet } from "./goalBank";
 export const DIFFICULTIES: readonly GoalDifficulty[] = ["easy", "medium", "hard"];
 
 export interface GoalOffer {
-  /** `${set}:${section}:${difficulty}:${index}` — stable while the bank isn't reordered. */
+  /** The goal's rule (see goalRules.ts), also stored as daily_goals.goal_id. */
   goalId: string;
   set: GoalSet;
   section: GoalSection;
@@ -63,15 +65,17 @@ export function dailyOffers(
   userId: string,
   dateKey: string,
   set: GoalSet,
+  settings: CheckInSettings,
 ): { section: GoalSection; offers: GoalOffer[] }[] {
   return sectionsFor(set).map((section) => {
     const tiers = tiersFor(set, section)!;
     return {
       section,
-      offers: DIFFICULTIES.map((difficulty) => {
-        const list = tiers[difficulty];
-        const index = hash(`${userId}|${dateKey}|${set}|${section}|${difficulty}`) % list.length;
-        return { goalId: `${set}:${section}:${difficulty}:${index}`, set, section, difficulty, text: list[index] };
+      offers: DIFFICULTIES.flatMap((difficulty) => {
+        const list = tiers[difficulty].filter((g) => ruleFeasible(g.rule, settings));
+        if (list.length === 0) return [];
+        const goal = list[hash(`${userId}|${dateKey}|${set}|${section}|${difficulty}`) % list.length];
+        return [{ goalId: goal.rule, set, section, difficulty, text: goal.text }];
       }),
     };
   });

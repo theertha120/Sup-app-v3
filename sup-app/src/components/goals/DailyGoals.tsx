@@ -1,6 +1,8 @@
 // Goals cards inside home's "today:" section (after DailySummary's cards):
-// "your goals" (picked goals to tick off, plus the history link) and "pick
-// your goals" (one easy/medium/hard offer per section; any number can be picked).
+// "your goals" (picked goals with live progress, plus the history link) and
+// "pick your goals" (one easy/medium/hard offer per section; any number can be
+// picked). Goals complete themselves from the app's data (goalRules.ts) and
+// then move to the "s'goals completed" card.
 // State comes from useDailyGoals() in home.tsx, which also feeds the
 // "s'goals completed" card in DailySummary. Fonts are loaded by home.tsx.
 // Text sizes follow DailySummary: card titles GrandHeavy 14, rows Regular 13.
@@ -15,6 +17,7 @@ import { useTutorial, type TutorialStep } from "@/src/contexts/TutorialContext";
 import { InfoButton, InfoModal, type InfoModalEntry } from "@/src/components/ui/InfoModal";
 import type { DailyGoalsState } from "@/src/hooks/useDailyGoals";
 import type { GoalDifficulty, GoalSection } from "@/src/lib/goals/dailyGoals";
+import type { GoalProgress } from "@/src/lib/goals/goalRules";
 
 const PRIMARY_TEXT = "#1D014A";
 const ACCENT = "#5222AE";
@@ -39,17 +42,20 @@ export const GOAL_INFO: Record<"todaysGoals" | "completedGoals", InfoModalEntry>
       "every day you get 3 new goals in each section: one easy, one medium and one hard.\n\n" +
       "• sections: posture and exercise for everyone. sitting (desk mode time) is added once you've tracked a s'pot session.\n" +
       "• goals are picked at random from our goal list, and stay the same all day. new ones arrive at midnight (your phone's time).\n" +
-      "• in \"pick your goals\", tap + to add as many as you like, from any section and difficulty. tap an added goal again to remove it.\n" +
-      "• your added goals show under \"your goals\". tick one when you've done it. it's on the honour system: the app doesn't check it against your data.\n" +
-      "• goals you add but don't tick are cleared at the end of the day.",
+      "• in \"pick your goals\", tap + to add as many as you like, from any section and difficulty. tap an added goal again (or its ✕) to remove it.\n" +
+      "• your added goals show under \"your goals\" with your progress. there's nothing to tick: each goal completes itself once the app sees you've done it.\n" +
+      "• posture goals use your responses to check-ins (tapping \"done\" or opening one counts; dismissing doesn't). hardware users also get s'core and posture goals from desk mode. you only get check-in goals your reminder settings can deliver.\n" +
+      "• exercise goals use workouts you log for today in exercise.\n" +
+      "• sitting goals use your desk mode sessions, once each session has ended.\n" +
+      "• goals that aren't done by midnight are cleared.",
   },
   completedGoals: {
     title: "completed goals",
     body:
-      "every goal you tick off is saved here, under the day you picked it for.\n\n" +
-      "• today's ticked goals also show in \"s'goals completed\" in today's data.\n" +
-      "• untick a goal to take it back out. a completed goal can't be removed from today's list.\n" +
-      "• goals you added but never ticked aren't kept.\n" +
+      "every goal you complete is saved here, under the day you picked it for.\n\n" +
+      "• goals complete themselves: the app checks your check-ins, workouts and desk sessions against each goal you picked.\n" +
+      "• today's completed goals also show in \"s'goals completed\" in today's data.\n" +
+      "• goals you picked but didn't complete that day aren't kept.\n" +
       "• your history is saved to your account, so it stays when you sign out or change phones.",
   },
 };
@@ -89,12 +95,56 @@ export function DifficultyPill({ difficulty }: { difficulty: GoalDifficulty }) {
   );
 }
 
+/** One open goal with its progress towards completion. */
+function GoalProgressRow({ goal, progress, busy, onRemove }: {
+  goal: DailyGoalsState["goals"][number];
+  progress: GoalProgress | undefined;
+  busy: boolean;
+  onRemove: () => void;
+}) {
+  const fraction = progress ? Math.min(1, progress.current / Math.max(1, progress.target)) : 0;
+  return (
+    <View style={styles.goalRow}>
+      <View style={styles.goalTextWrap}>
+        <Text style={styles.rowText}>{goal.goal_text}</Text>
+        <View style={styles.metaRow}>
+          <DifficultyPill difficulty={goal.difficulty} />
+          <Text style={styles.metaText}>{SECTION_META[goal.section].label}</Text>
+          {progress && (
+            <Text style={styles.progressText}>
+              {`${Math.min(progress.current, progress.target)} / ${progress.target} ${progress.unit}`}
+            </Text>
+          )}
+        </View>
+        <View
+          style={styles.progressTrack}
+          accessibilityRole="progressbar"
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
+        >
+          <View style={[styles.progressFill, { width: `${fraction * 100}%` }]} />
+        </View>
+        {progress?.blocked && <Text style={styles.blockedText}>{progress.blocked}</Text>}
+      </View>
+      <PressFeedback
+        feedback="scale"
+        onPress={onRemove}
+        disabled={busy}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`remove goal: ${goal.goal_text}`}
+      >
+        <Ionicons name="close" size={18} color={PRIMARY_TEXT} style={styles.removeIcon} />
+      </PressFeedback>
+    </View>
+  );
+}
+
 export default function DailyGoals({ state, onTipLayout }: {
   state: DailyGoalsState;
   /** Called with the y (within this component) a tutorial step should scroll to. */
   onTipLayout?: (y: number) => void;
 }) {
-  const { sections, goals, loading, error, pending, pick, unpick, toggleComplete, reload } = state;
+  const { sections, goals, openGoals, progress, hasCheckIns, loading, error, pending, pick, unpick, reload } = state;
   const { tutorialStep } = useTutorial();
   const [showInfo, setShowInfo] = useState(false);
   const pickedById = new Map(goals.map((g) => [g.goal_id, g]));
@@ -112,7 +162,7 @@ export default function DailyGoals({ state, onTipLayout }: {
         accentColor={PRIMARY_TEXT}
       />
 
-      {/* Picked goals to tick off, plus the history link */}
+      {/* Picked goals with progress, plus the history link */}
       <View
         style={[styles.card, styles.shadow]}
         onLayout={(e) => { goalsCardYRef.current = e.nativeEvent.layout.y; }}
@@ -126,37 +176,22 @@ export default function DailyGoals({ state, onTipLayout }: {
           </PressFeedback>
         )}
 
-        {goals.length === 0 ? (
-          <Text style={styles.emptyText}>{"no goals yet. add some from \"pick your goals\" below."}</Text>
+        {openGoals.length === 0 ? (
+          <Text style={styles.emptyText}>
+            {goals.length === 0
+              ? "no goals yet. add some from \"pick your goals\" below."
+              : "all done for now! add more from \"pick your goals\" below."}
+          </Text>
         ) : (
-          goals.map((goal) => {
-            const done = goal.completed_at != null;
-            return (
-              <PressFeedback
-                key={goal.id}
-                feedback="link"
-                style={styles.goalRow}
-                onPress={() => void toggleComplete(goal)}
-                disabled={pending.has(goal.id)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: done, busy: pending.has(goal.id) }}
-                accessibilityLabel={`${goal.difficulty} ${goal.section} goal: ${goal.goal_text}`}
-              >
-                <Ionicons
-                  name={done ? "checkmark-circle" : "ellipse-outline"}
-                  size={22}
-                  color={done ? DIFFICULTY_COLOURS.easy : ACCENT}
-                />
-                <View style={styles.goalTextWrap}>
-                  <Text style={[styles.rowText, done && styles.rowTextDone]}>{goal.goal_text}</Text>
-                  <View style={styles.metaRow}>
-                    <DifficultyPill difficulty={goal.difficulty} />
-                    <Text style={styles.metaText}>{SECTION_META[goal.section].label}</Text>
-                  </View>
-                </View>
-              </PressFeedback>
-            );
-          })
+          openGoals.map((goal) => (
+            <GoalProgressRow
+              key={goal.id}
+              goal={goal}
+              progress={progress[goal.id]}
+              busy={pending.has(goal.id)}
+              onRemove={() => void unpick(goal)}
+            />
+          ))
         )}
 
         <PressFeedback
@@ -179,7 +214,7 @@ export default function DailyGoals({ state, onTipLayout }: {
 
       {tutorialStep === "goals-history-tip" && (
         <GoalsTutorialTip
-          text={"tap \"history of goals\" to see every goal you've ever completed."}
+          text={"tap \"history of completed goals\" to see every goal you've ever completed."}
           next="go-settings-tip"
           nextLabel="got it"
           onLayout={() => onTipLayout?.(goalsCardYRef.current + historyLinkYRef.current - 24)}
@@ -188,7 +223,7 @@ export default function DailyGoals({ state, onTipLayout }: {
 
       {tutorialStep === "goals-pick-tip" && (
         <GoalsTutorialTip
-          text={"every day you get an easy, medium and hard goal per section. tap + to add any you want, then tick them off in \"your goals\"."}
+          text={"every day you get an easy, medium and hard goal per section. tap + to add any. they complete themselves once the app sees you've done them."}
           next="goals-history-tip"
           onLayout={onTipLayout}
         />
@@ -213,6 +248,13 @@ export default function DailyGoals({ state, onTipLayout }: {
                 <Ionicons name={SECTION_META[section].icon} size={14} color={PRIMARY_TEXT} style={styles.groupIcon} />
                 <Text style={styles.groupLabel}>{SECTION_META[section].label}</Text>
               </View>
+              {offers.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {section === "posture" && !hasCheckIns
+                    ? "posture goals use check-ins. turn on reminders in settings to get them."
+                    : "no goals available here today."}
+                </Text>
+              ) : (
               <View style={styles.groupList}>
                 {offers.map((offer, i) => {
                   const picked = pickedById.get(offer.goalId);
@@ -242,6 +284,7 @@ export default function DailyGoals({ state, onTipLayout }: {
                   );
                 })}
               </View>
+              )}
             </View>
           ))
         )}
@@ -323,6 +366,33 @@ const styles = StyleSheet.create({
   },
   goalTextWrap: {
     flex: 1,
+  },
+  progressText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 11,
+    color: ACCENT,
+    marginLeft: "auto",
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(63, 36, 131, 0.08)",
+    overflow: "hidden",
+    marginTop: 6,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#AB99FA",
+  },
+  blockedText: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 11,
+    color: "#C0313A",
+    marginTop: 4,
+  },
+  removeIcon: {
+    opacity: 0.5,
   },
   rowText: {
     flex: 1,

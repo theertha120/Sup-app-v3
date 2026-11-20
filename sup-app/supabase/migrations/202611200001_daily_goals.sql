@@ -1,5 +1,6 @@
 -- Daily goals the user picked from the app's hardcoded bank (src/lib/goals/goalBank.ts).
--- One row per picked goal per local day; completed_at is set when marked done.
+-- One row per picked goal per local day; completed_at is set when the app finds
+-- the goal done. goal_id is the goal's rule (src/lib/goals/goalRules.ts).
 -- goal_text is copied in so history survives later edits to the bank.
 create table public.daily_goals (
   id uuid primary key default gen_random_uuid(),

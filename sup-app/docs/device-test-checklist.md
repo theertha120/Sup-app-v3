@@ -123,12 +123,16 @@ Use a test database with `202611200001_daily_goals.sql` applied.
 
 - [ ] **Goal set:** an account with no posture sessions sees posture and exercise goals only; after its first s'pot session, returning to Home also shows sitting goals.
 - [ ] **Offers:** each section shows one easy, one medium and one hard goal. They stay the same after relaunch the same day and change after local midnight (reopen Home).
-- [ ] **Pick and complete:** pick goals from different sections and difficulties → they appear under "your goals". Tick one → it is struck through and shows in "s'goals completed" in today's data. Untick → it leaves that card. Tapping a picked, unfinished offer removes it; a completed one can't be removed.
+- [ ] **Pick and remove:** pick goals from different sections and difficulties → they appear under "your goals" with a progress bar and "x / y" count. The ✕, or tapping the picked offer again, removes an unfinished goal; a completed one can't be removed.
+- [ ] **Auto-complete, check-ins:** pick a posture check-in goal (e.g. respond to 2 check-ins), then tap "done" on real check-ins → progress rises on returning to the app and the goal moves to "s'goals completed" with no tap needed. Dismissing a check-in doesn't count, and "without dismissing any" goals show it's no longer possible.
+- [ ] **Auto-complete, exercise:** pick an exercise goal, log a matching workout dated today in Exercise, go back to Home → it completes. A workout dated an earlier day doesn't count.
+- [ ] **Auto-complete, desk mode:** pick a sitting goal (hardware account), track and end a desk session long enough → back on Home it completes within about a minute. A session still in progress doesn't count until it's ended.
+- [ ] **Reminder settings:** on light reminders with only the morning preset, no posture goal asks for more than 3 check-ins or for check-ins outside the morning. With reminders off, a no-hardware account sees "turn on reminders in settings" under posture.
 - [ ] **Collapsed by default:** open today's data, switch tabs and come back (and relaunch) → Home shows "see today's data" collapsed; the "your goals" and "pick your goals" cards sit under "today:" with the other cards, in the same fonts and sizes.
-- [ ] **Explainers:** the "?" on "your goals", on "s'goals completed" and next to "completed goals" on the history screen each open the right explanation; "got it" closes it.
-- [ ] **History:** "history of goals" opens the history screen grouped by day, newest first; persists after relaunch and sign-out/sign-in; a second account doesn't see the first's goals.
+- [ ] **Explainers:** the "?" on "your goals" (explains auto-completion and where each section's data comes from), on "s'goals completed" and next to "completed goals" on the history screen each open the right explanation; "got it" closes it.
+- [ ] **History:** "history of completed goals" opens the history screen grouped by day, newest first; persists after relaunch and sign-out/sign-in; a second account doesn't see the first's goals.
 - [ ] **Layout:** with today's data open, the last goal card clears the floating nav bar; the home tutorial's "see today's data" tip still scrolls into view.
-- [ ] **Offline:** picking or ticking with no network shows an error and no false success.
+- [ ] **Offline:** picking with no network shows an error and no false success; progress just stops updating until the network returns.
 
 ## Reminders and notifications
 
