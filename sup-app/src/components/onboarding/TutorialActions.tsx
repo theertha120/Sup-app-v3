@@ -27,6 +27,9 @@ export default function TutorialActions({ children, hideSkip = false }: Tutorial
       case "data-tip":
       case "snapshot-tip":
       case "snapshot-tip-stats":
+      case "goals-completed-tip":
+      case "goals-pick-tip":
+      case "goals-history-tip":
         setTutorialStep("go-settings-tip");
         break;
       case "settings-tip":

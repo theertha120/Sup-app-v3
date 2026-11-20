@@ -1,4 +1,5 @@
-// Home tab: s'kipper's greeting, today's AI insight and a collapsible view of today's data.
+// Home tab: s'kipper's greeting, today's AI insight and a collapsible view of today's data
+// (incl. today's goals).
 // The three chat bubbles animate in one after another once the profile and fonts are ready.
 import PressFeedback from "@/src/components/ui/PressFeedback";
 import TutorialActions from "@/src/components/onboarding/TutorialActions";
@@ -20,6 +21,8 @@ import {
 import BackgroundBlobs from "@/src/components/ui/BackgroundBlobs";
 import HeaderBar from "@/src/components/ui/HeaderBar";
 import DailySummary from "@/src/components/daily/DailySummary";
+import DailyGoals from "@/src/components/goals/DailyGoals";
+import { useDailyGoals } from "@/src/hooks/useDailyGoals";
 import { fetchLatestDailyAiSummary } from "@/src/services/ai/dailyAiSummaryService";
 import { logNavbarClick } from "@/src/services/analytics/navbarClickService";
 import { useTutorial } from "@/src/contexts/TutorialContext";
@@ -145,16 +148,29 @@ export default function HomeScreen() {
   const [showToday, setShowToday] = useState(false);
   const todayExpanded = showToday
     || tutorialStep === "snapshot-tip"
-    || tutorialStep === "snapshot-tip-stats";
+    || tutorialStep === "snapshot-tip-stats"
+    || tutorialStep === "goals-completed-tip"
+    || tutorialStep === "goals-pick-tip"
+    || tutorialStep === "goals-history-tip";
   const bubblesYRef = useRef(0);
+  const todayYRef = useRef(0);
+  const goalsYRef = useRef(0);
   const scrollToTodayRef = useRef(false);
 
   // After the user opens the section, scroll it into view once it has laid out.
   const onTodayLayout = (e: LayoutChangeEvent) => {
+    todayYRef.current = e.nativeEvent.layout.y;
     if (!scrollToTodayRef.current) return;
     scrollToTodayRef.current = false;
     const y = bubblesYRef.current + e.nativeEvent.layout.y;
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true }));
+  };
+
+  // Goals tutorial tips sit further down today's data; scroll each one into
+  // view once laid out. `y` is the tip's offset within today's section.
+  const scrollToTodayTip = (y: number) => {
+    const target = bubblesYRef.current + todayYRef.current + y;
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, target - 16), animated: true }));
   };
 
   // Cancel a pending tutorial scroll when the step changes or the screen unmounts.
@@ -186,6 +202,9 @@ export default function HomeScreen() {
       tutorialScrollFrame.current = null;
     });
   };
+
+  // Shared by the goals section and the "completed today" card in DailySummary.
+  const dailyGoals = useDailyGoals();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -254,6 +273,8 @@ export default function HomeScreen() {
       }).start();
 
       hasAnimatedRef.current = false;
+      // Today's data (incl. goals) starts collapsed on every visit to Home.
+      setShowToday(false);
 
       return () => {
         // clean up timers when leaving screen
@@ -472,7 +493,7 @@ export default function HomeScreen() {
                   resizeMode="contain"
                 />
                 <View style={styles.tutorialTipTextWrap}>
-                  <Text style={styles.tutorialTipText}>get daily personalised goals here every morning!</Text>
+                  <Text style={styles.tutorialTipText}>{"s'kipper gives you a personalised insight here every morning!"}</Text>
                   <TutorialActions>
                     <PressFeedback feedback="link" onPress={() => setTutorialStep("data-tip")}>
                       <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
@@ -499,7 +520,10 @@ export default function HomeScreen() {
 
           {todayExpanded && (
             <View style={styles.todaySection} onLayout={onTodayLayout}>
-              <DailySummary />
+              <DailySummary completedGoals={dailyGoals.completedToday} onTipLayout={scrollToTodayTip} />
+              <View onLayout={(e) => { goalsYRef.current = e.nativeEvent.layout.y; }}>
+                <DailyGoals state={dailyGoals} onTipLayout={(y) => scrollToTodayTip(goalsYRef.current + y)} />
+              </View>
             </View>
           )}
         </View>

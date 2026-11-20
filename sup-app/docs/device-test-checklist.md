@@ -117,6 +117,19 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] **Accessibility:** VoiceOver/TalkBack can identify each date, selected day, rating, Save, workout options and tab. Older/Newer week accessibility actions navigate the correct way; offscreen week pages are not read out.
 - [ ] **Navigation while tracking:** with a real s’pot session active, open Exercise and save a manual workout → Desk tracking continues; Stats, Community and Daily still open normally. No squat/walk workout is automatically added by this feature.
 
+## Daily goals
+
+Use a test database with `202611200001_daily_goals.sql` applied.
+
+- [ ] **Goal set:** an account with no posture sessions sees posture and exercise goals only; after its first s'pot session, returning to Home also shows sitting goals.
+- [ ] **Offers:** each section shows one easy, one medium and one hard goal. They stay the same after relaunch the same day and change after local midnight (reopen Home).
+- [ ] **Pick and complete:** pick goals from different sections and difficulties → they appear under "your goals". Tick one → it is struck through and shows in "s'goals completed" in today's data. Untick → it leaves that card. Tapping a picked, unfinished offer removes it; a completed one can't be removed.
+- [ ] **Collapsed by default:** open today's data, switch tabs and come back (and relaunch) → Home shows "see today's data" collapsed; the "your goals" and "pick your goals" cards sit under "today:" with the other cards, in the same fonts and sizes.
+- [ ] **Explainers:** the "?" on "your goals", on "s'goals completed" and next to "completed goals" on the history screen each open the right explanation; "got it" closes it.
+- [ ] **History:** "history of goals" opens the history screen grouped by day, newest first; persists after relaunch and sign-out/sign-in; a second account doesn't see the first's goals.
+- [ ] **Layout:** with today's data open, the last goal card clears the floating nav bar; the home tutorial's "see today's data" tip still scrolls into view.
+- [ ] **Offline:** picking or ticking with no network shows an error and no false success.
+
 ## Reminders and notifications
 
 - [ ] First launch → notification permission prompt. Deny → app still works.
@@ -133,7 +146,7 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] At the end of a session, the s'kipper message appears in the summary.
 - [ ] Home shows today's daily insight (or yesterday's if today's isn't generated yet).
 - [ ] Home → **see today's data** below the insight expands today's s'napshot, s'ession and s'core and scrolls them into view above the navbar; tap again (**hide today's data**) to collapse. ⓘ popups and % badges work as before.
-- [ ] Tutorial on Home: the "see today's data" tip opens the section and shows the s'napshot tips in place; "got it" scrolls back up to the settings prompt in the header; "skip page" on any Home tip goes straight to the settings prompt.
+- [ ] Tutorial on Home: the "see today's data" tip opens the section and shows the s'napshot tips in place, then "s'goals completed", picking goals and "history of goals" — each tip scrolls into view with its card highlighted (for "history of goals", the link itself is on screen above the tip); "got it" on the last one scrolls back up to the settings prompt in the header; "skip page" on any Home tip goes straight to the settings prompt.
 
 ## Offline
 

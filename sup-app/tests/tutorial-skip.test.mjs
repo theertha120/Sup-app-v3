@@ -34,7 +34,7 @@ function skip(tutorialStep, options = {}) {
 // Every page is reached from the header or navbar: skipping shows the
 // "go to" prompt and the user navigates themselves.
 for (const [steps, prompt] of [
-  [['goals-tip', 'data-tip', 'snapshot-tip', 'snapshot-tip-stats'], 'go-settings-tip'],
+  [['goals-tip', 'data-tip', 'snapshot-tip', 'snapshot-tip-stats', 'goals-completed-tip', 'goals-pick-tip', 'goals-history-tip'], 'go-settings-tip'],
   [['settings-tip', 'coaching-tip'], 'go-sensor-tip'],
   [['figure-tip', 'supdate-tip', 'end-session-tip'], 'go-stats-tip'],
   [['stats-tip'], 'go-community-tip'],

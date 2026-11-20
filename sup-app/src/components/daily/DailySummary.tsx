@@ -1,6 +1,7 @@
 // Today's daily summary, shown in Home's collapsible "today's data" section:
 // today's posture snapshot (share of time per state), session time and
-// s'up s'core, with % change badges against yesterday.
+// s'up s'core, with % change badges against yesterday, and the goals
+// completed today (passed in by home.tsx).
 // Data is today's + yesterday's posture_daily row, fetched on mount (each
 // expand) and on every Home focus while expanded.
 // Fonts are loaded by the host screen (home.tsx).
@@ -27,6 +28,9 @@ import { InfoButton, InfoModal } from "@/src/components/ui/InfoModal";
 import { toLocalDateKey } from "@/src/lib/dateKey";
 import { formatSessionMins } from "@/src/lib/formatDuration";
 import { captureError } from "@/src/lib/sentry";
+import { Ionicons } from "@expo/vector-icons";
+import type { DailyGoal } from "@/src/lib/goals/dailyGoals";
+import { DifficultyPill, GOAL_INFO, GoalsTutorialTip } from "@/src/components/goals/DailyGoals";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PRIMARY_TEXT = "#1D014A";
@@ -175,7 +179,36 @@ const breakdownStyles = StyleSheet.create({
   },
 });
 
-export default function DailySummary() {
+/** Goals ticked off today, from home's useDailyGoals(). */
+function CompletedGoalsCard({ goals, highlighted, onInfo }: {
+  goals: DailyGoal[];
+  highlighted: boolean;
+  onInfo: () => void;
+}) {
+  return (
+    <View style={[styles.card, styles.shadow, styles.highlightable, highlighted && styles.highlighted]}>
+      <InfoButton onPress={onInfo} color={PRIMARY_TEXT} />
+      <Text style={styles.cardTitle}>{"s'goals completed"}</Text>
+      {goals.length === 0 ? (
+        <Text style={styles.goalsEmpty}>{"no goals completed yet today. tick one off in \"your goals\" below."}</Text>
+      ) : (
+        goals.map((goal) => (
+          <View key={goal.id} style={styles.goalRow}>
+            <Ionicons name="checkmark-circle" size={18} color={SEGMENT_COLORS.upright} />
+            <Text style={styles.goalText}>{goal.goal_text}</Text>
+            <DifficultyPill difficulty={goal.difficulty} />
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+export default function DailySummary({ completedGoals = [], onTipLayout }: {
+  completedGoals?: DailyGoal[];
+  /** Called with a goals tutorial tip's y (within this component) so home can scroll to it. */
+  onTipLayout?: (y: number) => void;
+}) {
   const { isAuthenticated, userId } = useAuth();
   const { tutorialStep, setTutorialStep } = useTutorial();
 
@@ -290,6 +323,7 @@ export default function DailySummary() {
       title: "s'ession",
       body: "total time tracked in active posture sessions today. the more you track, the more your s'core reflects your real posture.",
     },
+    completedGoals: GOAL_INFO.completedGoals,
     score: {
       title: "s'core",
       body:
@@ -358,8 +392,8 @@ export default function DailySummary() {
               here's your total session time and s'up score for today's s'pot sessions.
             </Text>
             <TutorialActions>
-              <PressFeedback feedback="link" onPress={() => setTutorialStep("go-settings-tip")}>
-                <Text style={styles.tutorialTipNext}>got it</Text>
+              <PressFeedback feedback="link" onPress={() => setTutorialStep("goals-completed-tip")}>
+                <Text style={styles.tutorialTipNext}>next {'>>'}</Text>
               </PressFeedback>
             </TutorialActions>
           </View>
@@ -402,6 +436,20 @@ export default function DailySummary() {
           <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{supScore} pts</Text>
         </View>
       </View>
+
+      {tutorialStep === "goals-completed-tip" && (
+        <GoalsTutorialTip
+          text="goals you tick off today show up here."
+          next="goals-pick-tip"
+          onLayout={onTipLayout}
+        />
+      )}
+
+      <CompletedGoalsCard
+        goals={completedGoals}
+        highlighted={tutorialStep === "goals-completed-tip"}
+        onInfo={() => setActiveInfo("completedGoals")}
+      />
     </View>
   );
 }
@@ -527,4 +575,24 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
 
+  goalsEmpty: {
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: PRIMARY_TEXT,
+    opacity: 0.7,
+    lineHeight: 18,
+  },
+  goalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  goalText: {
+    flex: 1,
+    fontFamily: "Agrandir-Regular",
+    fontSize: 13,
+    color: PRIMARY_TEXT,
+    lineHeight: 18,
+  },
 });
