@@ -39,6 +39,7 @@ node --experimental-strip-types --no-warnings --test tests/exercise-log.test.cjs
 | `exercise-log.test.cjs` | Manual workout validation, repeat copies, account-scoped storage queries, pagination and failures |
 | `exercise-ui.test.mjs` | Form and history callbacks, custom exercises, per-set values, retry/double-save protection, edit/delete/repeat, account switching, date selection, weekly swipes and fourth-tab navigation |
 | `daily-goals.test.mjs` | Goal bank (50 per difficulty per section, no duplicates, every rule evaluable, sections use the right data), stable daily offers filtered to what the user's reminder settings can deliver, auto-completion rules for check-ins / posture quality / desk mode / exercise, account- and day-scoped queries, completions never overwritten, history paging |
+| `daily-goals-achievable.test.mjs` | Every one of the 750 goals can be completed, for every reminder frequency / active-hours setup it can be offered to, using data the app can really produce (check-ins within cap, cooldown and presets; workouts that pass the Exercise form; non-overlapping sessions with the real s'core formula), and impossible goals are never offered |
 | older files | check-email, leaderboard, posture stabiliser, press feedback, saved devices, Sentry logging, Desk session stats, tutorial skip |
 
 Tests marked `# TODO` in the output are **known bugs** written as tests. They

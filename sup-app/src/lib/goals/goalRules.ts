@@ -49,6 +49,20 @@ export interface CheckInSettings {
   frequency: string | null;
   presets: string[];
 }
+/** Everything that decides whether a goal can still be completed for this user. */
+export interface OfferContext extends CheckInSettings {
+  /** The engine logs check-ins even when the OS blocks them, so they could never be answered. */
+  notificationsAllowed: boolean;
+  yesterdaySupScore: number | null;
+  yesterdayDeskMs: number | null;
+}
+
+/**
+ * Highest s'core a "beat yesterday" goal may ask for. The s'core is
+ * round((Σ credit × minutes + 50 × 10) / (minutes + 10)) — docs/score-methodology.md —
+ * so it only nears 100: 95 takes ~1.5 hours of perfect upright posture, 99 over 5 hours.
+ */
+export const MAX_REACHABLE_SCORE = 95;
 
 export interface GoalProgress {
   current: number;
@@ -94,13 +108,17 @@ export function dayPartOf(ms: number): DayPart | null {
 }
 
 /**
- * Whether the user's reminder settings can ever deliver what a check-in goal
- * needs (enough check-ins per day, in the right part of the day). Goals that
- * don't use check-ins are always feasible.
+ * Whether a goal can be completed today for this user. Check-in goals need
+ * notifications allowed and reminder settings that can deliver enough
+ * check-ins in the right part of the day; "beat yesterday" goals need a
+ * target that's still reachable. Everything else is always feasible.
  */
-export function ruleFeasible(rule: string, settings: CheckInSettings): boolean {
+export function ruleFeasible(rule: string, settings: OfferContext): boolean {
   const { kind, args } = parseRule(rule);
+  if (kind === "sc_beat") return (settings.yesterdaySupScore ?? 50) + Number(args[0]) <= MAX_REACHABLE_SCORE;
+  if (kind === "dk_beat") return (settings.yesterdayDeskMs ?? 0) / MIN + Number(args[0]) <= 24 * 60;
   if (!kind.startsWith("ci_")) return true;
+  if (!settings.notificationsAllowed) return false;
   const limits = settings.frequency ? CHECK_IN_LIMITS[settings.frequency] : undefined;
   if (!limits) return false;
   const presets = settings.presets.filter((p): p is DayPart => p in DAY_PARTS);

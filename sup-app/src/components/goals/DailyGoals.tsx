@@ -44,7 +44,7 @@ export const GOAL_INFO: Record<"todaysGoals" | "completedGoals", InfoModalEntry>
       "• goals are picked at random from our goal list, and stay the same all day. new ones arrive at midnight (your phone's time).\n" +
       "• in \"pick your goals\", tap + to add as many as you like, from any section and difficulty. tap an added goal again (or its ✕) to remove it.\n" +
       "• your added goals show under \"your goals\" with your progress. there's nothing to tick: each goal completes itself once the app sees you've done it.\n" +
-      "• posture goals use your responses to check-ins (tapping \"done\" or opening one counts; dismissing doesn't). hardware users also get s'core and posture goals from desk mode. you only get check-in goals your reminder settings can deliver.\n" +
+      "• posture goals use your responses to check-ins (tapping \"yuh\" or opening one counts; \"nuh\" and \"ugh\" don't). check-ins only arrive while the app is open, during your active hours. hardware users also get s'core and posture goals from desk mode. you only get check-in goals your notification and reminder settings can deliver.\n" +
       "• exercise goals use workouts you log for today in exercise.\n" +
       "• sitting goals use your desk mode sessions, once each session has ended.\n" +
       "• goals that aren't done by midnight are cleared.",
@@ -251,7 +251,7 @@ export default function DailyGoals({ state, onTipLayout }: {
               {offers.length === 0 ? (
                 <Text style={styles.emptyText}>
                   {section === "posture" && !hasCheckIns
-                    ? "posture goals use check-ins. turn on reminders in settings to get them."
+                    ? "posture goals use check-ins. turn on reminders in settings and allow notifications to get them."
                     : "no goals available here today."}
                 </Text>
               ) : (

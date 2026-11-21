@@ -1,8 +1,8 @@
 // Picks each day's goal offers from the hardcoded bank. The pick is a hash of
 // user + day, so offers stay the same all day (and across devices) without
-// storing them, and change each new local day. Check-in goals the user's
-// reminder settings can't deliver are left out before picking.
-import { ruleFeasible, type CheckInSettings } from "./goalRules";
+// storing them, and change each new local day. Goals the user can't
+// complete today (see ruleFeasible) are left out before picking.
+import { ruleFeasible, type OfferContext } from "./goalRules";
 import {
   GOAL_BANK,
   type GoalDifficulty,
@@ -65,7 +65,7 @@ export function dailyOffers(
   userId: string,
   dateKey: string,
   set: GoalSet,
-  settings: CheckInSettings,
+  settings: OfferContext,
 ): { section: GoalSection; offers: GoalOffer[] }[] {
   return sectionsFor(set).map((section) => {
     const tiers = tiersFor(set, section)!;

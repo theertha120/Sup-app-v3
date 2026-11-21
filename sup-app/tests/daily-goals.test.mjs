@@ -8,7 +8,8 @@ const { GOAL_BANK } = loadTs('src/lib/goals/goalBank.ts');
 const { dailyOffers, goalSetFor, sectionsFor, groupByDate } = loadTs('src/lib/goals/dailyGoals.ts');
 const { evaluateRule, ruleFeasible, ruleSources, dayPartOf } = loadTs('src/lib/goals/goalRules.ts');
 
-const ALL_ON = { frequency: 'active', presets: ['morning', 'afternoon', 'evening', 'late_night'] };
+const ON = { notificationsAllowed: true, yesterdaySupScore: null, yesterdayDeskMs: null };
+const ALL_ON = { ...ON, frequency: 'active', presets: ['morning', 'afternoon', 'evening', 'late_night'] };
 const at = (h, m = 0) => new Date(2026, 10, 20, h, m).getTime();
 const MIN = 60_000;
 const emptyDay = () => ({ checkIns: [], sessions: [], workouts: [], supScore: null, yesterdaySupScore: null, yesterdayDeskMs: null });
@@ -70,25 +71,25 @@ test('offers are one easy/medium/hard per section, stable within a day, and vary
 });
 
 test('check-in goals respect the daily cap and active presets', () => {
-  const light = { frequency: 'light', presets: ['morning'] };
+  const light = { ...ON, frequency: 'light', presets: ['morning'] };
   assert.equal(ruleFeasible('ci_done:3', light), true);
   assert.equal(ruleFeasible('ci_done:4', light), false);
   assert.equal(ruleFeasible('ci_part:morning:2', light), true);
   assert.equal(ruleFeasible('ci_part:evening:1', light), false);
   assert.equal(ruleFeasible('ci_parts:2', light), false);
-  assert.equal(ruleFeasible('ci_rate:100:6', { frequency: 'medium', presets: ['morning'] }), true);
-  assert.equal(ruleFeasible('ci_done:1', { frequency: null, presets: [] }), false);
-  assert.equal(ruleFeasible('dk_total:30', { frequency: null, presets: [] }), true);
+  assert.equal(ruleFeasible('ci_rate:100:6', { ...ON, frequency: 'medium', presets: ['morning'] }), true);
+  assert.equal(ruleFeasible('ci_done:1', { ...ON, frequency: null, presets: [] }), false);
+  assert.equal(ruleFeasible('dk_total:30', { ...ON, frequency: null, presets: [] }), true);
 
-  for (const settings of [light, { frequency: 'light', presets: ['late_night'] }]) {
+  for (const settings of [light, { ...ON, frequency: 'light', presets: ['late_night'] }]) {
     for (const { section, offers } of dailyOffers('user-1', '2026-11-20', 'no_hardware', settings)) {
       if (section === 'posture') assert.equal(offers.length, 3, 'a light-reminder user still gets every tier');
       for (const o of offers) assert.ok(ruleFeasible(o.goalId, settings), o.goalId);
     }
   }
-  const off = dailyOffers('user-1', '2026-11-20', 'hardware', { frequency: null, presets: [] });
+  const off = dailyOffers('user-1', '2026-11-20', 'hardware', { ...ON, frequency: null, presets: [] });
   assert.equal(off.find((s) => s.section === 'posture').offers.length, 3, 'hardware users keep posture-quality goals');
-  assert.equal(dailyOffers('user-1', '2026-11-20', 'no_hardware', { frequency: null, presets: [] })[0].offers.length, 0);
+  assert.equal(dailyOffers('user-1', '2026-11-20', 'no_hardware', { ...ON, frequency: null, presets: [] })[0].offers.length, 0);
 });
 
 test('check-in rules count responses, speed, parts of the day and runs; dismissals never count', () => {

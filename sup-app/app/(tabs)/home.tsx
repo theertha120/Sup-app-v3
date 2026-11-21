@@ -146,12 +146,15 @@ export default function HomeScreen() {
   // Collapsible "today's data" section below the insight bubble. Kept open
   // while its tutorial tips are showing so they can't be hidden mid-step.
   const [showToday, setShowToday] = useState(false);
-  const todayExpanded = showToday
-    || tutorialStep === "snapshot-tip"
+  const todayTipShowing = tutorialStep === "snapshot-tip"
     || tutorialStep === "snapshot-tip-stats"
     || tutorialStep === "goals-completed-tip"
     || tutorialStep === "goals-pick-tip"
     || tutorialStep === "goals-history-tip";
+  const todayExpanded = showToday || todayTipShowing;
+  // Read by the focus effect without re-running it on every tutorial step.
+  const todayTipShowingRef = useRef(todayTipShowing);
+  todayTipShowingRef.current = todayTipShowing;
   const bubblesYRef = useRef(0);
   const todayYRef = useRef(0);
   const goalsYRef = useRef(0);
@@ -274,6 +277,10 @@ export default function HomeScreen() {
 
       hasAnimatedRef.current = false;
       // Today's data (incl. goals) starts collapsed on every visit to Home.
+      // Also back to the top: Android keeps the old scroll offset when the
+      // content shrinks, which left only the background showing until a touch
+      // (e.g. coming back from goal history, at the bottom of today's data).
+      if (!todayTipShowingRef.current) scrollRef.current?.scrollTo({ y: 0, animated: false });
       setShowToday(false);
 
       return () => {

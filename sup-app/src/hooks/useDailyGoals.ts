@@ -6,6 +6,7 @@
 // adds the sitting section), shows up on the next focus.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
+import * as Notifications from "expo-notifications";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { toLocalDateKey } from "@/src/lib/dateKey";
@@ -19,8 +20,8 @@ import {
 import {
   evaluateRule,
   ruleSources,
-  type CheckInSettings,
   type GoalDayData,
+  type OfferContext,
   type GoalProgress,
 } from "@/src/lib/goals/goalRules";
 import {
@@ -73,7 +74,8 @@ export function useDailyGoals() {
   const { userId } = useAuth();
   const [dateKey, setDateKey] = useState(() => toLocalDateKey());
   const [hasHardware, setHasHardware] = useState<boolean | null>(null);
-  const [settings, setSettings] = useState<CheckInSettings | null>(null);
+  // What decides which goals can be offered (see ruleFeasible).
+  const [settings, setSettings] = useState<OfferContext | null>(null);
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   // Progress for picked, not-yet-completed goals, by daily_goals row id.
   const [progress, setProgress] = useState<Record<string, GoalProgress>>({});
@@ -85,6 +87,8 @@ export function useDailyGoals() {
   const loadIdRef = useRef(0);
   const goalsRef = useRef<DailyGoal[]>([]);
   goalsRef.current = goals;
+  // The local day `goals` were loaded for; a different day means midnight passed.
+  const goalsDayRef = useRef<string | null>(null);
   const checkingRef = useRef(false);
   // A check requested while one is running; run once the current one ends.
   const queuedCheckRef = useRef<{ list: DailyGoal[]; day: string } | null>(null);
@@ -92,6 +96,7 @@ export function useDailyGoals() {
   useEffect(() => {
     loadIdRef.current++;
     setGoals([]);
+    goalsDayRef.current = null;
     setProgress({});
     setHasHardware(null);
     setSettings(null);
@@ -143,10 +148,12 @@ export function useDailyGoals() {
     const loadId = ++loadIdRef.current;
     const today = toLocalDateKey();
     setDateKey(today);
-    const [hardware, reminderSettings, dayGoals] = await Promise.allSettled([
+    const [hardware, reminderSettings, dayGoals, permission, daily] = await Promise.allSettled([
       hasLoggedPostureSession(userId),
       fetchCheckInSettings(userId),
       fetchGoalsForDay(userId, today),
+      Notifications.getPermissionsAsync(),
+      fetchDailyPosturePair(userId, today),
     ]);
     if (loadId !== loadIdRef.current) return;
     if (hardware.status === "fulfilled") setHasHardware(hardware.value);
@@ -155,26 +162,47 @@ export function useDailyGoals() {
       // Keep what we knew; only fall back to the no-hardware set on first load.
       setHasHardware((prev) => prev ?? false);
     }
-    if (reminderSettings.status === "fulfilled") setSettings(reminderSettings.value);
-    else {
-      captureError(reminderSettings.reason, "daily-goals-settings");
-      setSettings((prev) => prev ?? { frequency: null, presets: [] });
-    }
+    // A failed read keeps the last known value, so today's offers don't flip.
+    if (reminderSettings.status === "rejected") captureError(reminderSettings.reason, "daily-goals-settings");
+    if (daily.status === "rejected") captureError(daily.reason, "daily-goals-yesterday");
+    setSettings((prev) => ({
+      ...(reminderSettings.status === "fulfilled"
+        ? reminderSettings.value
+        : { frequency: prev?.frequency ?? null, presets: prev?.presets ?? [] }),
+      notificationsAllowed: permission.status === "fulfilled"
+        ? permission.value.granted
+        : prev?.notificationsAllowed ?? false,
+      yesterdaySupScore: daily.status === "fulfilled"
+        ? daily.value.previous?.supScore ?? null
+        : prev?.yesterdaySupScore ?? null,
+      yesterdayDeskMs: daily.status === "fulfilled"
+        ? daily.value.previous?.totalDeskMs ?? null
+        : prev?.yesterdayDeskMs ?? null,
+    }));
     if (dayGoals.status === "fulfilled") {
       setGoals(dayGoals.value);
+      goalsDayRef.current = today;
       setError(null);
       void checkGoals(dayGoals.value, today);
     } else {
       captureError(dayGoals.reason, "daily-goals-load", { dateKey: today });
+      // Don't show an earlier day's goals as today's.
+      if (goalsDayRef.current !== today) { setGoals([]); setProgress({}); goalsDayRef.current = null; }
       setError("couldn't load your goals.");
     }
     setLoading(false);
   }, [userId, checkGoals]);
 
   // Load on focus; while focused, re-check on foreground and every minute.
+  // After midnight (or a failed load) the minute tick reloads instead, so
+  // the new day's offers appear and old goals aren't checked against new data.
   useFocusEffect(useCallback(() => {
     void load();
-    const recheck = () => void checkGoals(goalsRef.current, toLocalDateKey());
+    const recheck = () => {
+      const day = goalsDayRef.current;
+      if (day !== toLocalDateKey()) void load();
+      else void checkGoals(goalsRef.current, day);
+    };
     const timer = setInterval(recheck, RECHECK_MS);
     const sub = AppState.addEventListener("change", (state) => { if (state === "active") void load(); });
     return () => { clearInterval(timer); sub.remove(); };
@@ -198,6 +226,8 @@ export function useDailyGoals() {
   const pick = useCallback(async (offer: GoalOffer) => {
     if (!userId || pending.has(offer.goalId)) return;
     if (goals.some((g) => g.goal_id === offer.goalId)) return;
+    // Offers on screen are from an earlier day; show today's instead.
+    if (dateKey !== toLocalDateKey()) { void load(); return; }
     const loadId = loadIdRef.current;
     await withPending(offer.goalId, async () => {
       try {
@@ -230,7 +260,8 @@ export function useDailyGoals() {
 
   const openGoals = useMemo(() => goals.filter((g) => !g.completed_at), [goals]);
   const completedToday = useMemo(() => goals.filter((g) => g.completed_at), [goals]);
-  const hasCheckIns = settings != null && settings.frequency != null && settings.presets.length > 0;
+  const hasCheckIns = settings != null && settings.frequency != null && settings.presets.length > 0
+    && settings.notificationsAllowed;
 
   return {
     dateKey, sections, goals, openGoals, completedToday, progress, hasCheckIns,
