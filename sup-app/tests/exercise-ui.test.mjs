@@ -265,14 +265,14 @@ test('load and delete errors show retry feedback without removing saved history'
   assert.ok(!f.text().includes('couldn’t load'));
 });
 
-test('Exercise stays fourth after Stats and all six tabs remain available', () => {
+test('Exercise stays fourth after Stats and all five tabs remain available', () => {
   function Tabs() {} Tabs.Screen = 'TabScreen';
   const f = mountComponent('app/(tabs)/_layout.tsx', 'default', {}, { mocks: () => ({
     'expo-router': { Tabs }, 'react-native': { ...native, Platform: { select: choices => choices.ios } },
     '@/src/components/ui/LiquidGlass': { default: 'LiquidGlass' },
   }) });
   assert.deepEqual(f.nodes().filter(node => node.type === 'TabScreen').map(node => node.props.name),
-    ['home', 'desk', 'stats', 'exercise', 'leaderboard', 'daily']);
+    ['home', 'desk', 'stats', 'exercise', 'leaderboard']);
 });
 test('screen-reader actions navigate weeks and never offer a newer week from today', () => {
   const w = week();

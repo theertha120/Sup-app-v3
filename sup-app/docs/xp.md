@@ -8,7 +8,7 @@
 - the profile dropdown and modal (as the level);
 - the AI coach's daily insight.
 
-XP rewards doing the habit: tracking, checking in, exercising and, later, finishing goals. It's earned per phone-local day, added up over every day, and never goes down. The total sets your level.
+XP rewards doing the habit: tracking, checking in, exercising and finishing daily goals. It's earned per phone-local day, added up over every day, and never goes down. The total sets your level.
 
 The old s'up s'core formula is still in `postureSyncService.ts` (`computeSupScore`, `supScoreForRows`) and still unit-tested. Every place that used it is commented out and marked `[s'up s'core — RETIRED]`, so the change can be rolled back. `posture_daily.sup_score` keeps its old values but is no longer written.
 
@@ -53,7 +53,7 @@ SQL: `supabase/migrations/202611190001_xp.sql`. Run it in the Supabase SQL edito
 
 The same SQL also replaces `community_leaderboard_page`. It keeps the same name, arguments and JSON shape, but `score` is now the **XP earned in the period** (day or week), ranked highest first. `days_counted` is now the number of days that earned XP. The app's fallback ranking (used if the function is missing) does the same.
 
-**Days with only a check-in or workout** now get a `posture_daily` row, with zeros in the posture columns, so their XP counts on the leaderboard. The app never overwrites an existing row's posture data when saving XP; it only updates the XP columns.
+**Days with only a check-in, workout or completed goal** now get a `posture_daily` row, with zeros in the posture columns, so their XP counts on the leaderboard. The app never overwrites an existing row's posture data when saving XP; it only updates the XP columns.
 
 ## Where the numbers come from
 
@@ -62,6 +62,7 @@ The same SQL also replaces `community_leaderboard_page`. It keeps the same name,
 | s'it session time | `posture_daily.total_desk_ms` (completed sessions) | `date` (day the session started) |
 | Posture check-ins | `posture_checkins.logged_at` | Phone-local day |
 | Exercise | `exercise_workouts.performed_on` | `performed_on` |
+| Daily goals | `daily_goals` rows with `completed_at` set; `difficulty` gives 10 / 20 / 40 | `goal_date` (the day the goal was for) |
 
 ## When XP is saved (the app writes it)
 
@@ -72,6 +73,7 @@ The app calculates and saves XP, the same way it already saves `posture_daily`. 
 | A session ends | `IMUContext` rebuilds the day 5 s later, then `syncDayXp(user, that day)` |
 | A posture check-in is saved | `syncDayXp(user, today)` from the check-in screen |
 | A workout is saved, edited or deleted | `syncDayXp` for its date (both dates if an edit moved it) from the Exercise page |
+| Daily goals are marked complete | `syncDayXp` for the goal's day, from `useDailyGoals` right after `markGoalsCompleted` saves at least one |
 | Sign-in / app start | `XpSync` runs `syncAllXp(user)` once: recalculates every day, writes only days whose stored XP is wrong (including back to 0), and sets `profiles.xp_total` / `xp_level`. This backfills history from before XP and repairs writes that failed offline |
 
 Each `syncDayXp` also re-adds every day's stored XP and saves the profile total and level. A sync only writes what actually differs: a day whose XP didn't change isn't rewritten, and the profile isn't updated if its total and level are already right. Syncs run one at a time, and failures go to Sentry (`xp-sync-day`, `xp-sync-all`) without breaking the app.
@@ -119,13 +121,11 @@ Layouts are unchanged; only the wording, units and colours moved to XP. Old text
 
 The level in the profile dropdown and modal, Stats and the leaderboard update by themselves when XP changes (see "Screens update when XP changes").
 
-## Adding s'quat, s'tep and daily goals later
+## Adding s'quat and s'tep later
 
-The rules already score these. Add their data in `buildDailyActivity` and `dayActivity` (`xpService.ts`):
-- **s'quat / s'tep:** each day's tracked time goes into `sessionMs.squat` / `sessionMs.step`, sharing the 150-a-day cap with s'it.
-- **Goals:** push `'easy' | 'medium' | 'hard'` into `goalsCompleted` for the day.
+The rules already score these. Add each day's tracked time in `buildDailyActivity` and `dayActivity` (`xpService.ts`) as `sessionMs.squat` / `sessionMs.step` (sharing the 150-a-day cap with s'it), then call `syncDayXp` when a session ends.
 
-Then call `syncDayXp` when one is recorded.
+Daily goals are already connected (see the tables above): goals completed before this change were backfilled by the sign-in sync.
 
 ## Things to know / decide
 

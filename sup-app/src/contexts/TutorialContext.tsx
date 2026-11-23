@@ -6,6 +6,9 @@ export type TutorialStep =
   | "data-tip"
   | "snapshot-tip"
   | "snapshot-tip-stats"
+  | "goals-completed-tip"
+  | "goals-pick-tip"
+  | "goals-history-tip"
   | "settings-tip"
   | "coaching-tip"
   | "calibrate-tip"
@@ -23,7 +26,6 @@ export type TutorialStep =
   // (navbar tab or header icon) so they learn how to get there; tapping the
   // highlighted target starts that page's tips.
   | "go-home-tip"
-  | "go-daily-tip"
   | "go-settings-tip"
   | "go-sensor-tip"
   | "go-desk-tip"

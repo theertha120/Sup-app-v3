@@ -97,7 +97,7 @@ const local = (d, h, m = 0) => new Date(2026, 10, d, h, m).toISOString();
  * Loads xpService against an in-memory posture_daily / posture_checkins /
  * exercise_workouts / profiles. `daily` rows are { date, total_desk_ms, xp }.
  */
-function service({ daily = [], checkins = [], workouts = [], failInsert = null, failProfile = false } = {}) {
+function service({ daily = [], checkins = [], workouts = [], goals = [], failInsert = null, failProfile = false } = {}) {
   const tables = { daily: daily.map((r) => ({ ...r })), profile: { xp_total: 0, xp_level: 0 } };
   const sentry = fakeSentry();
   const db = fakeSupabase((q) => {
@@ -125,6 +125,11 @@ function service({ daily = [], checkins = [], workouts = [], failInsert = null, 
       return { count: checkins.filter((c) => c.logged_at >= from && c.logged_at < to).length, error: null };
     }
     if (q.table === 'exercise_workouts') return { count: workouts.filter((w) => w.performed_on === where.performed_on).length, error: null };
+    if (q.table === 'daily_goals') {
+      const completed = goals.filter((g) => g.completed_at);
+      if (op('range')) { const [, from, to] = op('range'); return { data: completed.slice(from, to + 1), error: null }; }
+      return { data: completed.filter((g) => g.goal_date === where.goal_date).map((g) => ({ difficulty: g.difficulty })), error: null };
+    }
     if (q.table === 'profiles') {
       if (op('update')) { if (failProfile) return { error: { message: 'rls' } }; Object.assign(tables.profile, op('update')[1]); return { error: null }; }
       return { data: tables.profile, error: null };
@@ -378,4 +383,60 @@ test('signing out stops listening for XP changes', async () => {
   assert.equal(h.listeners.size, 1);
   h.auth.userId = null; h.auth.isAuthenticated = false; await h.render();
   assert.equal(h.listeners.size, 0);
+});
+
+// ─── Daily goals earn XP ──────────────────────────────────────────────────────
+
+const goal = (goal_date, difficulty, completed = true) =>
+  ({ goal_date, difficulty, completed_at: completed ? `${goal_date}T09:00:00.000Z` : null });
+
+test('completed goals count 10 / 20 / 40 XP on the day they were for; open goals count nothing', () => {
+  const s = service();
+  const days = s.buildDailyActivity({ daily: [], workouts: [], checkins: [], goals: [
+    goal('2026-11-18', 'easy'), goal('2026-11-18', 'hard'), goal('2026-11-18', 'medium', false),
+    goal('2026-11-17', 'medium'), { goal_date: '2026-11-17', difficulty: 'impossible', completed_at: '2026-11-17T09:00:00Z' },
+  ] });
+  const xpBy = Object.fromEntries(days.map((d) => [d.date, rules.xpForDay(d)]));
+  assert.equal(xpBy['2026-11-18'].breakdown.goals, 50, 'easy 10 + hard 40; the open medium goal adds nothing');
+  assert.equal(xpBy['2026-11-17'].breakdown.goals, 20, 'unknown difficulties are ignored');
+});
+
+test('completing goals syncs that day’s XP, alongside the day’s other activity', async () => {
+  const s = service({
+    daily: [{ date: '2026-11-18', total_desk_ms: 20 * MIN, xp: 10 }],
+    goals: [goal('2026-11-18', 'medium'), goal('2026-11-18', 'easy'), goal('2026-11-18', 'hard', false)],
+  });
+  const day = await s.syncDayXp('user-a', '2026-11-18');
+  assert.deepEqual(day.breakdown, { postureCheckin: 0, exerciseLog: 0, sessions: 10, goals: 30 });
+  assert.equal(s.tables.daily[0].xp, 40);
+  assert.equal(s.tables.profile.xp_total, 40);
+  const q = s.db.queries.find((x) => x.table === 'daily_goals');
+  assert.deepEqual(eqs(q), { user_id: 'user-a', goal_date: '2026-11-18' });
+  assert.ok(q.ops.some(([m, col]) => m === 'not' && col === 'completed_at'), 'only completed goals');
+});
+
+test('a goal-only day (no session, check-in or workout) still gets a row with its XP', async () => {
+  const s = service({ goals: [goal('2026-11-16', 'hard')] });
+  await s.syncDayXp('user-a', '2026-11-16');
+  const row = opArg(s.writes('posture_daily', 'insert')[0], 'insert');
+  assert.equal(row.xp, 40);
+  assert.equal(row.xp_breakdown.goals, 40);
+});
+
+test('the sign-in sync backfills XP for goals completed before this change', async () => {
+  const s = service({
+    daily: [{ date: '2026-11-10', total_desk_ms: 0, xp: 0 }],
+    goals: [goal('2026-11-10', 'easy'), goal('2026-11-12', 'medium')],
+  });
+  const summary = await s.syncAllXp('user-a', '2026-11-18');
+  const xpBy = Object.fromEntries(s.tables.daily.map((r) => [r.date, r.xp]));
+  assert.deepEqual(xpBy, { '2026-11-10': 10, '2026-11-12': 20 });
+  assert.equal(summary.totalXp, 30);
+  assert.equal(s.tables.profile.xp_total, 30);
+});
+
+test('the goals hook syncs XP for the goal’s day only when goals were newly completed', async () => {
+  const { readFileSync } = await import('node:fs');
+  const hook = readFileSync(new URL('../src/hooks/useDailyGoals.ts', import.meta.url), 'utf8');
+  assert.match(hook, /const updated = await markGoalsCompleted\(userId, doneIds\);\s*\/\/[^\n]*\n\s*if \(updated\.length > 0\) void syncDayXp\(userId, day\);/);
 });
