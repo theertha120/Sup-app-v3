@@ -3,9 +3,10 @@ import { captureError } from "@/src/lib/sentry";
 import { localDayRange, toLocalDateKey } from "@/src/lib/dateKey";
 import { fetchAllPostureRows } from "@/src/services/posture/postureSyncService";
 import { loadCheckins, loadWorkouts } from "@/src/services/exercise/exerciseLogCache";
+import { fetchCompletedGoals } from "@/src/services/goals/dailyGoalsService";
 import {
-  emptyDay, levelFor, summarizeXp, xpForDay,
-  type DayActivity, type DayXp, type LevelProgress, type XpSummary,
+  emptyDay, levelFor, summarizeXp, xpForDay, XP_RULES,
+  type DayActivity, type DayXp, type GoalDifficulty, type LevelProgress, type XpSummary,
 } from "./xpRules";
 
 /**
@@ -19,25 +20,33 @@ import {
  *   s'it session time → posture_daily.total_desk_ms (completed sessions)
  *   posture check-ins → posture_checkins.logged_at (phone-local day)
  *   manual exercise   → exercise_workouts.performed_on
+ *   daily goals       → daily_goals with completed_at set, on their goal_date
+ *                       (10 / 20 / 40 XP for easy / medium / hard)
  *
  * When it's written:
- *   syncDayXp(user, day) — after a session ends, a check-in is logged, or a
- *     workout is saved / edited / deleted (both dates on an edit).
+ *   syncDayXp(user, day) — after a session ends, a check-in is logged, a
+ *     workout is saved / edited / deleted (both dates on an edit), or daily
+ *     goals are marked complete (useDailyGoals).
  *   syncAllXp(user)      — at login: backfills history and fixes any day whose
  *     stored XP is out of date (e.g. a write that failed while offline).
  *
- * To add s'quat / s'tep or daily goals later: read their rows in
- * buildDailyActivity / dayActivity and fill sessionMs.squat / sessionMs.step /
- * goalsCompleted. The rules in xpRules.ts already score them.
+ * To add s'quat / s'tep later: read their rows in buildDailyActivity /
+ * dayActivity and fill sessionMs.squat / sessionMs.step. The rules in
+ * xpRules.ts already score them.
  */
 
 // ─── Building activity ──────────────────────────────────────────────────────
+
+type GoalRow = { goal_date: string; difficulty: string; completed_at: string | null };
+
+const isGoalDifficulty = (d: string): d is GoalDifficulty => d in XP_RULES.goal;
 
 /** Groups the raw rows into one DayActivity per phone-local day. */
 export function buildDailyActivity(input: {
   daily: { date: string; totalDeskMs: number | null }[];
   workouts: { performed_on: string }[];
   checkins: { logged_at: string }[];
+  goals?: GoalRow[];
 }): DayActivity[] {
   const days = new Map<string, DayActivity>();
   const day = (date: string) => {
@@ -53,6 +62,10 @@ export function buildDailyActivity(input: {
     const logged = new Date(c.logged_at);
     if (!Number.isNaN(logged.getTime())) day(toLocalDateKey(logged)).postureCheckins++;
   }
+  // Each completed goal counts on the day it was for (goal_date), by difficulty.
+  for (const g of input.goals ?? []) {
+    if (g.completed_at && isGoalDifficulty(g.difficulty)) day(g.goal_date).goalsCompleted.push(g.difficulty);
+  }
   return [...days.values()];
 }
 
@@ -62,14 +75,16 @@ export function buildDailyActivity(input: {
  */
 async function dayActivity(userId: string, date: string): Promise<{ activity: DayActivity; storedXp: number }> {
   const { start, end } = localDayRange(date);
-  const [daily, checkins, workouts] = await Promise.all([
+  const [daily, checkins, workouts, goals] = await Promise.all([
     supabase.from("posture_daily").select("total_desk_ms, xp").eq("user_id", userId).eq("date", date).maybeSingle(),
     supabase.from("posture_checkins").select("id", { count: "exact", head: true })
       .eq("user_id", userId).gte("logged_at", start.toISOString()).lt("logged_at", end.toISOString()),
     supabase.from("exercise_workouts").select("id", { count: "exact", head: true })
       .eq("user_id", userId).eq("performed_on", date),
+    supabase.from("daily_goals").select("difficulty")
+      .eq("user_id", userId).eq("goal_date", date).not("completed_at", "is", null),
   ]);
-  const error = daily.error ?? checkins.error ?? workouts.error;
+  const error = daily.error ?? checkins.error ?? workouts.error ?? goals.error;
   if (error) throw error;
   const row = daily.data as { total_desk_ms?: number; xp?: number } | null;
   const activity = emptyDay(date);
@@ -77,6 +92,9 @@ async function dayActivity(userId: string, date: string): Promise<{ activity: Da
   if (sitMs) activity.sessionMs.sit = sitMs;
   activity.postureCheckins = checkins.count ?? 0;
   activity.exerciseLogs = workouts.count ?? 0;
+  for (const g of (goals.data ?? []) as { difficulty: string }[]) {
+    if (isGoalDifficulty(g.difficulty)) activity.goalsCompleted.push(g.difficulty);
+  }
   return { activity, storedXp: Number(row?.xp) || 0 };
 }
 
@@ -201,10 +219,10 @@ export function syncDayXp(userId: string, date: string = toLocalDateKey()): Prom
 export function syncAllXp(userId: string, today: string = toLocalDateKey()): Promise<XpSummary | null> {
   return serial(async () => {
     try {
-      const [daily, workouts, checkins] = await Promise.all([
-        fetchAllPostureRows(userId), loadWorkouts(userId), loadCheckins(userId),
+      const [daily, workouts, checkins, goals] = await Promise.all([
+        fetchAllPostureRows(userId), loadWorkouts(userId), loadCheckins(userId), fetchCompletedGoals(userId),
       ]);
-      const activity = buildDailyActivity({ daily, workouts, checkins });
+      const activity = buildDailyActivity({ daily, workouts, checkins, goals });
       const computed = new Map(activity.map((a) => [a.date, xpForDay(a)]));
       const stored = new Map(daily.map((row) => [row.date, row.xp ?? 0]));
       let daysChanged = false;
@@ -232,10 +250,11 @@ export async function fetchLevelProgress(userId: string): Promise<LevelProgress>
 
 /** XP worked out from the saved data without writing anything (total, level, today). */
 export async function fetchXpSummary(userId: string, today: string = toLocalDateKey()): Promise<XpSummary> {
-  const [daily, workouts, checkins] = await Promise.all([
+  const [daily, workouts, checkins, goals] = await Promise.all([
     fetchAllPostureRows(userId),
     loadWorkouts(userId),
     loadCheckins(userId),
+    fetchCompletedGoals(userId),
   ]);
-  return summarizeXp(buildDailyActivity({ daily, workouts, checkins }), today);
+  return summarizeXp(buildDailyActivity({ daily, workouts, checkins, goals }), today);
 }

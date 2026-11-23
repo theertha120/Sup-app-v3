@@ -29,7 +29,7 @@ Run `npm test` from `sup-app` before pushing or merging. Exercise Log coverage i
 
 Before release, check on a device with that database:
 
-1. Open the fourth tab at a narrow phone width; check all six navigation targets and the selected highlight.
+1. Open the fourth tab at a narrow phone width; check all five navigation targets and the selected highlight.
 2. Log plank (3 × 30 seconds), glute bridge (3 × 12 reps), and yoga (20 minutes) in one workout. Choose a back rating and save. Relaunch and confirm the workout persists.
 3. Enter different values per set, a custom strength exercise, and a fractional activity duration. Check the keyboard does not cover Save and that long exercise names wrap.
 4. Save with missing/zero/negative values or no back rating; confirm the form remains open with a helpful error. Cancel a dirty form and choose Keep editing, then Discard.

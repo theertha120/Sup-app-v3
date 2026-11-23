@@ -2,7 +2,7 @@ import PressFeedback from "@/src/components/ui/PressFeedback";
 import React from "react";
 import { View, useWindowDimensions, StyleSheet, Image, Text } from "react-native";
 import { BlurView } from "expo-blur";
-import Svg, { Defs, Mask, Rect } from "react-native-svg";
+import Svg, { Rect } from "react-native-svg";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -26,7 +26,6 @@ const NAV_PROMPTS: Partial<Record<NonNullable<TutorialStep>, {
   firstStep: TutorialStep;
 }>> = {
   "go-home-tip":      { route: "home",        text: "let's start! tap home in the navbar.",                firstStep: "goals-tip" },
-  "go-daily-tip":     { route: "daily",       text: "now tap the daily summary in the navbar.",            firstStep: "snapshot-tip" },
   "go-desk-tip":      { route: "desk",        text: "now tap desk mode in the navbar.",                    firstStep: "figure-tip" },
   "go-stats-tip":     { route: "stats",       text: "now tap stats in the navbar to see your progress.",   firstStep: "stats-tip" },
   "go-community-tip": { route: "leaderboard", text: "now tap the community tab in the navbar.",            firstStep: "community-tip" },
@@ -37,27 +36,7 @@ const ROUTE_TO_TAB: Record<string, NavbarTab> = {
   stats: "stats",
   leaderboard: "community",
   desk: "desk",
-  daily: "today_summary",
 };
-
-// Matches the solid-silhouette-with-cutouts style of the nav_*.png icons,
-// tinted the same way via `color` instead of Image's tintColor.
-function DailyIcon({ color }: { color: string }) {
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24">
-      <Defs>
-        <Mask id="dailyMask" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
-          <Rect x="0" y="0" width="24" height="24" fill="#fff" />
-          <Rect x="3" y="10" width="18" height="1.6" fill="#000" />
-          <Rect x="9.5" y="14" width="5" height="4" rx="1" fill="#000" />
-        </Mask>
-      </Defs>
-      <Rect x="3" y="6" width="18" height="15" rx="3" fill={color} mask="url(#dailyMask)" />
-      <Rect x="7" y="3" width="2.2" height="6" rx="1.1" fill={color} />
-      <Rect x="14.8" y="3" width="2.2" height="6" rx="1.1" fill={color} />
-    </Svg>
-  );
-}
 
 function ExerciseIcon({ color }: { color: string }) {
   return (
@@ -189,10 +168,8 @@ export default function LiquidGlass({
                     style={{ width: 24, height: 24, tintColor: isFocused ? "#111" : "#888" }}
                     resizeMode="contain"
                   />
-                ) : route.name === "exercise" ? (
-                  <ExerciseIcon color={isFocused ? "#111" : "#888"} />
                 ) : (
-                  <DailyIcon color={isFocused ? "#111" : "#888"} />
+                  <ExerciseIcon color={isFocused ? "#111" : "#888"} />
                 )}
               </TabIcon>
             </PressFeedback>

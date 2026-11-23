@@ -77,16 +77,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
-      <Tabs.Screen
-        name="daily"
-        options={{
-          title: "Daily Summary",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="today-outline" size={size} color={color} />
-          ),
-        }}
-      />
     </Tabs>
   );
 }

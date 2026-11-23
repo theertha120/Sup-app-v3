@@ -25,7 +25,7 @@ feature is in progress; when the release ships, move anything worth keeping
 into its feature section below and clear this list.
 
 - [ ] **Exercise Log release:** complete the Exercise Log section below on a dev-client/release build with the migration applied to the test database.
-- [ ] **Navigation regression:** all six tabs open the right screen; Exercise is fourth, immediately after Stats; the selection highlight fits a narrow phone.
+- [ ] **Navigation regression:** all five tabs open the right screen (there is no separate Daily tab); Exercise is fourth, immediately after Stats; the selection highlight fits a narrow phone.
 - [ ] Record actual device results in [exercise-log-test-results.md](exercise-log-test-results.md). Automated tests do not satisfy the manual items.
 
 ---
@@ -131,7 +131,7 @@ settings. Do each on both platforms when you can and note what you saw.
 - [ ] End a session → Desk shows the **summary** (replay with scrubber, highlights, comparison with the last session, s'kipper message).
 - [ ] Kill and reopen → the latest summary still shows in Desk mode.
 - [ ] Desk → under **recent history**, the session end summary and s'update history are separate cards, both collapsed by default (also after ending a new session); tapping each header expands/collapses it (the ⓘ on the summary still opens its info). While collapsed, the page scrolls normally.
-- [ ] Wait ~10s after ending, open **Daily** → today's s'up s'core and minutes updated.
+- [ ] Wait ~10s after ending, open **Home** and expand **see today's data** → today's s'up s'core and minutes updated.
 - [ ] **Stats week** → last bar is today; labels are the real weekdays.
 - [ ] **Stats month** → wk 1–4, plus wk 5 only if the month has a 29th; tap a bar → correct date range.
 - [ ] **Stats year** → each month's bar matches that month.
@@ -157,6 +157,24 @@ Use a test account and test database with `202611150001_exercise_log.sql` applie
 - [ ] **Accessibility:** VoiceOver/TalkBack can identify each date, selected day, rating, Save, workout options and tab. Older/Newer week accessibility actions navigate the correct way; offscreen week pages are not read out.
 - [ ] **Navigation while tracking:** with a real s’pot session active, open Exercise and save a manual workout → Desk tracking continues; Stats, Community and Daily still open normally. No squat/walk workout is automatically added by this feature.
 - [ ] **Loads at login:** sign in (or relaunch while signed in), wait a few seconds on Home, then open Exercise → workouts and posture check-ins are already there with no loading spinner. Log a workout, switch tabs and come back → it is still there. Sign out and in as another account → the first account’s history never appears, even briefly.
+
+## Daily goals
+
+Use a test database with `202611200001_daily_goals.sql` applied.
+
+- [ ] **Goal set:** an account with no posture sessions sees posture and exercise goals only; after its first s'pot session, returning to Home also shows sitting goals.
+- [ ] **Offers:** each section shows one easy, one medium and one hard goal. They stay the same after relaunch the same day and change after local midnight (reopen Home).
+- [ ] **Across midnight:** leave Home open with an unfinished goal past local midnight → within a minute the new day's offers show, "your goals" empties, and yesterday's goal is not marked complete. Tapping an old offer just before the switch reloads instead of adding it.
+- [ ] **Pick and remove:** pick goals from different sections and difficulties → they appear under "your goals" with a progress bar and "x / y" count. The ✕, or tapping the picked offer again, removes an unfinished goal; a completed one can't be removed.
+- [ ] **Auto-complete, check-ins:** pick a posture check-in goal (e.g. respond to 2 check-ins), then tap "done" on real check-ins → progress rises on returning to the app and the goal moves to "s'goals completed" with no tap needed. Dismissing a check-in doesn't count, and "without dismissing any" goals show it's no longer possible.
+- [ ] **Auto-complete, exercise:** pick an exercise goal, log a matching workout dated today in Exercise, go back to Home → it completes. A workout dated an earlier day doesn't count.
+- [ ] **Auto-complete, desk mode:** pick a sitting goal (hardware account), track and end a desk session long enough → back on Home it completes within about a minute. A session still in progress doesn't count until it's ended.
+- [ ] **Reminder settings:** on light reminders with only the morning preset, no posture goal asks for more than 3 check-ins or for check-ins outside the morning. With reminders off, a no-hardware account sees "turn on reminders in settings" under posture. Block the app's notifications in Android settings and reopen Home → no check-in goals are offered (the engine still logs check-ins it can't show). The check-in buttons read "Yuh / Nuh / Ugh", matching the goal text.
+- [ ] **Collapsed by default:** open today's data, switch tabs and come back (and relaunch) → Home shows "see today's data" collapsed; the "your goals" and "pick your goals" cards sit under "today:" with the other cards, in the same fonts and sizes.
+- [ ] **Explainers:** the "?" on "your goals" (explains auto-completion and where each section's data comes from), on "s'goals completed" and next to "completed goals" on the history screen each open the right explanation; "got it" closes it.
+- [ ] **History:** "history of completed goals" opens the history screen grouped by day, newest first; persists after relaunch and sign-out/sign-in; a second account doesn't see the first's goals. Scroll down to the link, open history and tap the back arrow → Home shows at the top with today's data collapsed and everything visible, without touching the screen (same after switching tabs while scrolled down).
+- [ ] **Layout:** with today's data open, the last goal card clears the floating nav bar; the home tutorial's "see today's data" tip still scrolls into view.
+- [ ] **Offline:** picking with no network shows an error and no false success; progress just stops updating until the network returns.
 
 ## Reminders and notifications
 
@@ -200,6 +218,8 @@ Use a test account. Test on Android and iOS when available. Leave every box unch
 - [ ] During a session, a live s'kipper insight appears.
 - [ ] At the end of a session, the s'kipper message appears in the summary.
 - [ ] Home shows today's daily insight (or yesterday's if today's isn't generated yet).
+- [ ] Home → **see today's data** below the insight expands today's s'napshot, s'ession and s'core and scrolls them into view above the navbar; tap again (**hide today's data**) to collapse. ⓘ popups and % badges work as before.
+- [ ] Tutorial on Home: the "see today's data" tip opens the section and shows the s'napshot tips in place, then "s'goals completed", picking goals and "history of goals" — each tip scrolls into view with its card highlighted (for "history of goals", the link itself is on screen above the tip); "got it" on the last one scrolls back up to the settings prompt in the header; "skip page" on any Home tip goes straight to the settings prompt.
 
 ## Offline
 
